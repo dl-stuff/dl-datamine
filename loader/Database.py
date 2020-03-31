@@ -1,6 +1,9 @@
 import sqlite3
 import json
 import os
+from typing import List, Dict, Any, Callable
+from Mappings import ACTION_CONDITION_TYPES, ABILITY_CONDITION_TYPES
+
 
 MASTER = ['AbilityData',
 'AbilityGroup',
@@ -53,7 +56,7 @@ MASTER = ['AbilityData',
 'WeaponRarity',
 'WeaponType',]
 
-class DBTable:
+class DBTableMetadata:
     def __init__(self, name, pk='_Id'):
         self.name = name
         self.pk = pk
@@ -165,14 +168,15 @@ class DBManager:
     def check_table(self, table):
         if table not in self.tables:
             table_info = self.query_many(f'PRAGMA table_info({table})', (), dict)
-            tbl = DBTable(table)
+            tbl = DBTableMetadata(table)
             tbl.init_from_table_info(table_info)
             self.tables[table] = tbl
+        return self.tables[table]
 
     def create_table(self, table, row, pk='_Id'):
         query = f'DROP TABLE IF EXISTS {table}'
         self.conn.execute(query)
-        tbl = DBTable(table, pk=pk)
+        tbl = DBTableMetadata(table, pk=pk)
         tbl.init_from_row(row)
         self.tables[table] = tbl
         query = f'CREATE TABLE {table} ({tbl.field_types})'
@@ -180,7 +184,7 @@ class DBManager:
         self.conn.commit()
 
     def insert_many(self, table, data):
-        tbl = self.tables[table]
+        tbl = self.check_table(table)
         values = '('+'?,'*tbl.field_length
         values = values[:-1]+')'
         query = f'INSERT INTO {table} ({tbl.fields}) VALUES {values}'
@@ -208,25 +212,115 @@ class DBManager:
                 self.load_table_from_json(os.path.join(root, f))
 
     def select_all(self, table, d_type=dict):
+        tbl = self.check_table(table)
         return self.query_many(
-            query=self.select_builder(tables={table: self.tables[table].field_type.keys()}),
+            query=self.select_builder(tables={table: tbl.field_type.keys()}),
             param=(),
             d_type=d_type
         )
 
-    def select_by_pk(self, table, pk, d_type=dict):
-        tbl = self.tables[table]
+    def select_by_pk(self, table, pk, fields=None, d_type=dict):
+        tbl = self.check_table(table)
+        fields = fields or tbl.field_type.keys()
         return self.query_one(
             query=self.select_builder(
-                tables={table: tbl.field_type.keys()},
+                tables={table: fields},
                 where=f'{table}.{tbl.pk}=?'
             ),
             param=(pk,),
             d_type=d_type
         )
 
+    def select_by_pk_labeled(self, table, pk, labeled_fields, fields=None, d_type=dict):
+        entry = self.select_by_pk(table, pk, fields, d_type)
+        for l in labeled_fields:
+            try:
+                entry[l] = self.select_by_pk('TextLabel', entry[l])['_Text']
+            except:
+                continue
+        return entry
+
+
+class DBTable:
+    def __init__(self, database: DBManager, name, labeled_fields=[]):
+        self.name = name
+        self.database = database
+        self.labeled_fields = labeled_fields
+
+    def get(self, key, fields=None):
+        return self.database.select_by_pk_labeled(self.name, key, self.labeled_fields, fields)
+
+class AbilityData(DBTable):
+    STAT_ABILITIES = {
+        2: 'strength',
+        3: 'defense',
+        4: 'skill_haste',
+        8: 'shapeshift_time',
+        10: 'attack_speed',
+        12: 'fs_charge_rate'
+    }
+
+    ABILITY_TYPES: Dict[int, Callable[[List[int], str], str]] = {
+        1: lambda ids, _: AbilityData.STAT_ABILITIES.get(ids[0], f'stat {ids[0]}'),
+        2: lambda ids, _: f'affliction_res {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
+        3: lambda ids, _: f'affliction_proc_rate {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
+        4: lambda ids, _: f'tribe_res {ids[0]}',
+        5: lambda ids, _: f'bane {ids[0]}',
+        6: lambda ids, _: 'damage',
+        7: lambda ids, _: f'critical_rate',
+        8: lambda ids, _: f'recovery_potency',
+        9: lambda ids, _: f'gauge_accelerator',
+        11: lambda ids, _: f'striking_haste',
+        14: lambda ids, _: f'action_condition {[i for i in ids if i]}',
+        16: lambda ids, _: f'debuff_chance',
+        17: lambda ids, _: f'skill_prep',
+        18: lambda ids, _: f'buff_tim',
+        20: lambda ids, _: f'punisher {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
+        21: lambda ids, _: f'player_exp',
+        25: lambda ids, _: f'cond_action_grant {ids[0]}',
+        26: lambda ids, _: f'critical_damage',
+        27: lambda ids, _: f'shapeshift_prep',
+        30: lambda ids, _: f'specific_bane {ids[0]}',
+        35: lambda ids, _: f'gauge_inhibitor',
+        36: lambda ids, _: f'dragon damage',
+        39: lambda ids, _: f'action_grant {ids[0]}',
+        40: lambda _, s: f'gauge def/skillboost {s}',
+        43: lambda ids, _: f'ability_ref {ids[0]}',
+        44: lambda ids, _: f'action {ids[0]}',
+        48: lambda ids, _: f'dragon_timer_decrease_rate',
+        49: lambda ids, _: f'shapeshift_fill',
+        51: lambda ids, _: f'random_buff {ids}',
+        52: lambda ids, _: f'critical_rate',
+        54: lambda _, s: f'combo_dmg_boost {s}',
+        55: lambda ids, _: f'combo_time',
+    }
+    REF_TYPE = 43
+
+    def __init__(self, db):
+        super().__init__(db, 'AbilityData', ['_Name', '_Details', '_HeadText'])
+    
+    def get(self, key, fields=None, with_references=True, with_description=True):
+        res = super().get(key, fields)
+        ref = None
+        if not fields:
+            for i in (1, 2, 3):
+                a_type = res[f'_AbilityType{i}']
+                if with_description and a_type in self.ABILITY_TYPES:
+                    a_ids = [res[f'_VariousId{i}a'], res[f'_VariousId{i}b'], res[f'_VariousId{i}c']]
+                    a_str = res[f'_VariousId{i}str']
+                    res[f'_AbilityDescription{i}'] = self.ABILITY_TYPES[a_type](a_ids, a_str)
+                if with_references and a_type == self.REF_TYPE:
+                    ref = self.get(res[f'_VariousId{i}a'])
+        if isinstance(ref, list):
+            return [res, *ref]
+        elif ref:
+            return [res, ref]
+        else:
+            return res
 
 if __name__ == '__main__':
     db = DBManager()
-    db.load_master('./extract/master')
-    
+    tbl = AbilityData(db)
+    res = tbl.get(445)
+    for k, v in res.items():
+        print(k, v)
