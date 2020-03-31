@@ -1,3 +1,10 @@
 /out/
 /download/
 /extract/
+*__pycache__
+*.lnk
+*.sh
+*.txt
+*.sqlite
+Asset_Download.py
+Asset_Extract.py

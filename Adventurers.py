@@ -4,16 +4,16 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, Union
 
-from Abilities import get_ability_data, AbilityData, get_ability_and_references
-from ActionConditions import ActionConditionData, get_action_condition_data
-from Actions import get_text_label, \
+from loader.Abilities import get_ability_data, AbilityData, get_ability_and_references
+from loader.ActionConditions import ActionConditionData, get_action_condition_data
+from loader.Actions import get_text_label, \
     get_actions, Action, get_action_metadata
-from CharacterMotion import AnimationClipData, get_animation_clip_data_by_id
-from Common import run_common
-from Mappings import ELEMENTS, WEAPON_TYPES
-from Mode import get_modes, Mode
-from Skills import Skill, get_skills
-from UniqueCombo import get_unique_combos, UniqueCombo
+from loader.CharacterMotion import AnimationClipData, get_animation_clip_data_by_id
+from loader.Common import run_common
+from loader.Mappings import ELEMENTS, WEAPON_TYPES
+from loader.Mode import get_modes, Mode
+from loader.Skills import Skill, get_skills
+from loader.UniqueCombo import get_unique_combos, UniqueCombo
 
 
 @dataclass
