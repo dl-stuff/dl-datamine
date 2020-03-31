@@ -1,53 +1,47 @@
 import json
 import os
-from dataclasses import dataclass, field
-from typing import Dict, Optional
+import re
+from loader.Database import DBManager, DBTableMetadata
 
+CHARACTER_MOTION = DBTableMetadata(
+    'CharacterMotion', pk='name', field_type={
+        'name': DBTableMetadata.TEXT+DBTableMetadata.PK,
+        'ref': DBTableMetadata.INT,
+        'startTime': DBTableMetadata.REAL,
+        'stopTime': DBTableMetadata.REAL,
+        'duration': DBTableMetadata.REAL,
+    }
+)
 
-@dataclass
-class AnimationClipData:
-    name: str
-    startTime: float
-    stopTime: float
-    id: Optional[int] = field(init=False)
-    duration: float = field(init=False)
+ref_pattern = re.compile(r'[A-Z]{3}_[A-Z]{3}_\d{2}_\d{2}_(\d+)')
+def build_character_motion(data):
+    db_data = {}
+    db_data['name'] = data['name']
+    res = ref_pattern.match(data['name'])
+    if res:
+        db_data['ref'] = res.group(1)
+    else:
+        db_data['ref'] = None
+    db_data['startTime'] = data['m_MuscleClip']['m_StartTime']
+    db_data['stopTime'] = data['m_MuscleClip']['m_StopTime']
+    db_data['duration'] = data['m_MuscleClip']['m_StopTime'] - data['m_MuscleClip']['m_StartTime']
+    return db_data
 
-    def __post_init__(self):
-        self.duration = self.stopTime - self.startTime
-        try:
-            self.id = int(self.name.split('_')[-1])
-        except (IndexError, ValueError):
-            self.id = None
-
-
-def load_animation_clip_data(in_path: str) -> Optional[AnimationClipData]:
-    with open(in_path) as f:
-        data = json.load(f)
-        return AnimationClipData(
-            name=data['name'],
-            startTime=data['m_MuscleClip']['m_StartTime'],
-            stopTime=data['m_MuscleClip']['m_StopTime']
-        )
-
-
-def get_animation_clip_data(in_dir: str) -> Dict[str, AnimationClipData]:
-    clips = {}
-    for root, _, files in os.walk(in_dir):
+def load_character_motion(db, path):
+    character_motion = []
+    db.create_table(CHARACTER_MOTION)
+    for root, _, files in os.walk(path):
         for file_name in files:
             file_path = os.path.join(root, file_name)
             try:
-                clip = load_animation_clip_data(file_path)
-                clips[clip.name] = clip
+                with open(file_path) as f:
+                    data = json.load(f)
+                    character_motion.append(build_character_motion(data))
             except (KeyError, TypeError):
                 pass
-    return clips
+    db.insert_many(CHARACTER_MOTION.name, character_motion)
 
-
-def get_animation_clip_data_by_id(in_dir: str) -> Dict[Optional[int], Dict[str, AnimationClipData]]:
-    clips = {}
-    data = get_animation_clip_data(in_dir)
-    for clip in data.values():
-        if clip.id not in clips:
-            clips[clip.id] = {}
-        clips[clip.id][clip.name] = clip
-    return clips
+if __name__ == '__main__':
+    from loader.Database import DBManager
+    db = DBManager()
+    load_character_motion(db, './extract/characters_motion')

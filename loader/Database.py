@@ -1,81 +1,35 @@
 import sqlite3
 import json
 import os
-from typing import List, Dict, Any, Callable
-from Mappings import ACTION_CONDITION_TYPES, ABILITY_CONDITION_TYPES
-
-
-MASTER = ['AbilityData',
-'AbilityGroup',
-'AbilityLimitedGroup',
-'AbilityShiftGroup',
-'AbnormalStatusType',
-'ActionCollision',
-'ActionCondition',
-'ActionGrant',
-'ActionMarker',
-'ActionTarget',
-'AmuletData',
-'AmuletLevel',
-'AmuletLimitBreak',
-'AmuletRarity',
-'AmuletTrade',
-'CharaAIOperation',
-'CharaAIParam',
-'CharaData',
-'CharaLevel',
-'CharaLimitBreak',
-'CharaModeData',
-'CharaRarity',
-'CharaUniqueCombo',
-'CommonAction',
-'CommonActionHitAttribute',
-'CommonReportCategory',
-'DamageDamping',
-'DragonData',
-'DragonDecoration',
-'DragonGiftData',
-'DragonLevel',
-'DragonLimitBreak',
-'DragonRarity',
-'DragonReliabilityLevel',
-'DragonTalk',
-'ElementalType',
-'ExAbilityData',
-'MC',
-'PlayerAction',
-'PlayerActionHitAttribute',
-'PlayerBulletData',
-'RemoveBuffAction',
-'SkillChainData',
-'SkillData',
-'TextLabel',
-'WeaponData',
-'WeaponLevel',
-'WeaponLimitBreak',
-'WeaponRarity',
-'WeaponType',]
 
 class DBTableMetadata:
-    def __init__(self, name, pk='_Id'):
+    PK = ' PRIMARY KEY'
+    INT = 'INTEGER'
+    REAL = 'REAL'
+    TEXT = 'TEXT'
+    BLOB = 'BLOB'
+
+    def __init__(self, name, pk='_Id', field_type={}):
         self.name = name
         self.pk = pk
-        self.field_type = {}
+        self.field_type = field_type
 
     def init_from_row(self, row):
+        self.field_type = {}
         for k, v in row.items():
             if isinstance(v, int):
-                self.field_type[k] = 'INTEGER'
+                self.field_type[k] = DBTableMetadata.INT
             elif isinstance(v, float):
-                self.field_type[k] = 'REAL'
+                self.field_type[k] = DBTableMetadata.REAL
             elif isinstance(v, str):
-                self.field_type[k] = 'TEXT'
+                self.field_type[k] = DBTableMetadata.TEXT
             else:
-                self.field_type[k] = 'BLOB'
+                self.field_type[k] = DBTableMetadata.BLOB
             if k == self.pk:
-                self.field_type[k] += ' PRIMARY KEY'
+                self.field_type[k] += DBTableMetadata.PK
 
     def init_from_table_info(self, table_info):
+        self.field_type = {}
         for c in table_info:
             if c['pk'] == 1:
                 self.pk = c['name']
@@ -84,6 +38,10 @@ class DBTableMetadata:
     @property
     def fields(self):
         return ','.join(self.field_type.keys())
+
+    @property
+    def named_fields(self):
+        return ','.join([f'{self.name}.{k}' for k in self.field_type.keys()])
 
     @property
     def field_types(self):
@@ -107,39 +65,6 @@ class DBManager:
     def close(self):
         self.conn.close()
         self.conn = None
-
-    @staticmethod
-    def select_builder(tables, key=None, where=None, order=None, distinct=False):
-        if distinct:
-            SELECT_FROM = 'SELECT DISTINCT {fields} FROM {first_table}'
-        else:
-            SELECT_FROM = 'SELECT {fields} FROM {first_table}'
-        WHERE = 'WHERE {condition}'
-        JOIN = 'LEFT JOIN {other_table} ON {first_table}.{key}={other_table}.{key}'
-        ORDER = 'ORDER BY {order}'
-        first_table = None
-        fields_lst = []
-        other_tables = []
-        for table, fields in tables.items():
-            if fields is not None:
-                fields_lst.extend(['{}.{}'.format(table, f) for f in fields])
-            if first_table is None:
-                first_table = table
-                if key is None:
-                    break
-            else:
-                other_tables.append(table)
-        query = [SELECT_FROM.format(first_table=first_table, fields=', '.join(fields_lst))]
-        prev_table = first_table
-        if key:
-            for k, other in zip(key, other_tables):
-                query.append(JOIN.format(first_table=prev_table, other_table=other, key=k))
-                prev_table = other
-        if where:
-            query.append(WHERE.format(condition=where))
-        if order:
-            query.append(ORDER.format(order=order))
-        return ' '.join(query)
 
     @staticmethod
     def list_dict_values(data, pk):
@@ -173,14 +98,21 @@ class DBManager:
             self.tables[table] = tbl
         return self.tables[table]
 
-    def create_table(self, table, row, pk='_Id'):
+    def create_table(self, meta):
+        table = meta.name
         query = f'DROP TABLE IF EXISTS {table}'
         self.conn.execute(query)
-        tbl = DBTableMetadata(table, pk=pk)
-        tbl.init_from_row(row)
-        self.tables[table] = tbl
-        query = f'CREATE TABLE {table} ({tbl.field_types})'
+        self.tables[table] = meta
+        query = f'CREATE TABLE {table} ({meta.field_types})'
         self.conn.execute(query)
+        self.conn.commit()
+
+    def insert_one(self, table, data):
+        tbl = self.check_table(table)
+        values = '('+'?,'*tbl.field_length
+        values = values[:-1]+')'
+        query = f'INSERT INTO {table} ({tbl.fields}) VALUES {values}'
+        self.conn.execute(query, data)
         self.conn.commit()
 
     def insert_many(self, table, data):
@@ -191,136 +123,73 @@ class DBManager:
         self.conn.executemany(query, self.list_dict_values(data, tbl.pk))
         self.conn.commit()
 
-    def load_table_from_json(self, path):
-        with open(path) as f:
-            data = json.load(f)
-            try:
-                row = data[next(iter(data))]
-                pk = next(iter(row))
-            except:
-                row = False
-            if not (row and isinstance(row, dict) and pk.startswith('_')):
-                print(f'Skip {path}')
-                return
-            table = os.path.basename(os.path.splitext(path)[0])
-            self.create_table(table, row, pk)
-            self.insert_many(table, data.values())
-
-    def load_master(self, path):
-        for root, _, files in os.walk(path):
-            for f in files:
-                self.load_table_from_json(os.path.join(root, f))
-
     def select_all(self, table, d_type=dict):
         tbl = self.check_table(table)
+        query = f'SELECT {tbl.named_fields} FROM {table}'
         return self.query_many(
-            query=self.select_builder(tables={table: tbl.field_type.keys()}),
+            query=query,
             param=(),
             d_type=d_type
         )
 
-    def select_by_pk(self, table, pk, fields=None, d_type=dict):
+    def select_one(self, table, value, field=None, fields=None, d_type=dict):
         tbl = self.check_table(table)
-        fields = fields or tbl.field_type.keys()
+        field = field or tbl.pk
+        if fields:
+            named_fields = [f'{table}.{k}' for k in fields()]
+        else:
+            named_fields = tbl.named_fields
+        query = f'SELECT {named_fields} FROM {table} WHERE {table}.{field}=?'
         return self.query_one(
-            query=self.select_builder(
-                tables={table: fields},
-                where=f'{table}.{tbl.pk}=?'
-            ),
-            param=(pk,),
+            query=query,
+            param=(value,),
             d_type=d_type
         )
 
-    def select_by_pk_labeled(self, table, pk, labeled_fields, fields=None, d_type=dict):
-        entry = self.select_by_pk(table, pk, fields, d_type)
-        for l in labeled_fields:
-            try:
-                entry[l] = self.select_by_pk('TextLabel', entry[l])['_Text']
-            except:
-                continue
-        return entry
+    def create_view(self, name, table, references, join_mode='LEFT'):
+        query = f'DROP VIEW IF EXISTS {name}'
+        self.conn.execute(query)
+        tbl = self.check_table(table)
+        fields = []
+        joins = []
+        for k in tbl.field_type.keys():
+            if k in references:
+                rtbl = references[k][0]
+                rk = references[k][1]
+                rv = references[k][2:]
+                rtbl = self.check_table(rtbl)
+                if len(rv) == 1:
+                    fields.append(f'{rtbl.name}{k}.{rv[0]} AS {k}')
+                else:
+                    for v in rv:
+                        fields.append(f'{tbl.name}.{k}')
+                        fields.append(f'{rtbl.name}{k}.{v} AS {k}{v}')
+                joins.append(f'{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}')
+            else:
+                fields.append(f'{tbl.name}.{k}')
+        field_str = ','.join(fields)
+        joins_str = '\n'+'\n'.join(joins)
+        query = f'CREATE VIEW {name} AS SELECT {field_str} FROM {tbl.name} {joins_str}'
+        self.conn.execute(query)
+        self.conn.commit()
 
+    def delete_view(self, name):
+        query = f'DROP VIEW IF EXISTS {name}'
+        self.conn.execute(query)
+        self.conn.commit()
 
-class DBTable:
-    def __init__(self, database: DBManager, name, labeled_fields=[]):
-        self.name = name
+class DBView:
+    def __init__(self, database, table, references={}, labeled_fields=[]):
         self.database = database
-        self.labeled_fields = labeled_fields
+        self.name = f'View_{table}'
+        self.references = references
+        for label in labeled_fields:
+            self.references[label] = ('TextLabel', '_Id', '_Text')
+        self.base_table = table
+        self.database.create_view(self.name, self.base_table, self.references)
 
-    def get(self, key, fields=None):
-        return self.database.select_by_pk_labeled(self.name, key, self.labeled_fields, fields)
-
-class AbilityData(DBTable):
-    STAT_ABILITIES = {
-        2: 'strength',
-        3: 'defense',
-        4: 'skill_haste',
-        8: 'shapeshift_time',
-        10: 'attack_speed',
-        12: 'fs_charge_rate'
-    }
-
-    ABILITY_TYPES: Dict[int, Callable[[List[int], str], str]] = {
-        1: lambda ids, _: AbilityData.STAT_ABILITIES.get(ids[0], f'stat {ids[0]}'),
-        2: lambda ids, _: f'affliction_res {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
-        3: lambda ids, _: f'affliction_proc_rate {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
-        4: lambda ids, _: f'tribe_res {ids[0]}',
-        5: lambda ids, _: f'bane {ids[0]}',
-        6: lambda ids, _: 'damage',
-        7: lambda ids, _: f'critical_rate',
-        8: lambda ids, _: f'recovery_potency',
-        9: lambda ids, _: f'gauge_accelerator',
-        11: lambda ids, _: f'striking_haste',
-        14: lambda ids, _: f'action_condition {[i for i in ids if i]}',
-        16: lambda ids, _: f'debuff_chance',
-        17: lambda ids, _: f'skill_prep',
-        18: lambda ids, _: f'buff_tim',
-        20: lambda ids, _: f'punisher {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
-        21: lambda ids, _: f'player_exp',
-        25: lambda ids, _: f'cond_action_grant {ids[0]}',
-        26: lambda ids, _: f'critical_damage',
-        27: lambda ids, _: f'shapeshift_prep',
-        30: lambda ids, _: f'specific_bane {ids[0]}',
-        35: lambda ids, _: f'gauge_inhibitor',
-        36: lambda ids, _: f'dragon damage',
-        39: lambda ids, _: f'action_grant {ids[0]}',
-        40: lambda _, s: f'gauge def/skillboost {s}',
-        43: lambda ids, _: f'ability_ref {ids[0]}',
-        44: lambda ids, _: f'action {ids[0]}',
-        48: lambda ids, _: f'dragon_timer_decrease_rate',
-        49: lambda ids, _: f'shapeshift_fill',
-        51: lambda ids, _: f'random_buff {ids}',
-        52: lambda ids, _: f'critical_rate',
-        54: lambda _, s: f'combo_dmg_boost {s}',
-        55: lambda ids, _: f'combo_time',
-    }
-    REF_TYPE = 43
-
-    def __init__(self, db):
-        super().__init__(db, 'AbilityData', ['_Name', '_Details', '_HeadText'])
-    
-    def get(self, key, fields=None, with_references=True, with_description=True):
-        res = super().get(key, fields)
-        ref = None
-        if not fields:
-            for i in (1, 2, 3):
-                a_type = res[f'_AbilityType{i}']
-                if with_description and a_type in self.ABILITY_TYPES:
-                    a_ids = [res[f'_VariousId{i}a'], res[f'_VariousId{i}b'], res[f'_VariousId{i}c']]
-                    a_str = res[f'_VariousId{i}str']
-                    res[f'_AbilityDescription{i}'] = self.ABILITY_TYPES[a_type](a_ids, a_str)
-                if with_references and a_type == self.REF_TYPE:
-                    ref = self.get(res[f'_VariousId{i}a'])
-        if isinstance(ref, list):
-            return [res, *ref]
-        elif ref:
-            return [res, ref]
-        else:
-            return res
-
-if __name__ == '__main__':
-    db = DBManager()
-    tbl = AbilityData(db)
-    res = tbl.get(445)
-    for k, v in res.items():
-        print(k, v)
+    def get(self, pk, fields=None, exclude_falsy=True):
+        res = self.database.select_one(self.name, pk, fields)
+        if exclude_falsy:
+            res = dict(filter(lambda x: bool(x[1]), res.items()))
+        return res
