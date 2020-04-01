@@ -51,7 +51,7 @@ def build_bullet(meta, ref, seq, data):
     return db_data
 
 ACTION_PART = DBTableMetadata(
-    'ActionPart', pk='_Id', field_type={
+    'ActionParts', pk='_Id', field_type={
         '_Id': DBTableMetadata.INT+DBTableMetadata.PK,
         '_ref': DBTableMetadata.INT,
         '_seq': DBTableMetadata.INT,
@@ -79,7 +79,7 @@ ACTION_PART = DBTableMetadata(
 
         # SEND_SIGNAL
         '_actionId': DBTableMetadata.INT,
-        '_decoId': DBTableMetadata.TEXT,
+        '_decoId': DBTableMetadata.INT,
 
         # ACTIVE_CANCEL
         '_actionType': DBTableMetadata.INT,

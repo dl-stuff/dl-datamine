@@ -8,3 +8,4 @@
 *.sqlite
 Asset_Download.py
 Asset_Extract.py
+/adventurers/

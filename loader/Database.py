@@ -2,6 +2,10 @@ import sqlite3
 import json
 import os
 
+class DBDict(dict):
+    def __repr__(self):
+        return json.dumps(self, indent=2)
+
 class DBTableMetadata:
     PK = ' PRIMARY KEY'
     INT = 'INTEGER'
@@ -123,7 +127,7 @@ class DBManager:
         self.conn.executemany(query, self.list_dict_values(data, tbl.pk))
         self.conn.commit()
 
-    def select_all(self, table, d_type=dict):
+    def select_all(self, table, d_type=DBDict):
         tbl = self.check_table(table)
         query = f'SELECT {tbl.named_fields} FROM {table}'
         return self.query_many(
@@ -132,15 +136,22 @@ class DBManager:
             d_type=d_type
         )
 
-    def select_one(self, table, value, field=None, fields=None, d_type=dict):
+    EXACT = 'exact'
+    LIKE  = 'like'
+    def select(self, table, value=None, by=None, fields=None, order=None, mode=EXACT, d_type=DBDict):
         tbl = self.check_table(table)
-        field = field or tbl.pk
+        by = by or tbl.pk
         if fields:
-            named_fields = [f'{table}.{k}' for k in fields()]
+            named_fields = ','.join([f'{table}.{k}' for k in fields])
         else:
             named_fields = tbl.named_fields
-        query = f'SELECT {named_fields} FROM {table} WHERE {table}.{field}=?'
-        return self.query_one(
+        if mode == self.EXACT:
+            query = f'SELECT {named_fields} FROM {table} WHERE {table}.{by}=?'
+        elif mode == self.LIKE:
+            query = f'SELECT {named_fields} FROM {table} WHERE {table}.{by} LIKE ? || \'%\''
+        if order:
+            query += f' ORDER BY {order}'
+        return self.query_many(
             query=query,
             param=(value,),
             d_type=d_type
@@ -153,16 +164,15 @@ class DBManager:
         fields = []
         joins = []
         for k in tbl.field_type.keys():
-            if k in references:
-                rtbl = references[k][0]
-                rk = references[k][1]
-                rv = references[k][2:]
+            if table in references and k in references[table]:
+                rtbl = references[table][k][0]
+                rk = references[table][k][1]
+                rv = references[table][k][2:]
                 rtbl = self.check_table(rtbl)
                 if len(rv) == 1:
                     fields.append(f'{rtbl.name}{k}.{rv[0]} AS {k}')
                 else:
                     for v in rv:
-                        fields.append(f'{tbl.name}.{k}')
                         fields.append(f'{rtbl.name}{k}.{v} AS {k}{v}')
                 joins.append(f'{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}')
             else:
@@ -179,17 +189,39 @@ class DBManager:
         self.conn.commit()
 
 class DBView:
-    def __init__(self, database, table, references={}, labeled_fields=[]):
+    def __init__(self, database, table, references=None, labeled_fields=None):
         self.database = database
-        self.name = f'View_{table}'
-        self.references = references
-        for label in labeled_fields:
-            self.references[label] = ('TextLabel', '_Id', '_Text')
+        self.references = references or {}
+        if table not in self.references and labeled_fields:
+            self.references[table] = {}
+            for label in labeled_fields:
+                self.references[table][label] = ('TextLabel', '_Id', '_Text')
+        self.name = table
         self.base_table = table
+        if len(self.references) > 0:
+            self.open()
+
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
+        if order and '.' not in order:
+            order = self.name + '.' + order
+        res = self.database.select(self.name, pk, by, fields, order, mode)
+        if exclude_falsy:
+            res = [self.remove_falsy_fields(r) for r in res]
+        if len(res) == 1:
+            res = res[0]
+        return res
+
+    def get_all(self, exclude_falsy):
+        return self.database.select_all(self.name)
+
+    @staticmethod
+    def remove_falsy_fields(res):
+        return DBDict(filter(lambda x: bool(x[1]), res.items()))
+
+    def open(self):
+        self.name = f'View_{self.base_table}'
         self.database.create_view(self.name, self.base_table, self.references)
 
-    def get(self, pk, fields=None, exclude_falsy=True):
-        res = self.database.select_one(self.name, pk, fields)
-        if exclude_falsy:
-            res = dict(filter(lambda x: bool(x[1]), res.items()))
-        return res
+    def close(self):
+        self.database.delete_view(self.name)
+        self.name = self.base_table

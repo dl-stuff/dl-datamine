@@ -17,6 +17,14 @@ ELEMENTS = {
     5: 'Shadow'
 }
 
+CLASS_TYPES = {
+    1: 'Attack', 
+    2: 'Defense',
+    3: 'Support',
+    4: 'Healing'
+}
+
+
 ACTION_CONDITION_TYPES = {
     0: 'Normal',
     1: 'Poison',
