@@ -42,8 +42,8 @@ class AbilityData(DBView):
         1: lambda ids, _: AbilityData.STAT_ABILITIES.get(ids[0], f'stat {ids[0]}'),
         2: lambda ids, _: f'affliction_res {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
         3: lambda ids, _: f'affliction_proc_rate {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
-        4: lambda ids, _: f'tribe_res {ids[0]}',
-        5: lambda ids, _: f'bane {ids[0]}',
+        4: lambda ids, _: f'tribe_res {ids}',
+        5: lambda ids, _: f'bane {ids}',
         6: lambda ids, _: 'damage',
         7: lambda ids, _: f'critical_rate',
         8: lambda ids, _: f'recovery_potency',
@@ -55,16 +55,16 @@ class AbilityData(DBView):
         18: lambda ids, _: f'buff_tim',
         20: lambda ids, _: f'punisher {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
         21: lambda ids, _: f'player_exp',
-        25: lambda ids, _: f'cond_action_grant {ids[0]}',
+        25: lambda ids, _: f'cond_action_grant {ids}',
         26: lambda ids, _: f'critical_damage',
         27: lambda ids, _: f'shapeshift_prep',
-        30: lambda ids, _: f'specific_bane {ids[0]}',
+        30: lambda ids, _: f'specific_bane {ids}',
         35: lambda ids, _: f'gauge_inhibitor',
         36: lambda ids, _: f'dragon damage',
-        39: lambda ids, _: f'action_grant {ids[0]}',
+        39: lambda ids, _: f'action_grant {ids}',
         40: lambda _, s: f'gauge def/skillboost {s}',
-        43: lambda ids, _: f'ability_ref {0 if not ids else ids[0]}',
-        44: lambda ids, _: f'action {ids[0]}',
+        43: lambda ids, _: f'ability_ref {ids}',
+        44: lambda ids, _: f'action {ids}',
         48: lambda ids, _: f'dragon_timer_decrease_rate',
         49: lambda ids, _: f'shapeshift_fill',
         51: lambda ids, _: f'random_buff {ids}',
@@ -136,7 +136,7 @@ class PlayerActionHitAttribute(DBView):
         super().__init__(db, 'PlayerActionHitAttribute')
 
 class PlayerAction(DBView):
-    LV_SUFFIX = re.compile(r'(.*)(LV\d{2})')
+    LV_SUFFIX = re.compile(r'(.*LV)(\d{2})')
     HIT_LABELS = ['_hitLabel', '_hitAttrLabel', '_abHitAttrLabel']
     def __init__(self, db):
         super().__init__(db, 'PlayerAction')
