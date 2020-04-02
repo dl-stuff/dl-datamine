@@ -64,12 +64,17 @@ class DBTableMetadata:
     def blob_fields(self):
         return dict(filter(lambda x: x[1] == DBTableMetadata.BLOB, self.field_type.items())).keys()
 
+    def __eq__(self, other):
+        return self.name == other.name and self.pk == other.pk and self.field_type == other.field_type
+
+
 class DBManager:
-    def __init__(self, db_file='dl.sqlite'):
+    def __init__(self, db_file='dl.sqlite', drop_on_reload=False):
         self.conn = None
         if db_file is not None:
             self.open(db_file)
         self.tables = {}
+        self.drop_on_reload = True
 
     def open(self, db_file):
         self.conn = sqlite3.connect(db_file)
@@ -105,22 +110,30 @@ class DBManager:
         else:
             return dict({res[idx_key]: d_type(res) for res in cursor.fetchall()})
 
-    def check_table(self, table):
+    def check_table(self, table, update_table_dict=True):
         if table not in self.tables:
             table_info = self.query_many(f'PRAGMA table_info({table})', (), dict)
             if len(table_info) == 0:
                 return False
             tbl = DBTableMetadata(table)
             tbl.init_from_table_info(table_info)
-            self.tables[table] = tbl
+            if update_table_dict:
+                self.tables[table] = tbl
+            else:
+                return tbl
         return self.tables[table]
+
+    def drop_table(self, table):
+        query = f'DROP TABLE IF EXISTS {table}'
+        self.conn.execute(query)
+        self.conn.commit()
 
     def create_table(self, meta):
         table = meta.name
-        query = f'DROP TABLE IF EXISTS {table}'
-        self.conn.execute(query)
-        self.tables[table] = meta
-        query = f'CREATE TABLE {table} ({meta.field_types})'
+        # query = f'DROP TABLE IF EXISTS {table}'
+        # self.conn.execute(query)
+        # self.tables[table] = meta
+        query = f'CREATE TABLE IF NOT EXISTS {table} ({meta.field_types})'
         self.conn.execute(query)
         self.conn.commit()
 
@@ -180,9 +193,10 @@ class DBManager:
         joins = []
         for k in tbl.field_type.keys():
             if table in references and k in references[table]:
-                rtbl = references[table][k][0]
-                rk = references[table][k][1]
-                rv = references[table][k][2:]
+                rtbl_tpl = references[table][k]
+                rtbl = rtbl_tpl[0]
+                rk = rtbl_tpl[1]
+                rv = rtbl_tpl[2:]
                 rtbl = self.check_table(rtbl)
                 if len(rv) == 1:
                     fields.append(f'{rtbl.name}{k}.{rv[0]} AS {k}')
@@ -190,6 +204,9 @@ class DBManager:
                     for v in rv:
                         fields.append(f'{rtbl.name}{k}.{v} AS {k}{v}')
                 joins.append(f'{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}')
+                if rtbl.name == 'TextLabel': # special case bolb
+                    fields.append(f'{rtbl.name}JP{k}.{rv[0]} AS {k}JP')
+                    joins.append(f'{join_mode} JOIN {rtbl.name}JP AS {rtbl.name}JP{k} ON {tbl.name}.{k}={rtbl.name}JP{k}.{rk}')
             else:
                 fields.append(f'{tbl.name}.{k}')
         field_str = ','.join(fields)

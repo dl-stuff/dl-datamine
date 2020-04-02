@@ -105,6 +105,7 @@ PROCESSORS[CommandType.SETTING_HIT_DATA] = build_hit_attr_label
 
 def load_actions(db, path):
     file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')
+    db.drop_table(ACTION_PART.name)
     db.create_table(ACTION_PART)
     sorted_data = []
     action_parts_list_path = None

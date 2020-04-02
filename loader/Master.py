@@ -36,13 +36,17 @@ def load_table(db, data, table, key=None):
         for k, v in zip(keys, values):
             load_table(db, v, table, key=k)
 
+def load_json(db, path, table):
+    db.drop_table(table)
+    with open(path) as f:
+        load_table(db, json.load(f), table)
+
 def load_master(db, path):
     for root, _, files in os.walk(path):
         for fn in files:
             path = os.path.join(root, fn)
             table = os.path.basename(os.path.splitext(path)[0])
-            with open(path) as f:
-                load_table(db, json.load(f), table)
+            load_json(db, path, table)
 
 if __name__ == '__main__':
     db = DBManager()

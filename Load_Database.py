@@ -3,14 +3,18 @@ import argparse
 
 from loader.Database import DBManager
 
-from loader.Master import load_master
+from loader.Master import load_master, load_json
 from loader.Actions import load_actions
 from loader.CharacterMotion import load_character_motion
 
 EN = 'en'
+JP = 'jp'
+
 MASTER = 'master'
 ACTIONS = 'actions'
 CHARACTERS_MOTION = 'characters_motion'
+
+TEXT_LABEL = 'TextLabel.json'
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Import data to database.')
@@ -23,5 +27,6 @@ if __name__ == '__main__':
 
     db = DBManager(out_file)
     load_master(db, os.path.join(in_dir, EN, MASTER))
+    load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')
     load_actions(db, os.path.join(in_dir, ACTIONS))
     load_character_motion(db, os.path.join(in_dir, CHARACTERS_MOTION))

@@ -163,18 +163,20 @@ class CharaData(DBView):
             return res
         return self.process_result(res, exclude_falsy=exclude_falsy, condesnse=True)
 
-    def export_all_to_folder(self, out_dir, ext='.json', exclude_falsy=True):
+    def export_all_to_folder(self, out_dir=None, ext='.json', exclude_falsy=True):
+        if not out_dir:
+            out_dir = f'./out/adventurers'
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         for res in all_res:
             res = self.process_result(res, exclude_falsy=exclude_falsy, condesnse=True)
             name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
             output = os.path.join(out_dir, f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
-            with open(output, 'w', newline='') as fp:
-                json.dump(res, fp, indent=2)
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                json.dump(res, fp, indent=2, ensure_ascii=False)
 
 
 if __name__ == '__main__':
     db = DBManager()
     view = CharaData(db)
-    view.export_all_to_folder('./adventurers')
+    view.export_all_to_folder()

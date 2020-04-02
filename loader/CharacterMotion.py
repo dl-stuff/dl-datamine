@@ -29,6 +29,7 @@ def build_character_motion(data):
 
 def load_character_motion(db, path):
     character_motion = []
+    db.drop_table(CHARACTER_MOTION.name)
     db.create_table(CHARACTER_MOTION)
     for root, _, files in os.walk(path):
         for file_name in files:
