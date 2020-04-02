@@ -8,18 +8,23 @@ class DBDict(dict):
 
 class DBTableMetadata:
     PK = ' PRIMARY KEY'
+    AUTO = ' AUTOINCREMENT'
     INT = 'INTEGER'
     REAL = 'REAL'
     TEXT = 'TEXT'
     BLOB = 'BLOB'
+    DBID = 'DBID'
 
     def __init__(self, name, pk='_Id', field_type={}):
         self.name = name
         self.pk = pk
         self.field_type = field_type
 
-    def init_from_row(self, row):
+    def init_from_row(self, row, auto_pk=False):
         self.field_type = {}
+        if auto_pk:
+            self.pk = self.DBID
+            self.field_type[self.DBID] = DBTableMetadata.INT + DBTableMetadata.PK + DBTableMetadata.AUTO
         for k, v in row.items():
             if isinstance(v, int):
                 self.field_type[k] = DBTableMetadata.INT
@@ -41,11 +46,11 @@ class DBTableMetadata:
 
     @property
     def fields(self):
-        return ','.join(self.field_type.keys())
+        return ','.join(filter(lambda k: k != self.DBID, self.field_type.keys()))
 
     @property
     def named_fields(self):
-        return ','.join([f'{self.name}.{k}' for k in self.field_type.keys()])
+        return ','.join([f'{self.name}.{k}' for k in self.field_type.keys() if k != self.DBID])
 
     @property
     def field_types(self):
@@ -53,7 +58,11 @@ class DBTableMetadata:
 
     @property
     def field_length(self):
-        return len(self.field_type)
+        return len(self.field_type) - 1 * int(self.pk == self.DBID)
+
+    @property
+    def blob_fields(self):
+        return dict(filter(lambda x: x[1] == DBTableMetadata.BLOB, self.field_type.items())).keys()
 
 class DBManager:
     def __init__(self, db_file='dl.sqlite'):
@@ -71,9 +80,11 @@ class DBManager:
         self.conn = None
 
     @staticmethod
-    def list_dict_values(data, pk):
+    def list_dict_values(data, tbl):
         for entry in data:
-            if entry[pk]:
+            if tbl.pk == DBTableMetadata.DBID or entry[tbl.pk]:
+                for field in tbl.blob_fields:
+                    entry[field] = json.dumps(entry[field])
                 yield tuple(entry.values())
 
     def query_one(self, query, param, d_type):
@@ -97,6 +108,8 @@ class DBManager:
     def check_table(self, table):
         if table not in self.tables:
             table_info = self.query_many(f'PRAGMA table_info({table})', (), dict)
+            if len(table_info) == 0:
+                return False
             tbl = DBTableMetadata(table)
             tbl.init_from_table_info(table_info)
             self.tables[table] = tbl
@@ -111,20 +124,22 @@ class DBManager:
         self.conn.execute(query)
         self.conn.commit()
 
-    def insert_one(self, table, data):
+    INSERT = 'INSERT'
+    REPLACE = 'REPLACE'
+    def insert_one(self, table, data, mode='INSERT'):
         tbl = self.check_table(table)
         values = '('+'?,'*tbl.field_length
         values = values[:-1]+')'
-        query = f'INSERT INTO {table} ({tbl.fields}) VALUES {values}'
+        query = f'{mode} INTO {table} ({tbl.fields}) VALUES {values}'
         self.conn.execute(query, data)
         self.conn.commit()
 
-    def insert_many(self, table, data):
+    def insert_many(self, table, data, mode='INSERT'):
         tbl = self.check_table(table)
         values = '('+'?,'*tbl.field_length
         values = values[:-1]+')'
-        query = f'INSERT INTO {table} ({tbl.fields}) VALUES {values}'
-        self.conn.executemany(query, self.list_dict_values(data, tbl.pk))
+        query = f'{mode} INTO {table} ({tbl.fields}) VALUES {values}'
+        self.conn.executemany(query, self.list_dict_values(data, tbl))
         self.conn.commit()
 
     def select_all(self, table, d_type=DBDict):
@@ -211,8 +226,11 @@ class DBView:
             res = res[0]
         return res
 
-    def get_all(self, exclude_falsy):
-        return self.database.select_all(self.name)
+    def get_all(self, exclude_falsy=False):
+        res = self.database.select_all(self.name)
+        if exclude_falsy:
+            res = [self.remove_falsy_fields(r) for r in res]
+        return res
 
     @staticmethod
     def remove_falsy_fields(res):

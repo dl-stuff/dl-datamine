@@ -128,22 +128,21 @@ class CharaData(DBView):
             res[ex2] = self.abilities.get(res[ex2], exclude_falsy=exclude_falsy)
         return res
 
-    def process_result(self, res, exclude_falsy=True, full_query=True, condesnse=True):
-        if not full_query:
-            return res
+    def process_result(self, res, exclude_falsy=True, condesnse=True):
         if '_WeaponType' in res:
             res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
         if '_ElementalType' in res:
-            res['_WeaponType'] = ELEMENTS.get(res['_ElementalType'], res['_ElementalType'])
+            res['_ElementalType'] = ELEMENTS.get(res['_ElementalType'], res['_ElementalType'])
         if '_CharaType' in res:
-            res['_WeaponType'] = CLASS_TYPES.get(res['_CharaType'], res['_CharaType'])
+            res['_CharaType'] = CLASS_TYPES.get(res['_CharaType'], res['_CharaType'])
         if condesnse:
             res = self.condense_stats(res)
         
         if '_ModeChangeType' in res and res['_ModeChangeType']:
             res['_ModeChangeType'] = MODE_CHANGE_TYPES.get(res['_ModeChangeType'], res['_ModeChangeType'])
             for m in ('_ModeId1', '_ModeId2', '_ModeId3'):
-                res[m] = self.mode.get(res[m], exclude_falsy=exclude_falsy, full_query=True)
+                if m in res:
+                    res[m] = self.mode.get(res[m], exclude_falsy=exclude_falsy, full_query=True)
 
         for s in ('_Skill1', '_Skill2'):
             if s in res and res[s]:
@@ -160,14 +159,17 @@ class CharaData(DBView):
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condesnse=True):
         res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
-        return self.process_result(res, exclude_falsy=True, full_query=True, condesnse=True)
+        if not full_query:
+            return res
+        return self.process_result(res, exclude_falsy=exclude_falsy, condesnse=True)
 
     def export_all_to_folder(self, out_dir, ext='.json', exclude_falsy=True):
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         for res in all_res:
-            res = self.process_result(res, exclude_falsy=exclude_falsy, full_query=True, condesnse=True)
-            output = os.path.join(out_dir, f'{res["_BaseId"]}_{res["_VariationId"]:02}_{res["_SecondName"] or res["_Name"]}{ext}')
+            res = self.process_result(res, exclude_falsy=exclude_falsy, condesnse=True)
+            name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
+            output = os.path.join(out_dir, f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
             with open(output, 'w', newline='') as fp:
                 json.dump(res, fp, indent=2)
 

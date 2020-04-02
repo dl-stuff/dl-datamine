@@ -1,6 +1,7 @@
 import json
 import os
 from loader.Database import DBManager, DBTableMetadata
+from loader.Master import load_table
 from enum import Enum
 import re
 
@@ -106,8 +107,11 @@ def load_actions(db, path):
     file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')
     db.create_table(ACTION_PART)
     sorted_data = []
+    action_parts_list_path = None
     for root, _, files in os.walk(path):
         for file_name in files:
+            if file_name == 'ActionPartsList.json':
+                action_parts_list_path = os.path.join(root, file_name)
             res = file_filter.match(file_name)
             if res:
                 ref = res.group(1)
@@ -121,6 +125,9 @@ def load_actions(db, path):
                             db_data = builder(ACTION_PART, ref, seq, data)
                             sorted_data.append(db_data)
     db.insert_many(ACTION_PART.name, sorted_data)
+    if action_parts_list_path is not None:
+        with open(action_parts_list_path) as f:
+            load_table(db, json.load(f), 'ActionPartsList')
 
 if __name__ == '__main__':
     from loader.Database import DBManager
