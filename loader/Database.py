@@ -204,7 +204,7 @@ class DBManager:
                     for v in rv:
                         fields.append(f'{rtbl.name}{k}.{v} AS {k}{v}')
                 joins.append(f'{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}')
-                if rtbl.name == 'TextLabel': # special case bolb
+                if rtbl.name == 'TextLabel' and not k.endswith('En'): # special case bolb
                     fields.append(f'{rtbl.name}JP{k}.{rv[0]} AS {k}JP')
                     joins.append(f'{join_mode} JOIN {rtbl.name}JP AS {rtbl.name}JP{k} ON {tbl.name}.{k}={rtbl.name}JP{k}.{rk}')
             else:

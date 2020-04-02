@@ -1,7 +1,6 @@
 import json
 import os
 from loader.Database import DBManager, DBTableMetadata
-from loader.Master import load_table
 from enum import Enum
 import re
 
@@ -26,12 +25,11 @@ class CommandType(Enum):
         return cls.UNKNOWN
 
 
-def build_db_data(meta, ref, seq, data, override={}):
+def build_db_data(meta, ref, seq, data):
     db_data = {}
     for k in meta.field_type.keys():
-        key = k if k not in override else override[k]
-        if key in data:
-            db_data[k] = data[key]
+        if k in data:
+            db_data[k] = data[k]
         else:
             db_data[k] = None
     db_data['_Id'] = f'{ref}{seq:03}'
@@ -41,14 +39,14 @@ def build_db_data(meta, ref, seq, data, override={}):
 
 
 def build_hit_attr_label(meta, ref, seq, data):
-    return build_db_data(meta, ref, seq, data, {'_hitLabel': '_hitAttrLabel'})
+    return build_db_data(meta, ref, seq, data)
 
 
 def build_bullet(meta, ref, seq, data):
-    db_data = build_db_data(meta, ref, seq, data, {'_hitLabel': '_hitAttrLabel'})
+    db_data = build_db_data(meta, ref, seq, data)
     ab_label = data['_arrangeBullet']['_abHitAttrLabel']
     if ab_label:
-        db_data['_hitLabel'] = ab_label
+        db_data['_abHitAttrLabel'] = ab_label
     return db_data
 
 ACTION_PART = DBTableMetadata(
@@ -75,6 +73,8 @@ ACTION_PART = DBTableMetadata(
         '_collisionHitInterval': DBTableMetadata.REAL,
         '_isHitDelete': DBTableMetadata.INT,
         '_hitLabel': DBTableMetadata.TEXT,
+        '_hitAttrLabel': DBTableMetadata.TEXT,
+        '_abHitAttrLabel': DBTableMetadata.TEXT,
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
 
@@ -108,27 +108,40 @@ def load_actions(db, path):
     db.drop_table(ACTION_PART.name)
     db.create_table(ACTION_PART)
     sorted_data = []
-    action_parts_list_path = None
     for root, _, files in os.walk(path):
         for file_name in files:
             if file_name == 'ActionPartsList.json':
-                action_parts_list_path = os.path.join(root, file_name)
-            res = file_filter.match(file_name)
-            if res:
-                ref = res.group(1)
+                table = 'ActionPartsList'
+                db.drop_table(table)
                 with open(os.path.join(root, file_name)) as f:
                     raw = json.load(f)
-                    action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
-                    for seq, data in enumerate(action):
-                        command_type = CommandType(data['commandType'])
-                        if command_type in PROCESSORS.keys():
-                            builder = PROCESSORS[command_type]
-                            db_data = builder(ACTION_PART, ref, seq, data)
-                            sorted_data.append(db_data)
+                    for r in raw:
+                        resource_fn = os.path.basename(r['_resourcePath'])
+                        try:
+                            r['_host'], r['_Id'] = resource_fn.split('_')
+                            r['_Id'] = int(r['_Id'])
+                        except:
+                            r['_host'], r['_Id'] = None, 0
+                    row = next(iter(raw))
+                    pk = '_Id'
+                    meta = DBTableMetadata(table, pk=pk)
+                    meta.init_from_row(row)
+                    db.create_table(meta)
+                    db.insert_many(table, raw)
+            else:
+                res = file_filter.match(file_name)
+                if res:
+                    ref = res.group(1)
+                    with open(os.path.join(root, file_name)) as f:
+                        raw = json.load(f)
+                        action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
+                        for seq, data in enumerate(action):
+                            command_type = CommandType(data['commandType'])
+                            if command_type in PROCESSORS.keys():
+                                builder = PROCESSORS[command_type]
+                                db_data = builder(ACTION_PART, ref, seq, data)
+                                sorted_data.append(db_data)
     db.insert_many(ACTION_PART.name, sorted_data)
-    if action_parts_list_path is not None:
-        with open(action_parts_list_path) as f:
-            load_table(db, json.load(f), 'ActionPartsList')
 
 if __name__ == '__main__':
     from loader.Database import DBManager

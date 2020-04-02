@@ -7,7 +7,6 @@ from exporter.Shared import AbilityData, SkillData, PlayerAction, check_target_p
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
 
 MODE_CHANGE_TYPES = {
-    0: 'Normal',
     1: 'Skill',
     2: 'Hud',
     3: 'Dragon'
@@ -27,12 +26,9 @@ class CharaUniqueCombo(DBView):
         res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
-        actions = []
         if '_ActionId' in res and res['_ActionId']:            
             base_action_id = res['_ActionId']
-            for i in range(0, res['_MaxComboNum']):
-                actions.append(self.actions.get(base_action_id+i, exclude_falsy=exclude_falsy))
-        res['_ActionId'] = actions
+            res['_ActionId'] = [self.actions.get(base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
         return res
 
 

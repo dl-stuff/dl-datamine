@@ -24,7 +24,7 @@ class ActionCondition(DBView):
         try:
             res['_Type'] = ACTION_CONDITION_TYPES.get(res['_Type'], res['_Type'])
         except:
-            res['_Type'] = ACTION_CONDITION_TYPES[0]
+            pass
         return res
 
 
@@ -88,9 +88,9 @@ class AbilityData(DBView):
         self.action_condition = ActionCondition(db)
     
     def get(self, key, fields=None, full_query=True, exclude_falsy=True):
-        ability_data = super().get(key, fields=fields, exclude_falsy=False)
+        ability_data = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
         try:
-            ability_data['_ConditionType'] = ABILITY_CONDITION_TYPES.get(ability_data['_ConditionType'], str(ability_data['_ConditionType']))
+            ability_data['_ConditionType'] = ABILITY_CONDITION_TYPES.get(ability_data['_ConditionType'], ability_data['_ConditionType'])
         except:
             pass
         if not fields:
@@ -98,7 +98,7 @@ class AbilityData(DBView):
                 if f'_AbilityType{i}' in ability_data and ability_data[f'_AbilityType{i}']:
                     a_type = ability_data[f'_AbilityType{i}']
                     a_ids = {f'_VariousId{i}{a}': ability_data[f'_VariousId{i}{a}'] for a in ('a', 'b', 'c') if f'_VariousId{i}{a}' in ability_data and ability_data[f'_VariousId{i}{a}']}
-                    a_str = ability_data[f'_VariousId{i}str']
+                    a_str = ability_data.get(f'_VariousId{i}str', None)
                     if a_type in self.ABILITY_TYPES:
                         ability_data[f'_Description{i}'] = self.ABILITY_TYPES[a_type](list(a_ids.values()), a_str)
                     if full_query:
@@ -107,8 +107,6 @@ class AbilityData(DBView):
                                 ability_data[ak] = self.get(value, fields=fields, full_query=True, exclude_falsy=exclude_falsy)
                             elif a_type == self.ACT_COND_TYPE:
                                 ability_data[ak] = self.action_condition.get(value, exclude_falsy=exclude_falsy)
-        if exclude_falsy:
-            ability_data = self.remove_falsy_fields(ability_data)
         return ability_data
 
 class ActionParts(DBView):
@@ -139,6 +137,7 @@ class PlayerActionHitAttribute(DBView):
 
 class PlayerAction(DBView):
     LV_SUFFIX = re.compile(r'(.*)(LV\d{2})')
+    HIT_LABELS = ['_hitLabel', '_hitAttrLabel', '_abHitAttrLabel']
     def __init__(self, db):
         super().__init__(db, 'PlayerAction')
         self.parts = ActionParts(db)
@@ -153,16 +152,19 @@ class PlayerAction(DBView):
         pa_id = player_action['_Id']
         action_parts = self.parts.get(pa_id, by='_ref', order='_seq ASC', exclude_falsy=exclude_falsy)
         for ap in action_parts:
-            if '_hitLabel' in ap and ap['_hitLabel']:
-                res = self.LV_SUFFIX.match(ap['_hitLabel'])
-                if res:
-                    base_label, _ = res.groups()
-                    hit_attrs = self.attrs.get(base_label, by='_Id', order='_Id DESC', mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
-                    if hit_attrs:
-                        if isinstance(hit_attrs, dict) or full_hitattr:
-                            ap['_hitAttr'] = hit_attrs
-                        elif len(hit_attrs) > 0:
-                            ap['_hitAttr'] = hit_attrs[0]
+            for label in self.HIT_LABELS:
+                if label in ap and ap[label]:
+                    res = self.LV_SUFFIX.match(ap[label])
+                    if res:
+                        base_label, _ = res.groups()
+                        hit_attrs = self.attrs.get(base_label, by='_Id', order='_Id DESC', mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+                        if hit_attrs:
+                            if isinstance(hit_attrs, dict) or full_hitattr:
+                                ap[label] = hit_attrs
+                            elif len(hit_attrs) > 0:
+                                ap[label] = hit_attrs[0]
+                    else:
+                        ap[label] = self.attrs.get(ap[label], by='_Id', exclude_falsy=exclude_falsy)
         player_action['_Parts'] = action_parts
         return player_action
 
@@ -198,7 +200,7 @@ class SkillData(DBView):
         return data
 
     def get(self, pk, fields=None, exclude_falsy=True, 
-            full_query=True, full_abilities=True, full_transSkill=True,
+            full_query=True, full_abilities=False, full_transSkill=True,
             full_hitattr=False):
         skill_data = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
@@ -213,13 +215,13 @@ class SkillData(DBView):
         else:
             skill_data = self.get_last(self.abilities, '_Ability', skill_data, exclude_falsy=exclude_falsy)
         if full_transSkill and '_TransSkill' in skill_data and skill_data['_TransSkill']:
-            next_trans_skill = self.get(skill_data['_TransSkill'], exclude_falsy=False, full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
+            next_trans_skill = self.get(skill_data['_TransSkill'], exclude_falsy=exclude_falsy, full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
             trans_skill_group = {
                 skill_data['_Id']: None,
                 next_trans_skill['_Id']: next_trans_skill
             }
             while next_trans_skill['_TransSkill'] != skill_data['_Id']:
-                next_trans_skill = self.get(next_trans_skill['_TransSkill'], exclude_falsy=False, full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
+                next_trans_skill = self.get(next_trans_skill['_TransSkill'], exclude_falsy=exclude_falsy, full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
                 trans_skill_group[next_trans_skill['_Id']] = next_trans_skill
             skill_data['_TransSkill'] = trans_skill_group
         # ChainGroupId

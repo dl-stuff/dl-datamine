@@ -26,7 +26,6 @@ CLASS_TYPES = {
 
 
 ACTION_CONDITION_TYPES = {
-    0: 'Normal',
     1: 'Poison',
     2: 'Burn',
     3: 'Freeze',
@@ -41,7 +40,6 @@ ACTION_CONDITION_TYPES = {
 }
 
 ABILITY_CONDITION_TYPES = {
-    0: 'None',
     1: 'hp_geq',
     2: 'hp_leq',
     4: 'buff_effect',

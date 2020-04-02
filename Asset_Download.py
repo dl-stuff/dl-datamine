@@ -27,15 +27,21 @@ async def download(session, source, target):
         with open(target, 'wb') as f:
             f.write(await resp.read())
 
+def check_filter_str(filter_str, label):
+    print(filter_str)
+    return not filter_str or re.search(filter_str, label, flags=re.IGNORECASE)
+
 def read_manifest_by_filter_str(manifest, filter_str, output):
     manifest_set = set()
     with open(manifest, 'r') as m:
         for l in m:
             sp = l.split('|')
-            if not filter_str or filter_str in sp[1]:
+            url = sp[0].strip()
+            label = sp[1].strip()
+            if check_filter_str(filter_str, label):
                 # yield sp[0].strip(), 'output/'+merge_path_dir(sp[1].strip())
                 # yield sp[0].strip(), './'+sp[1].strip()
-                mtuple = sp[0].strip(), output+merge_path_dir(sp[1].strip())
+                mtuple = url, output+merge_path_dir(label)
                 manifest_set.add(mtuple)
     return manifest_set
 
