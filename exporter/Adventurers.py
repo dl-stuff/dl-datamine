@@ -124,14 +124,14 @@ class CharaData(DBView):
             res[ex2] = self.abilities.get(res[ex2], exclude_falsy=exclude_falsy)
         return res
 
-    def process_result(self, res, exclude_falsy=True, condesnse=True):
+    def process_result(self, res, exclude_falsy=True, condense=True):
         if '_WeaponType' in res:
             res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
         if '_ElementalType' in res:
             res['_ElementalType'] = ELEMENTS.get(res['_ElementalType'], res['_ElementalType'])
         if '_CharaType' in res:
             res['_CharaType'] = CLASS_TYPES.get(res['_CharaType'], res['_CharaType'])
-        if condesnse:
+        if condense:
             res = self.condense_stats(res)
         
         if '_ModeChangeType' in res and res['_ModeChangeType']:
@@ -142,9 +142,9 @@ class CharaData(DBView):
 
         for s in ('_Skill1', '_Skill2'):
             if s in res and res[s]:
-                res[s] = self.skills.get(res[s], exclude_falsy=exclude_falsy, full_query=True, full_hitattr=not condesnse)
+                res[s] = self.skills.get(res[s], exclude_falsy=exclude_falsy, full_query=True, full_hitattr=not condense)
 
-        if condesnse:
+        if condense:
             res = self.last_abilities(res)
         else:
             res = self.all_abilities(res)
@@ -153,11 +153,11 @@ class CharaData(DBView):
 
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condesnse=True):
+    def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condense=True):
         res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
-        return self.process_result(res, exclude_falsy=exclude_falsy, condesnse=True)
+        return self.process_result(res, exclude_falsy=exclude_falsy, condense=True)
 
     @staticmethod
     def outfile_name(res, ext='.json'):

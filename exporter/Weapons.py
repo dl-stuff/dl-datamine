@@ -3,7 +3,7 @@ import os
 import re
 
 from loader.Database import DBManager, DBView
-from exporter.Shared import AbilityData, SkillData, PlayerAction
+from exporter.Shared import AbilityData, SkillData, PlayerAction, get_valid_filename
 
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 

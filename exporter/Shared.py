@@ -7,6 +7,9 @@ from loader.Database import DBManager, DBView, DBDict
 from loader.Actions import CommandType
 from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES
 
+def get_valid_filename(s):
+    return re.sub(r'(?u)[^-\w. ]', '', s)
+
 class ActionCondition(DBView):
     def __init__(self, db):
         super().__init__(db, 'ActionCondition', labeled_fields=['_Text', '_TextEx'])
