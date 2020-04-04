@@ -1,8 +1,7 @@
 /out/
-/download/
-/extract/
+/_download/
+/_extract/
 *__pycache__
 *.lnk
 *.txt
 *.sqlite
-/adventurers/

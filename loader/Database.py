@@ -89,7 +89,8 @@ class DBManager:
         for entry in data:
             if tbl.pk == DBTableMetadata.DBID or entry[tbl.pk]:
                 for field in tbl.blob_fields:
-                    entry[field] = json.dumps(entry[field])
+                    if entry[field]:
+                        entry[field] = json.dumps(entry[field])
                 yield tuple(entry.values())
 
     def query_one(self, query, param, d_type):

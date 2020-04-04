@@ -136,9 +136,9 @@ class CharaData(DBView):
         
         if '_ModeChangeType' in res and res['_ModeChangeType']:
             res['_ModeChangeType'] = MODE_CHANGE_TYPES.get(res['_ModeChangeType'], res['_ModeChangeType'])
-            for m in ('_ModeId1', '_ModeId2', '_ModeId3'):
-                if m in res:
-                    res[m] = self.mode.get(res[m], exclude_falsy=exclude_falsy, full_query=True)
+        for m in ('_ModeId1', '_ModeId2', '_ModeId3'):
+            if m in res:
+                res[m] = self.mode.get(res[m], exclude_falsy=exclude_falsy, full_query=True)
 
         for s in ('_Skill1', '_Skill2'):
             if s in res and res[s]:

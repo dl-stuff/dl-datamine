@@ -49,7 +49,7 @@ class AbilityData(DBView):
         8: lambda ids, _: f'recovery_potency',
         9: lambda ids, _: f'gauge_accelerator',
         11: lambda ids, _: f'striking_haste',
-        14: lambda ids, _: f'action_condition {[i for i in ids if i]}',
+        14: lambda ids, s: f'action_condition {ids, s}',
         16: lambda ids, _: f'debuff_chance',
         17: lambda ids, _: f'skill_prep',
         18: lambda ids, _: f'buff_tim',
@@ -86,6 +86,7 @@ class AbilityData(DBView):
     def __init__(self, db):
         super().__init__(db, 'AbilityData', labeled_fields=['_Name', '_Details', '_HeadText'])
         self.action_condition = ActionCondition(db)
+        self.attrs = PlayerActionHitAttribute(db)
     
     def get(self, key, fields=None, full_query=True, exclude_falsy=True):
         ability_data = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
@@ -107,41 +108,69 @@ class AbilityData(DBView):
                                 ability_data[ak] = self.get(value, fields=fields, full_query=True, exclude_falsy=exclude_falsy)
                             elif a_type == self.ACT_COND_TYPE:
                                 ability_data[ak] = self.action_condition.get(value, exclude_falsy=exclude_falsy)
+                        if a_type == self.ACT_COND_TYPE and a_str:
+                            ak = f'_VariousId{i}str'
+                            ability_data[ak] = self.attrs.get(ability_data[ak], by='_Id', exclude_falsy=exclude_falsy)
         return ability_data
 
+class PlayerActionHitAttribute(DBView):
+    def __init__(self, db):
+        super().__init__(db, 'PlayerActionHitAttribute')
+        self.action_condition = ActionCondition(db)
+
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
+        res = super().get(pk, by, fields, order, mode, exclude_falsy)
+        res_list = [res] if isinstance(res, dict) else res
+        for r in res_list:
+            if '_ActionCondition1' in r and r['_ActionCondition1']:
+                act_cond = self.action_condition.get(r['_ActionCondition1'], exclude_falsy=exclude_falsy)
+                if act_cond:
+                    r['_ActionCondition1'] = act_cond
+        return res
+
 class ActionParts(DBView):
+    LV_SUFFIX = re.compile(r'(.*LV)(\d{2})')
+    HIT_LABELS = ['_hitLabel', '_hitAttrLabel', '_abHitAttrLabel']
     def __init__(self, db):
         super().__init__(db, 'ActionParts')
+        self.attrs = PlayerActionHitAttribute(db)
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, hide_ref=True):
-        res = super().get(pk, by=by, fields=fields, order=order, mode=mode, exclude_falsy=exclude_falsy)
-        for r in res:
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, hide_ref=True, full_hitattr=False):
+        action_parts = super().get(pk, by=by, fields=fields, order=order, mode=mode, exclude_falsy=exclude_falsy)
+        for r in action_parts:
             if 'commandType' in r:
                 r['commandType'] = CommandType(r['commandType']).name
             if hide_ref:
                 del r['_Id']
                 del r['_ref']
-                try:
-                    del r['_seq']
-                except:
-                    pass
-        return res
+
+            for label in self.HIT_LABELS:
+                if label not in r:
+                    continue
+                res = self.LV_SUFFIX.match(r[label])
+                if res:
+                    base_label, _ = res.groups()
+                    hit_attrs = self.attrs.get(base_label, by='_Id', order='_Id DESC', mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+                    if hit_attrs:
+                        if isinstance(hit_attrs, dict) or full_hitattr:
+                            r[label] = hit_attrs
+                        elif len(hit_attrs) > 0:
+                            r[label] = hit_attrs[0]
+                else:
+                    hit_attr = self.attrs.get(r[label], by='_Id', exclude_falsy=exclude_falsy)
+                    if hit_attr:
+                        r[label] = hit_attr
+
+        return action_parts
 
     @staticmethod
     def remove_falsy_fields(res):
-        return DBDict(filter(lambda x: bool(x[1]) or x[0] == '_seconds', res.items()))
-
-class PlayerActionHitAttribute(DBView):
-    def __init__(self, db):
-        super().__init__(db, 'PlayerActionHitAttribute')
+        return DBDict(filter(lambda x: bool(x[1]) or x[0] in ('_seconds', '_seq'), res.items()))
 
 class PlayerAction(DBView):
-    LV_SUFFIX = re.compile(r'(.*LV)(\d{2})')
-    HIT_LABELS = ['_hitLabel', '_hitAttrLabel', '_abHitAttrLabel']
     def __init__(self, db):
         super().__init__(db, 'PlayerAction')
         self.parts = ActionParts(db)
-        self.attrs = PlayerActionHitAttribute(db)
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True, full_hitattr=False):
         player_action = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
@@ -151,20 +180,6 @@ class PlayerAction(DBView):
             return False
         pa_id = player_action['_Id']
         action_parts = self.parts.get(pa_id, by='_ref', order='_seq ASC', exclude_falsy=exclude_falsy)
-        for ap in action_parts:
-            for label in self.HIT_LABELS:
-                if label in ap and ap[label]:
-                    res = self.LV_SUFFIX.match(ap[label])
-                    if res:
-                        base_label, _ = res.groups()
-                        hit_attrs = self.attrs.get(base_label, by='_Id', order='_Id DESC', mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
-                        if hit_attrs:
-                            if isinstance(hit_attrs, dict) or full_hitattr:
-                                ap[label] = hit_attrs
-                            elif len(hit_attrs) > 0:
-                                ap[label] = hit_attrs[0]
-                    else:
-                        ap[label] = self.attrs.get(ap[label], by='_Id', exclude_falsy=exclude_falsy)
         player_action['_Parts'] = action_parts
         return player_action
 
@@ -200,7 +215,7 @@ class SkillData(DBView):
         return data
 
     def get(self, pk, fields=None, exclude_falsy=True, 
-            full_query=True, full_abilities=False, full_transSkill=True,
+        full_query=True, full_abilities=False, full_transSkill=True,
             full_hitattr=False):
         skill_data = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:

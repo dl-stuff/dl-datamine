@@ -6,19 +6,32 @@ import re
 
 class CommandType(Enum):
     UNKNOWN = -1
-    PARTS_MOTION_DATA = 2
-    BULLET_DATA = 9
-    HIT_DATA = 10
-    EFFECT_DATA = 11
-    SOUND_DATA = 12
-    CAMERA_MOTION_DATA = 13
-    SEND_SIGNAL_DATA = 14
-    ACTIVE_CANCEL_DATA = 15
-    MULTI_BULLET_DATA = 24
-    PARABOLA_BULLET_DATA = 41
-    PIVOT_BULLET_DATA = 53
-    FIRE_STOCK_BULLET_DATA = 59
-    SETTING_HIT_DATA = 66
+    PARTS_MOTION = 2
+    MOVEMENT = 5
+    ROTATION = 7
+    MARKER = 8
+    BULLET = 9
+    HIT = 10
+    EFFECT = 11
+    SOUND = 12
+    CAMERA_MOTION = 13
+    SEND_SIGNAL = 14
+    ACTIVE_CANCEL = 15
+    TARGETING = 17 # spin cancel ?
+    ACTION_END = 23
+    MULTI_BULLET = 24
+    ANIMATION = 25 # or maybe effects ?
+    CONTROL = 30 # some kinda control related thing
+    COLLISION = 37 # seen in arrange bullet
+    PARABOLA_BULLET = 41
+    TIMESTOP = 48 # control animation playback ?
+    TIMECURVE = 49 # control animation playback ?
+    PIVOT_BULLET = 53
+    MOVEMENT_IN_SKILL = 54 # only eze s1 uses this
+    ROTATION_IN_SKILL = 55
+    FIRE_STOCK_BULLET = 59
+    CONDITION_TEXT = 63 # unsure where text is sourced, not in TextLabel
+    SETTING_HIT = 66
 
     @classmethod
     def _missing_(cls, value):
@@ -29,7 +42,10 @@ def build_db_data(meta, ref, seq, data):
     db_data = {}
     for k in meta.field_type.keys():
         if k in data:
-            db_data[k] = data[k]
+            if isinstance(data[k], str):
+                db_data[k] = data[k].strip()
+            else:
+                db_data[k] = data[k]
         else:
             db_data[k] = None
     db_data['_Id'] = f'{ref}{seq:03}'
@@ -38,15 +54,25 @@ def build_db_data(meta, ref, seq, data):
     return db_data
 
 
-def build_hit_attr_label(meta, ref, seq, data):
-    return build_db_data(meta, ref, seq, data)
-
-
 def build_bullet(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
     ab_label = data['_arrangeBullet']['_abHitAttrLabel']
     if ab_label:
         db_data['_abHitAttrLabel'] = ab_label
+    return db_data
+
+
+def build_marker(meta, ref, seq, data):
+    db_data = build_db_data(meta, ref, seq, data)
+    charge_lvl_sec = db_data['_chargeLvSec']
+    if not any(charge_lvl_sec):
+        db_data['_chargeLvSec'] = None
+    return db_data
+
+def build_animation(meta, ref, seq, data):
+    db_data = build_db_data(meta, ref, seq, data)
+    if '_name' in data and data['_name']:
+        db_data['_animationName'] = data['_name']
     return db_data
 
 ACTION_PART = DBTableMetadata(
@@ -57,10 +83,12 @@ ACTION_PART = DBTableMetadata(
         '_seconds': DBTableMetadata.REAL,
         '_speed': DBTableMetadata.REAL,
         '_duration': DBTableMetadata.REAL,
+        '_activateId': DBTableMetadata.INT,
 
         'commandType': DBTableMetadata.INT,
-        # PARTS_MOTION_DATA
-        '_activateId': DBTableMetadata.INT,
+
+        # PARTS_MOTION
+        '_motionState': DBTableMetadata.TEXT,
         '_motionFrame': DBTableMetadata.INT,
         '_blendDuration': DBTableMetadata.REAL,
         '_isBlend': DBTableMetadata.INT,
@@ -68,7 +96,31 @@ ACTION_PART = DBTableMetadata(
         '_isIgnoreFinishCondition': DBTableMetadata.INT,
         '_isIdleAfterCancel': DBTableMetadata.INT,
 
-        # HIT
+        # MOVEMENT
+        # '_position': DBTableMetadata.BLOB,
+        # '_pushOut': DBTableMetadata.INT,
+        # '_autoDash': DBTableMetadata.INT,
+        # '_chargeMarker': DBTableMetadata.INT,
+        # '_gravity': DBTableMetadata.REAL,
+        # '_moveStyle': DBTableMetadata.INT,
+        # '_teleportPosition': DBTableMetadata.INT,
+        # '_teleportDirection': DBTableMetadata.INT,
+        # '_distance': DBTableMetadata.INT,
+
+        # ROTATION
+        # '_rotation': DBTableMetadata.BLOB,
+
+        # MARKER
+        '_chargeSec': DBTableMetadata.REAL,
+        '_chargeLvSec': DBTableMetadata.BLOB,
+        # '_chargeAfterSec': DBTableMetadata.REAL,
+        # '_ignoredByPlayerAI': DBTableMetadata.INT,
+        # '_invisibleForPlayerAI': DBTableMetadata.INT,
+        # '_playerAIEscapeDir': DBTableMetadata.INT,
+        # '_ignoredImpactWaitForPlayerColor': DBTableMetadata.INT,
+
+        # HIT/BULLET
+        '_bulletSpeed': DBTableMetadata.REAL,
         '_delayTime': DBTableMetadata.REAL,
         '_collisionHitInterval': DBTableMetadata.REAL,
         '_isHitDelete': DBTableMetadata.INT,
@@ -79,29 +131,41 @@ ACTION_PART = DBTableMetadata(
         '_generateDelay': DBTableMetadata.REAL,
 
         # SEND_SIGNAL
-        '_actionId': DBTableMetadata.INT,
+        '_signalType': DBTableMetadata.INT,
         '_decoId': DBTableMetadata.INT,
+        '_actionId': DBTableMetadata.INT,
+        '_keepActionEnd': DBTableMetadata.INT,
+        '_keepActionId1': DBTableMetadata.INT,
+        '_keepActionId2': DBTableMetadata.INT,
 
         # ACTIVE_CANCEL
         '_actionType': DBTableMetadata.INT,
-        '_motionEnd': DBTableMetadata.INT
+        '_motionEnd': DBTableMetadata.INT,
+
+        # BULLETS - contains marker data, unsure if it does anything
+        # '_useMarker': DBTableMetadata.INT,
+        # '_marker': DBTableMetadata.BOLB (?)
+
+        # ANIMATION
+        '_animationName': DBTableMetadata.TEXT, 
+        '_isVisible': DBTableMetadata.TEXT, 
+        '_isActionClear': DBTableMetadata.TEXT,
     }
 )
 
 PROCESSORS = {}
-PROCESSORS[CommandType.PARTS_MOTION_DATA] = build_db_data
-PROCESSORS[CommandType.BULLET_DATA] = build_bullet
-PROCESSORS[CommandType.HIT_DATA] = build_db_data
-# PROCESSORS[CommandType.EFFECT_DATA] = DBTableMetadata('EffectData')
-# PROCESSORS[CommandType.SOUND_DATA] = DBTableMetadata('SoundData')
-# PROCESSORS[CommandType.CAMERA_MOTION_DATA] = DBTableMetadata('CameraMotionData')
-PROCESSORS[CommandType.SEND_SIGNAL_DATA] = build_db_data
-PROCESSORS[CommandType.ACTIVE_CANCEL_DATA] = build_db_data
-PROCESSORS[CommandType.MULTI_BULLET_DATA] = build_bullet
-PROCESSORS[CommandType.PARABOLA_BULLET_DATA] = build_bullet
-PROCESSORS[CommandType.PIVOT_BULLET_DATA] = build_bullet
-PROCESSORS[CommandType.FIRE_STOCK_BULLET_DATA] = build_bullet
-PROCESSORS[CommandType.SETTING_HIT_DATA] = build_hit_attr_label
+PROCESSORS[CommandType.PARTS_MOTION] = build_db_data
+PROCESSORS[CommandType.MARKER] = build_marker
+PROCESSORS[CommandType.BULLET] = build_bullet
+PROCESSORS[CommandType.HIT] = build_db_data
+PROCESSORS[CommandType.SEND_SIGNAL] = build_db_data
+PROCESSORS[CommandType.ACTIVE_CANCEL] = build_db_data
+PROCESSORS[CommandType.MULTI_BULLET] = build_bullet
+PROCESSORS[CommandType.ANIMATION] = build_animation
+PROCESSORS[CommandType.PARABOLA_BULLET] = build_bullet
+PROCESSORS[CommandType.PIVOT_BULLET] = build_bullet
+PROCESSORS[CommandType.FIRE_STOCK_BULLET] = build_bullet
+PROCESSORS[CommandType.SETTING_HIT] = build_db_data
 
 def load_actions(db, path):
     file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')
