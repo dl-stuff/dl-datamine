@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Dict
 
 from Common import run_common, load_by_id
-from Mappings import ACTION_CONDITION_TYPES
+from Mappings import AFFLICTION_TYPES
 from TextLabel import get_text_label
 
 
@@ -127,7 +127,7 @@ class ActionConditionData:
 def parse_action_condition(data: dict, labels: Dict[str, str]) -> ActionConditionData:
     return ActionConditionData(
         id=data['_Id'],
-        type=ACTION_CONDITION_TYPES.get(data['_Type'], str(data['_Type'])),
+        type=AFFLICTION_TYPES.get(data['_Type'], str(data['_Type'])),
         text=labels.get(data['_Text'], data['_Text']),
         text_ex=labels.get(data['_TextEx'], data['_TextEx']),
         unique_icon=data['_UniqueIcon'],

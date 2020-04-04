@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Callable
 
 from Actions import get_text_label
 from Common import run_common
-from Mappings import ACTION_CONDITION_TYPES, ABILITY_CONDITION_TYPES
+from Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES
 
 
 STAT_ABILITIES = {
@@ -21,8 +21,8 @@ STAT_ABILITIES = {
 
 ABILITY_TYPES: Dict[int, Callable[[List[int], str], str]] = {
     1: lambda ids, _: STAT_ABILITIES.get(ids[0], f'stat {ids[0]}'),
-    2: lambda ids, _: f'affliction_res {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
-    3: lambda ids, _: f'affliction_proc_rate {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
+    2: lambda ids, _: f'affliction_res {AFFLICTION_TYPES.get(ids[0], ids[0])}',
+    3: lambda ids, _: f'affliction_proc_rate {AFFLICTION_TYPES.get(ids[0], ids[0])}',
     4: lambda ids, _: f'tribe_res {ids[0]}',
     5: lambda ids, _: f'bane {ids[0]}',
     6: lambda ids, _: 'damage',
@@ -34,7 +34,7 @@ ABILITY_TYPES: Dict[int, Callable[[List[int], str], str]] = {
     16: lambda ids, _: f'debuff_chance',
     17: lambda ids, _: f'skill_prep',
     18: lambda ids, _: f'buff_tim',
-    20: lambda ids, _: f'punisher {ACTION_CONDITION_TYPES.get(ids[0], ids[0])}',
+    20: lambda ids, _: f'punisher {AFFLICTION_TYPES.get(ids[0], ids[0])}',
     21: lambda ids, _: f'player_exp',
     25: lambda ids, _: f'cond_action_grant {ids[0]}',
     26: lambda ids, _: f'critical_damage',

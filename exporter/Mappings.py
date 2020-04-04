@@ -25,7 +25,7 @@ CLASS_TYPES = {
 }
 
 
-ACTION_CONDITION_TYPES = {
+AFFLICTION_TYPES = {
     1: 'Poison',
     2: 'Burn',
     3: 'Freeze',
@@ -33,7 +33,7 @@ ACTION_CONDITION_TYPES = {
     5: 'Blind',
     6: 'Stun',
     7: 'Curse',
-    8: '8',
+    8: 'UNKNOWN08',
     9: 'Bog',
     10: 'Sleep',
     11: 'Frostbite'
@@ -73,4 +73,15 @@ ABILITY_CONDITION_TYPES = {
     47: 'not_knocked_back',
     48: 'buffed',
     50: 'enemy_has_def_down'
+}
+
+TRIBE_TYPES = {
+    1: 'Thaumian',
+    2: 'Physian',
+    3: 'Demihuman',
+    4: 'Therion',
+    5: 'Undead',
+    6: 'Demon',
+    7: 'Human',
+    8: 'Dragon'
 }

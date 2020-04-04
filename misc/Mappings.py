@@ -17,7 +17,7 @@ ELEMENTS = {
     5: 'Shadow'
 }
 
-ACTION_CONDITION_TYPES = {
+AFFLICTION_TYPES = {
     0: 'Normal',
     1: 'Poison',
     2: 'Burn',

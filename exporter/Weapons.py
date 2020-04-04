@@ -3,7 +3,7 @@ import os
 import re
 
 from loader.Database import DBManager, DBView
-from exporter.Shared import AbilityData, SkillData, PlayerAction, check_target_path
+from exporter.Shared import AbilityData, SkillData, PlayerAction
 
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
@@ -16,7 +16,7 @@ class WeaponData(DBView):
         self.abilities = AbilityData(db)
         self.skills = SkillData(db)
 
-    def process_result(self, res, exclude_falsy, full_query):
+    def process_result(self, res, exclude_falsy=True, full_query=True):
         if not full_query:
             return res
         if '_Type' in res:
@@ -34,18 +34,16 @@ class WeaponData(DBView):
         res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         return self.process_result(res, exclude_falsy, full_query)
 
-    def export_all_to_folder(self, out_dir=None, ext='.json', exclude_falsy=True):
-        if not out_dir:
-            out_dir = f'./out/weapons'
-        all_res = self.get_all(exclude_falsy=exclude_falsy)
-        check_target_path(out_dir)
-        for res in all_res:
-            res = self.process_result(res, exclude_falsy, True)
-            if '_BaseId' in res:
-                name = 'UNKNOWN' if '_Name' not in res else res['_Name']
-                output = os.path.join(out_dir, get_valid_filename(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'))
-                with open(output, 'w', newline='', encoding='utf-8') as fp:
-                    json.dump(res, fp, indent=2, ensure_ascii=False)
+    @staticmethod
+    def outfile_name(res, ext='.json'):
+        name = 'UNKNOWN' if '_Name' not in res else res['_Name']
+        if '_BaseId' in res:
+            return get_valid_filename(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
+        else:
+            return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
+
+    def export_all_to_folder(self, out_dir='./out/weapons', ext='.json', exclude_falsy=True):
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
 if __name__ == '__main__':
     db = DBManager()

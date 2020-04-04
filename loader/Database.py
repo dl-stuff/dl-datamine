@@ -1,6 +1,15 @@
 import sqlite3
 import json
 import os
+import errno
+
+def check_target_path(target):
+    if not os.path.exists(target):
+        try:
+            os.makedirs(target)
+        except OSError as exc: # Guard against race condition
+            if exc.errno != errno.EEXIST:
+                raise
 
 class DBDict(dict):
     def __repr__(self):
@@ -234,13 +243,21 @@ class DBView:
         if len(self.references) > 0:
             self.open()
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
+    def process_result(self, *args, **kargs):
+        return args[0]
+
+    @staticmethod
+    def outfile_name(res, ext='.json'):
+        name = '_' + res.get('_Name', '')
+        return f'{res["_Id"]}{name}{ext}'
+
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, expand_one=True):
         if order and '.' not in order:
             order = self.name + '.' + order
         res = self.database.select(self.name, pk, by, fields, order, mode)
         if exclude_falsy:
             res = [self.remove_falsy_fields(r) for r in res]
-        if len(res) == 1:
+        if expand_one and len(res) == 1:
             res = res[0]
         return res
 
@@ -261,3 +278,13 @@ class DBView:
     def close(self):
         self.database.delete_view(self.name)
         self.name = self.base_table
+
+    def export_all_to_folder(self, out_dir, ext='.json', exclude_falsy=True, **kargs):
+        all_res = self.get_all(exclude_falsy=exclude_falsy)
+        check_target_path(out_dir)
+        for res in all_res:
+            res = self.process_result(res, exclude_falsy=exclude_falsy, **kargs)
+            out_name = self.outfile_name(res, ext)
+            output = os.path.join(out_dir, out_name)
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                json.dump(res, fp, indent=2, ensure_ascii=False)

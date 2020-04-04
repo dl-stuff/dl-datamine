@@ -2,7 +2,7 @@ import json
 import os
 
 from loader.Database import DBManager, DBView
-from exporter.Shared import AbilityData, SkillData, PlayerAction, check_target_path
+from exporter.Shared import AbilityData, SkillData, PlayerAction
 
 class DragonMotion(DBView):
     def __init__(self, db):
@@ -46,17 +46,13 @@ class DragonData(DBView):
         res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         return self.process_result(res, exclude_falsy, full_query, full_abilities)
 
-    def export_all_to_folder(self, out_dir=None, ext='.json', exclude_falsy=True):
-        if not out_dir:
-            out_dir = f'./out/dragons'
-        all_res = self.get_all(exclude_falsy=exclude_falsy)
-        check_target_path(out_dir)
-        for res in all_res:
-            res = self.process_result(res, exclude_falsy=exclude_falsy)
-            name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
-            output = os.path.join(out_dir, f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
-            with open(output, 'w', newline='', encoding='utf-8') as fp:
-                json.dump(res, fp, indent=2, ensure_ascii=False)
+    @staticmethod
+    def outfile_name(res, ext='.json'):
+        name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
+        return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
+
+    def export_all_to_folder(self, out_dir='./out/dragons', ext='.json', exclude_falsy=True):
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True, full_abilities=False)
 
 if __name__ == '__main__':
     db = DBManager()
