@@ -3,7 +3,7 @@ import os
 
 from loader.Database import DBManager, DBView
 from loader.Actions import CommandType
-from exporter.Shared import AbilityData, SkillData, PlayerAction
+from exporter.Shared import AbilityData, SkillData, PlayerAction, ActionCondition
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
 
 MODE_CHANGE_TYPES = {
@@ -12,9 +12,10 @@ MODE_CHANGE_TYPES = {
     3: 'Dragon'
 }
 
-class ExAbilityData(DBView):
+class ExAbilityData(AbilityData):
     def __init__(self, db):
-        super().__init__(db, 'ExAbilityData', labeled_fields=['_Name', '_Details'])
+        DBView.__init__(self, db, 'ExAbilityData', labeled_fields=['_Name', '_Details'])
+        self.action_condition = ActionCondition(db)
 
 class CharaUniqueCombo(DBView):
     AVOID = {6}

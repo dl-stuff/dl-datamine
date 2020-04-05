@@ -58,9 +58,9 @@ class AbilityData(DBView):
         27: lambda ids, _: f'shapeshift_prep',
         30: lambda ids, _: f'specific_bane {ids}',
         35: lambda ids, _: f'gauge_inhibitor',
-        36: lambda ids, _: f'dragon damage',
+        36: lambda ids, _: f'dragon_damage',
         39: lambda ids, _: f'action_grant {ids}',
-        40: lambda _, s: f'gauge def/skillboost {s}',
+        40: lambda _, s: f'gauge_def/skillboost {s}',
         43: lambda ids, _: f'ability_ref {ids}',
         44: lambda ids, _: f'action {ids}',
         48: lambda ids, _: f'dragon_timer_decrease_rate',
@@ -95,6 +95,8 @@ class AbilityData(DBView):
             if f'_AbilityType{i}' in ability_data and ability_data[f'_AbilityType{i}']:
                 a_type = ability_data[f'_AbilityType{i}']
                 a_ids = {f'_VariousId{i}{a}': ability_data[f'_VariousId{i}{a}'] for a in ('a', 'b', 'c') if f'_VariousId{i}{a}' in ability_data and ability_data[f'_VariousId{i}{a}']}
+                if f'_VariousId{i}' in ability_data and ability_data[f'_VariousId{i}']:
+                    a_ids[f'_VariousId{i}'] = ability_data[f'_VariousId{i}']
                 a_str = ability_data.get(f'_VariousId{i}str', None)
                 if a_type in self.ABILITY_TYPES:
                     ability_data[f'_Description{i}'] = self.ABILITY_TYPES[a_type](list(a_ids.values()), a_str)
