@@ -1,6 +1,5 @@
 /out/
-/_download/
-/_extract/
+/_*/
 *__pycache__
 *.lnk
 *.txt
