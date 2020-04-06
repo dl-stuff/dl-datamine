@@ -171,8 +171,9 @@ class EnemyParam(DBView):
     #     return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
 
     PARAM_GROUP = re.compile(r'([^\d]+)_\d{2}_\d{2}_E_?\d{2}')
-    def export_all_to_folder(self, out_dir='./out/enemies', ext='.json', exclude_falsy=True):
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
+        out_dir = os.path.join(out_dir, 'enemies')
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         sorted_res = defaultdict(lambda: [])

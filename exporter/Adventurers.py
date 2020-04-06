@@ -165,7 +165,8 @@ class CharaData(DBView):
         name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
-    def export_all_to_folder(self, out_dir='./out/adventurers', ext='.json', exclude_falsy=True):
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, 'adventurers')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
 if __name__ == '__main__':

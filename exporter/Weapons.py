@@ -42,7 +42,8 @@ class WeaponData(DBView):
         else:
             return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
 
-    def export_all_to_folder(self, out_dir='./out/weapons', ext='.json', exclude_falsy=True):
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, 'weapons')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
 if __name__ == '__main__':

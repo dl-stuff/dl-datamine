@@ -34,7 +34,8 @@ class AmuletData(DBView):
         name = 'UNKNOWN' if '_Name' not in res else res['_Name']
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
-    def export_all_to_folder(self, out_dir='./out/wyrmprints', ext='.json', exclude_falsy=True):
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, 'wyrmprints')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True, full_abilities=False)
 
 if __name__ == '__main__':

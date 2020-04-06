@@ -98,7 +98,7 @@ def unpack_GameObject(data, destination_folder, stdout_log):
             json.dump(mono_list, f, indent=2)
     return None
 
-def unpack(obj, ex_target, stdout_log=False):
+def unpack(obj, ex_target, ex_dir, ex_img_dir, stdout_log=False):
     obj_type_str = str(obj.type)
     if obj_type_str in UNPACK:
         data = obj.read()
@@ -110,6 +110,10 @@ def unpack(obj, ex_target, stdout_log=False):
             dest = os.path.join(ex_target, data.name)
             method = UNPACK[obj_type_str]
         if method:
+            if obj_type_str == 'Texture2D':
+                dest = os.path.join(ex_img_dir, dest)
+            else:
+                dest = os.path.join(ex_dir, dest)
             return dest, method(data, dest, stdout_log)
             
 
@@ -250,13 +254,14 @@ def merge_images(image_list, stdout_log=False, do_indexed=False):
 
 
 class Extractor:
-    def __init__(self, jp_manifest, en_manifest, dl_dir='./_download', ex_dir='./_extract', stdout_log=True):
+    def __init__(self, jp_manifest, en_manifest, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', stdout_log=True):
         self.pm = {
             'jp': ParsedManifest(jp_manifest),
             'en': ParsedManifest(en_manifest)
         }
         self.dl_dir = dl_dir
         self.ex_dir = ex_dir
+        self.ex_img_dir = ex_img_dir
         self.extract_list = []
         self.stdout_log = stdout_log
 
@@ -271,14 +276,19 @@ class Extractor:
             with open(dl_target, 'wb') as f:
                 f.write(await resp.read())
             
+            _, ext = os.path.splitext(dl_target)
+            if len(ext) > 0:
+                if self.stdout_log:
+                    print('Skipped', dl_target)
+                return None
             if extract is None:
                 extract = os.path.dirname(target).replace('/', '_')
-            ex_target = os.path.join(self.ex_dir, region, extract)
+            ex_target = os.path.join(region, extract)
             am = AssetsManager(dl_target)
             texture_2d = {}
             for asset in am.assets.values():
                 for obj in asset.objects.values():
-                    result = unpack(obj, ex_target, self.stdout_log)
+                    result = unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, stdout_log=self.stdout_log)
                     if result and result[1]:
                         texture_2d[result[0]] = result[1]
             if len(texture_2d) > 0:
@@ -305,23 +315,26 @@ class Extractor:
         loop.run_until_complete(self.download_and_extract(download_list, None, region))
 
 if __name__ == '__main__':
-    ex = Extractor('jpmanifest_with_asset_labels.txt', 'enmanifest_with_asset_labels.txt', ex_dir='_images', stdout_log=False)
-    IMAGE_PATTERNS = {
-        # r'^images/icon/': None,
-        # r'^images/outgame': None
+    # IMAGE_PATTERNS = {
+    #     # r'^images/icon/': None,
+    #     # r'^images/outgame': None
 
-        r'^images/icon/ability/l': '../icon/ability',
-        r'^images/icon/amulet/l': '../icon/wyrmprint',
-        r'^images/icon/chara/l': '../icon/character',
-        r'^images/icon/element/m': '../icon/element',
-        r'^images/icon/weapontype/m': '../icon/weapontype',
-        r'^images/icon/skill/l': '../icon/skill',
-        r'^images/icon/stamp/l/framed': '../icon/stamp',
-        r'^images/icon/status': '../icon/status',
-        r'^images/icon/weapon/l': '../icon/weapon',
-        r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
-        r'^images/outgame/unitdetail/chara': '../portrait/character',
-        r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
-    }
+    #     r'^images/icon/ability/l': '../icon/ability',
+    #     r'^images/icon/amulet/l': '../icon/wyrmprint',
+    #     r'^images/icon/chara/l': '../icon/character',
+    #     r'^images/icon/element/m': '../icon/element',
+    #     r'^images/icon/weapontype/m': '../icon/weapontype',
+    #     r'^images/icon/skill/l': '../icon/skill',
+    #     r'^images/icon/stamp/l/framed': '../icon/stamp',
+    #     r'^images/icon/status': '../icon/status',
+    #     r'^images/icon/weapon/l': '../icon/weapon',
+    #     r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
+    #     r'^images/outgame/unitdetail/chara': '../portrait/character',
+    #     r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
+    # }
 
-    ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+    ex = Extractor('jpmanifest_with_asset_labels.txt', 'enmanifest_with_asset_labels.txt', stdout_log=True)
+    if os.path.exists('jpmanifest_old.txt'):
+        ex.download_and_extract_by_diff('jpmanifest_old.txt', region='jp')
+    if os.path.exists('enmanifest_old.txt'):
+        ex.download_and_extract_by_diff('enmanifest_old.txt', region='en')

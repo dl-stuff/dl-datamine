@@ -16,7 +16,7 @@ MANIFEST_JP = 'jpmanifest_with_asset_labels.txt'
 
 MASTER = 'master'
 ACTIONS = 'actions'
-CHARACTERS_MOTION = 'characters/motion'
+CHARACTERS_MOTION = 'characters_motion'
 DRAGON_MOTION = 'dragon_motion'
 
 TEXT_LABEL = 'TextLabel.json'
@@ -38,7 +38,6 @@ IMAGE_PATTERNS = {
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Import data to database.')
     parser.add_argument('--do_prep', help='Download and extract db related assets', action='store_true')
-    # parser.add_argument('--do_images', help='Download and extract images', action='store_true')
     parser.add_argument('-o', type=str, help='output file', default='dl.sqlite')
     args = parser.parse_args()
     # if args.do_images:
