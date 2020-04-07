@@ -315,26 +315,28 @@ class Extractor:
         loop.run_until_complete(self.download_and_extract(download_list, None, region))
 
 if __name__ == '__main__':
-    # IMAGE_PATTERNS = {
-    #     # r'^images/icon/': None,
-    #     # r'^images/outgame': None
+    IMAGE_PATTERNS = {
+        # r'^images/icon/': None,
+        # r'^images/outgame': None
 
-    #     r'^images/icon/ability/l': '../icon/ability',
-    #     r'^images/icon/amulet/l': '../icon/wyrmprint',
-    #     r'^images/icon/chara/l': '../icon/character',
-    #     r'^images/icon/element/m': '../icon/element',
-    #     r'^images/icon/weapontype/m': '../icon/weapontype',
-    #     r'^images/icon/skill/l': '../icon/skill',
-    #     r'^images/icon/stamp/l/framed': '../icon/stamp',
-    #     r'^images/icon/status': '../icon/status',
-    #     r'^images/icon/weapon/l': '../icon/weapon',
-    #     r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
-    #     r'^images/outgame/unitdetail/chara': '../portrait/character',
-    #     r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
-    # }
+        # r'^images/icon/ability/l': '../icon/ability',
+        # r'^images/icon/amulet/l': '../icon/wyrmprint',
+        # r'^images/icon/chara/l': '../icon/character',
+        # r'^images/icon/element/m': '../icon/element',
+        # r'^images/icon/weapontype/m': '../icon/weapontype',
+        # r'^images/icon/skill/l': '../icon/skill',
+        # r'^images/icon/stamp/l/framed': '../icon/stamp',
+        # r'^images/icon/status': '../icon/status',
+        # r'^images/icon/weapon/l': '../icon/weapon',
+        # r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
+        # r'^images/outgame/unitdetail/chara': '../portrait/character',
+        # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
+    }
 
     ex = Extractor('jpmanifest_with_asset_labels.txt', 'enmanifest_with_asset_labels.txt', stdout_log=True)
     if os.path.exists('jpmanifest_old.txt'):
         ex.download_and_extract_by_diff('jpmanifest_old.txt', region='jp')
     if os.path.exists('enmanifest_old.txt'):
         ex.download_and_extract_by_diff('enmanifest_old.txt', region='en')
+    
+    # ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
