@@ -100,6 +100,10 @@ def unpack_GameObject(data, destination_folder, stdout_log):
 
 def unpack(obj, ex_target, ex_dir, ex_img_dir, stdout_log=False):
     obj_type_str = str(obj.type)
+    if ex_dir is None and obj_type_str != 'Texture2D':
+        return None
+    if ex_img_dir is None and obj_type_str == 'Texture2D':
+        return None
     if obj_type_str in UNPACK:
         data = obj.read()
         method = None
@@ -333,7 +337,7 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
     }
 
-    ex = Extractor('jpmanifest_with_asset_labels.txt', 'enmanifest_with_asset_labels.txt', stdout_log=True)
+    ex = Extractor('jpmanifest_with_asset_labels.txt', 'enmanifest_with_asset_labels.txt', ex_dir=None, stdout_log=True)
     if os.path.exists('jpmanifest_old.txt'):
         ex.download_and_extract_by_diff('jpmanifest_old.txt', region='jp')
     if os.path.exists('enmanifest_old.txt'):
