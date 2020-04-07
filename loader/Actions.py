@@ -127,6 +127,7 @@ ACTION_PART = DBTableMetadata(
         '_hitLabel': DBTableMetadata.TEXT,
         '_hitAttrLabel': DBTableMetadata.TEXT,
         '_abHitAttrLabel': DBTableMetadata.TEXT,
+        '_bulletNum': DBTableMetadata.INT,
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
 

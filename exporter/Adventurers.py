@@ -51,7 +51,7 @@ class CharaModeData(DBView):
         for s in ('_Skill1Id', '_Skill2Id'):
             if s in res and res[s]:
                 res[s] = self.skills.get(res[s], exclude_falsy=exclude_falsy)
-        if '_UniqueComboId' and res['_UniqueComboId']:
+        if '_UniqueComboId' in res and res['_UniqueComboId']:
             res['_UniqueComboId'] = self.combo.get(res['_UniqueComboId'], exclude_falsy=exclude_falsy)
         if '_BurstAttackId' in res and res['_BurstAttackId']:
             res['_BurstAttackId'] = self.actions.get(res['_BurstAttackId'], exclude_falsy=exclude_falsy)
@@ -143,7 +143,7 @@ class CharaData(DBView):
 
         for s in ('_Skill1', '_Skill2'):
             if s in res and res[s]:
-                res[s] = self.skills.get(res[s], exclude_falsy=exclude_falsy, full_query=True, full_hitattr=not condense)
+                res[s] = self.skills.get(res[s], exclude_falsy=exclude_falsy, full_query=True)
 
         if condense:
             res = self.last_abilities(res)

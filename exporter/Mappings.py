@@ -39,6 +39,13 @@ AFFLICTION_TYPES = {
     11: 'Frostbite'
 }
 
+KILLER_STATE = {
+    **AFFLICTION_TYPES,
+    103: 'Defense down',
+    198: 'Dispel', # or maybe only burning ambition?
+    201: 'Break'
+}
+
 ABILITY_CONDITION_TYPES = {
     1: 'hp_geq',
     2: 'hp_leq',
