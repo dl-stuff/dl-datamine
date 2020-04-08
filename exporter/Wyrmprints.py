@@ -1,15 +1,15 @@
 import json
 import os
 
-from loader.Database import DBManager, DBView
+from loader.Database import DBViewIndex, DBView
 from exporter.Shared import AbilityData, SkillData, PlayerAction
 
 from exporter.Mappings import CLASS_TYPES
 
 class AmuletData(DBView):
-    def __init__(self, db):
-        super().__init__(db, 'AmuletData', labeled_fields=['_Name', '_Text1', '_Text2', '_Text3', '_Text4', '_Text5'])
-        self.abilities = AbilityData(db)
+    def __init__(self, index):
+        super().__init__(index, 'AmuletData', labeled_fields=['_Name', '_Text1', '_Text2', '_Text3', '_Text4', '_Text5'])
+        self.abilities = AbilityData(index)
 
     def process_result(self, res, exclude_falsy, full_query=True, full_abilities=False):
         if not full_query:
@@ -22,7 +22,7 @@ class AmuletData(DBView):
             for j in inner:
                 k = f'_Abilities{i}{j}'
                 if k in res and res[k]:
-                    res[k] = self.abilities.get(res[k], full_query=True, exclude_falsy=exclude_falsy)
+                    res[k] = self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy)
         return res
 
     def get(self, pk, fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
@@ -39,6 +39,6 @@ class AmuletData(DBView):
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True, full_abilities=False)
 
 if __name__ == '__main__':
-    db = DBManager()
-    view = AmuletData(db)
+    index = DBViewIndex()
+    view = AmuletData(index)
     view.export_all_to_folder()

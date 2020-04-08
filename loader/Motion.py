@@ -12,10 +12,10 @@ MOTION_FIELDS = {
         'duration': DBTableMetadata.REAL,
     }
 CHARACTER_MOTION = DBTableMetadata('CharacterMotion', pk='name', field_type=MOTION_FIELDS)
-CHARACTER_REF = re.compile(r'([A-Za-z]{3}.*)_(\d{8})')
+CHARACTER_REF = re.compile(r'([A-Za-z]{3}.*)_(\d{8})', flags=re.IGNORECASE)
 
 DRAGON_MOTION = DBTableMetadata('DragonMotion', pk='name', field_type=MOTION_FIELDS)
-DRAGON_REF = re.compile(r'([Dd])(\d{8})_\d{3}_\d{2}')
+DRAGON_REF = re.compile(r'd(\d{8})_\d{3}_\d{2}', flags=re.IGNORECASE)
 
 def build_motion(data, ref_pattern):
     db_data = {}

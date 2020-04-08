@@ -2,6 +2,9 @@ import sqlite3
 import json
 import os
 import errno
+from collections import defaultdict
+
+DB_FILE = 'dl.sqlite'
 
 def check_target_path(target):
     if not os.path.exists(target):
@@ -78,7 +81,7 @@ class DBTableMetadata:
 
 
 class DBManager:
-    def __init__(self, db_file='dl.sqlite', drop_on_reload=False):
+    def __init__(self, db_file=DB_FILE, drop_on_reload=False):
         self.conn = None
         if db_file is not None:
             self.open(db_file)
@@ -176,6 +179,7 @@ class DBManager:
 
     EXACT = 'exact'
     LIKE  = 'like'
+    RANGE = 'range'
     def select(self, table, value=None, by=None, fields=None, order=None, mode=EXACT, d_type=DBDict):
         tbl = self.check_table(table)
         by = by or tbl.pk
@@ -183,15 +187,18 @@ class DBManager:
             named_fields = ','.join([f'{table}.{k}' for k in fields])
         else:
             named_fields = tbl.named_fields
-        if mode == self.EXACT:
-            query = f'SELECT {named_fields} FROM {table} WHERE {table}.{by}=?'
-        elif mode == self.LIKE:
+        if mode == self.LIKE:
             query = f'SELECT {named_fields} FROM {table} WHERE {table}.{by} LIKE ? || \'%\''
+        elif mode == self.RANGE:
+            query = f'SELECT {named_fields} FROM {table} WHERE {table}.{by} >= ? AND {table}.{by} < ?'
+        else: # mode == self.EXACT
+            query = f'SELECT {named_fields} FROM {table} WHERE {table}.{by}=?'
         if order:
             query += f' ORDER BY {order}'
+        value = (value,) if not isinstance(value, tuple) else value
         return self.query_many(
             query=query,
-            param=(value,),
+            param=value,
             d_type=d_type
         )
 
@@ -231,8 +238,9 @@ class DBManager:
         self.conn.commit()
 
 class DBView:
-    def __init__(self, database, table, references=None, labeled_fields=None):
-        self.database = database
+    def __init__(self, index, table, references=None, labeled_fields=None):
+        self.index = index
+        self.database = index.db
         self.references = references or {}
         if table not in self.references and labeled_fields:
             self.references[table] = {}
@@ -288,3 +296,23 @@ class DBView:
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
                 json.dump(res, fp, indent=2, ensure_ascii=False)
+
+
+class DBViewIndex:
+
+    @staticmethod
+    def all_subclasses(c):
+        return set(c.__subclasses__()).union([s for c in c.__subclasses__() for s in DBViewIndex.all_subclasses(c)])
+
+    def __init__(self, db_file=DB_FILE):
+        super().__init__()
+        self.db = DBManager(db_file=db_file)
+        self.class_dict = {view_class.__name__: view_class for view_class in DBViewIndex.all_subclasses(DBView)}
+        self.instance_dict = {}
+
+    def __getitem__(self, key):
+        if key in self.instance_dict.keys():
+            return self.instance_dict.get(key)
+        else:
+            self.instance_dict[key] = self.class_dict[key](self)
+            return self.instance_dict[key]
