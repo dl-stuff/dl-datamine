@@ -149,8 +149,8 @@ ACTION_PART = DBTableMetadata(
 
         # ANIMATION
         '_animationName': DBTableMetadata.TEXT, 
-        '_isVisible': DBTableMetadata.TEXT, 
-        '_isActionClear': DBTableMetadata.TEXT,
+        '_isVisible': DBTableMetadata.INT, 
+        '_isActionClear': DBTableMetadata.INT,
     }
 )
 
