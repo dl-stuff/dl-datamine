@@ -16,6 +16,7 @@ class DragonData(DBView):
     def process_result(self, res, exclude_falsy, full_query=True, full_abilities=False):
         if not full_query:
             return res
+        self.index['ActionParts'].chara_id = None
         if '_Skill1' in res:
             res['_Skill1'] = self.index['SkillData'].get(res['_Skill1'], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
         inner = (1, 2) if full_abilities else (2,)

@@ -135,6 +135,20 @@ class PlayerActionHitAttribute(DBView):
     def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
         res = super().get(pk, by, fields, order, mode, exclude_falsy)
         return self.process_result(res, exclude_falsy=exclude_falsy)
+        
+class CharacterMotion(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'CharacterMotion')
+
+    def get_by_state_ref(self, state, ref, exclude_falsy=True):
+        tbl = self.database.check_table(self.name)
+        query = f'SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref=?;'
+        return self.database.query_many(
+            query=query,
+            param=(state,ref),
+            d_type=DBDict
+        )
+
 
 class ActionParts(DBView):
     LV_SUFFIX = re.compile(r'(.*LV)(\d{2})')
@@ -142,12 +156,13 @@ class ActionParts(DBView):
     BURST_ATK_DISPLACEMENT = 5
     def __init__(self, index):
         super().__init__(index, 'ActionParts')
+        self.chara_id = None
 
-    def get_burst_action_parts(self, pk, fields=None, exclude_falsy=False, hide_ref=False):
+    def get_burst_action_parts(self, pk, fields=None, exclude_falsy=True, hide_ref=False):
         sub_parts = super().get((pk, pk+self.BURST_ATK_DISPLACEMENT), by='_ref', fields=fields, order='_ref ASC', mode=DBManager.RANGE, exclude_falsy=exclude_falsy)
         return self.process_result(sub_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 
-    def process_result(self, action_parts, exclude_falsy=False, hide_ref=True):
+    def process_result(self, action_parts, exclude_falsy=True, hide_ref=True):
         for r in action_parts:
             if 'commandType' in r:
                 r['commandType'] = CommandType(r['commandType']).name
@@ -168,9 +183,20 @@ class ActionParts(DBView):
                     hit_attr = self.index['PlayerActionHitAttribute'].get(r[label], by='_Id', exclude_falsy=exclude_falsy)
                     if hit_attr:
                         r[label] = hit_attr
+
+            if '_motionState' in r and r['_motionState']:
+                ms = r['_motionState']
+                animation = []
+                if self.chara_id:
+                    animation = self.index['CharacterMotion'].get_by_state_ref(ms, self.chara_id, exclude_falsy=exclude_falsy)
+                if not animation:
+                    animation = self.index['CharacterMotion'].get(ms, exclude_falsy=exclude_falsy)
+                if animation:
+                    r['_animation'] = animation
+
         return action_parts
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, hide_ref=True):
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=True, hide_ref=True):
         action_parts = super().get(pk, by=by, fields=fields, order=order, mode=mode, exclude_falsy=exclude_falsy)
         return self.process_result(action_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 

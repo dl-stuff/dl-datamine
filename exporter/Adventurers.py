@@ -52,10 +52,6 @@ class CharaModeData(DBView):
             res['_BurstAttackId'] = self.index['PlayerAction'].get(res['_BurstAttackId'], exclude_falsy=exclude_falsy, burst_action=True)
         return res
 
-class CharacterMotion(DBView):
-    def __init__(self, index):
-        super().__init__(index, 'CharacterMotion')
-
 class CharaData(DBView):
     def __init__(self, index):
         super().__init__(index, 'CharaData', labeled_fields=['_Name', '_SecondName', '_CvInfo', '_CvInfoEn', '_ProfileText'])
@@ -115,6 +111,7 @@ class CharaData(DBView):
         return res
 
     def process_result(self, res, exclude_falsy=True, condense=True):
+        self.index['ActionParts'].chara_id = int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}')
         if '_WeaponType' in res:
             res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
         if '_ElementalType' in res:
@@ -138,8 +135,8 @@ class CharaData(DBView):
             res = self.last_abilities(res)
         else:
             res = self.all_abilities(res)
-        chara_id = f'{res["_BaseId"]}{res["_VariationId"]:02}'
-        res['_Animations'] = self.index['CharacterMotion'].get(chara_id, by='ref')
+        # chara_id = f'{res["_BaseId"]}{res["_VariationId"]:02}'
+        # res['_Animations'] = self.index['CharacterMotion'].get(chara_id, by='ref')
 
         return res
 

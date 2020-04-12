@@ -12,17 +12,29 @@ MOTION_FIELDS = {
         'duration': DBTableMetadata.REAL,
     }
 CHARACTER_MOTION = DBTableMetadata('CharacterMotion', pk='name', field_type=MOTION_FIELDS)
-CHARACTER_REF = re.compile(r'([A-Za-z]{3}.*)_(\d{8})', flags=re.IGNORECASE)
+CHARACTER_REF = re.compile(r'[A-Za-z]{3}_(.*)_(\d{8})', flags=re.IGNORECASE)
 
 DRAGON_MOTION = DBTableMetadata('DragonMotion', pk='name', field_type=MOTION_FIELDS)
 DRAGON_REF = re.compile(r'(d)(\d{8})_\d{3}_\d{2}', flags=re.IGNORECASE)
+
+def convert_state(state):
+    if '_' not in state:
+        return state
+    s1, sn = state.split('_', 1)
+    if s1 == 'SKL':
+        return f'skill_unique_{sn}'
+    elif s1 == 'CMB':
+        return f'combo_{sn.lower().replace("0", "")}'
+    else:
+        return state
+    
 
 def build_motion(data, ref_pattern):
     db_data = {}
     db_data['name'] = data['name']
     res = ref_pattern.match(data['name'])
     if res:
-        db_data['state'] = res.group(1) if len(res.group(1)) > 1 else None
+        db_data['state'] = convert_state(res.group(1)) if len(res.group(1)) > 1 else None
         db_data['ref'] = res.group(2)
     else:
         db_data['state'] = None
