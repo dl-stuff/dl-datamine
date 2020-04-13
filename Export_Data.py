@@ -1,6 +1,6 @@
 import argparse
 
-from loader.Database import DBManager
+from loader.Database import DBManager, DBViewIndex
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Enemy import EnemyParam
@@ -14,10 +14,10 @@ if __name__ == '__main__':
     parser.add_argument('-mode', type=str, help='output mode', default='json')
     args = parser.parse_args()
 
-    db = DBManager()
+    index = DBViewIndex()
     views = {}
     for view_class in (CharaData, DragonData, EnemyParam, WeaponData, AmuletData):
-        views[view_class.__name__] = view_class(db)
+        views[view_class.__name__] = view_class(index)
     if args.mode == 'json':
         for view in views.values():
             view.export_all_to_folder(out_dir=args.o)
