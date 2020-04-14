@@ -130,6 +130,7 @@ ACTION_PART = DBTableMetadata(
         '_bulletNum': DBTableMetadata.INT,
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
+        '_lifetime': DBTableMetadata.REAL,
 
         # SEND_SIGNAL
         '_signalType': DBTableMetadata.INT,

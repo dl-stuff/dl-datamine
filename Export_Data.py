@@ -6,6 +6,7 @@ from exporter.Dragons import DragonData
 from exporter.Enemy import EnemyParam
 from exporter.Weapons import WeaponData
 from exporter.Wyrmprints import AmuletData
+from exporter.Shared import ActionCondition, PlayerActionHitAttribute
 
 
 if __name__ == '__main__':
@@ -16,7 +17,7 @@ if __name__ == '__main__':
 
     index = DBViewIndex()
     views = {}
-    for view_class in (CharaData, DragonData, EnemyParam, WeaponData, AmuletData):
+    for view_class in (CharaData, DragonData, EnemyParam, WeaponData, AmuletData, ActionCondition, PlayerActionHitAttribute):
         views[view_class.__name__] = view_class(index)
     if args.mode == 'json':
         for view in views.values():

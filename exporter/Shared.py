@@ -1,10 +1,11 @@
 from typing import List, Dict, Any, Callable
+import json
 import re
 import os
 import errno
 from collections import Counter, defaultdict
 
-from loader.Database import DBViewIndex, DBManager, DBView, DBDict
+from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from loader.Actions import CommandType
 from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES, KILLER_STATE
 
@@ -26,6 +27,23 @@ class ActionCondition(DBView):
         res = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
         return self.process_result(res, exclude_falsy=exclude_falsy)
 
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
+        out_dir = os.path.join(out_dir, '_act_cond')
+        all_res = self.get_all(exclude_falsy=exclude_falsy)
+        check_target_path(out_dir)
+        sorted_res = defaultdict(lambda: [])
+        for res in all_res:
+            res = self.process_result(res, exclude_falsy=exclude_falsy)
+            try:
+                sorted_res[int(res['_Id'] / 100000000)].append(res)
+            except:
+                sorted_res[0].append(res)
+        for group_name, res_list in sorted_res.items():
+            out_name = get_valid_filename(f'{group_name}00000000{ext}')
+            output = os.path.join(out_dir, out_name)
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                json.dump(res_list, fp, indent=2, ensure_ascii=False)
 
 class AbilityData(DBView):
     STAT_ABILITIES = {
@@ -136,6 +154,26 @@ class PlayerActionHitAttribute(DBView):
         res = super().get(pk, by, fields, order, mode, exclude_falsy)
         return self.process_result(res, exclude_falsy=exclude_falsy)
         
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
+        out_dir = os.path.join(out_dir, '_hit_attr')
+        all_res = self.get_all(exclude_falsy=exclude_falsy)
+        check_target_path(out_dir)
+        sorted_res = defaultdict(lambda: [])
+        for res in all_res:
+            res = self.process_result(res, exclude_falsy=exclude_falsy)
+            try:
+                k1, _ = res['_Id'].split('_', 1)
+                sorted_res[k1].append(res)
+            except:
+                sorted_res[res['_Id']].append(res)
+        for group_name, res_list in sorted_res.items():
+            out_name = get_valid_filename(f'{group_name}{ext}')
+            output = os.path.join(out_dir, out_name)
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                json.dump(res_list, fp, indent=2, ensure_ascii=False)
+
+
 class CharacterMotion(DBView):
     def __init__(self, index):
         super().__init__(index, 'CharacterMotion')
@@ -378,8 +416,8 @@ class SkillData(DBView):
             return skill_data
         # Actions
         skill_data = self.get_all(self.index['PlayerAction'], '_ActionId', skill_data, exclude_falsy=exclude_falsy)
-        if '_AdvancedSkillLv1' in skill_data and skill_data['_AdvancedSkillLv1']:
-            skill_data['_AdvancedActionId1'] = (self.index['PlayerAction'].get(skill_data['_AdvancedActionId1'], exclude_falsy=exclude_falsy))
+        if '_AdvancedSkillLv1' in skill_data and skill_data['_AdvancedSkillLv1'] and (adv_act := self.index['PlayerAction'].get(skill_data['_AdvancedActionId1'], exclude_falsy=exclude_falsy)):
+            skill_data['_AdvancedActionId1'] = adv_act
 
         if generate_description:
             skill_data = self.build_skill_descriptions(skill_data)
