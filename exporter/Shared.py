@@ -15,12 +15,21 @@ def get_valid_filename(s):
 class ActionCondition(DBView):
     def __init__(self, index):
         super().__init__(index, 'ActionCondition', labeled_fields=['_Text', '_TextEx'])
+        self.get_skills = True
 
     def process_result(self, res, exclude_falsy=True):
         if '_Type' in res:
             res['_Type'] = AFFLICTION_TYPES.get(res['_Type'], res['_Type'])
         if '_EnhancedBurstAttack' in res and res['_EnhancedBurstAttack']:
             res['_EnhancedBurstAttack'] = self.index['PlayerAction'].get(res['_EnhancedBurstAttack'], exclude_falsy=exclude_falsy, burst_action=True)
+        if self.get_skills:
+            for s in ('_EnhancedSkill1', '_EnhancedSkill2', '_EnhancedSkillWeapon'):
+                if s in res and res[s]:
+                    self.get_skills = False
+                    skill = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy)
+                    if skill:
+                        res[s] = skill
+                    self.get_skills = True
         return res
 
     def get(self, key, fields=None, exclude_falsy=True):
