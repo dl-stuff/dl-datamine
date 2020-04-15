@@ -210,6 +210,8 @@ class ActionParts(DBView):
         return self.process_result(sub_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 
     def process_result(self, action_parts, exclude_falsy=True, hide_ref=True):
+        if isinstance(action_parts, dict):
+            action_parts = [action_parts]
         for r in action_parts:
             if 'commandType' in r:
                 r['commandType'] = CommandType(r['commandType']).name
@@ -270,6 +272,27 @@ class PlayerAction(DBView):
         if not full_query or not player_action:
             return player_action
         return self.process_result(player_action, exclude_falsy=exclude_falsy, full_query=full_query, burst_action=burst_action)
+
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
+        out_dir = os.path.join(out_dir, '_actions')
+        all_res = self.get_all(exclude_falsy=exclude_falsy)
+        check_target_path(out_dir)
+        sorted_res = defaultdict(lambda: [])
+        for res in all_res:
+            res = self.process_result(res, exclude_falsy=exclude_falsy)
+            try:
+                k1, _ = res['_ActionName'].split('_', 1)
+                if k1[0] == 'D' and k1 != 'DAG':
+                    k1 = 'DRAGON'
+                sorted_res[k1].append(res)
+            except:
+                sorted_res[res['_ActionName']].append(res)
+        for group_name, res_list in sorted_res.items():
+            out_name = get_valid_filename(f'{group_name}{ext}')
+            output = os.path.join(out_dir, out_name)
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                json.dump(res_list, fp, indent=2, ensure_ascii=False)
 
 class SkillChainData(DBView):
     def __init__(self, index):
