@@ -36,15 +36,6 @@ def process_json(tree):
 
 def write_json(f, data):
     tree = data.read_type_tree()
-    while isinstance(tree, dict):
-        if 'dict' in tree:
-            tree = tree['dict']
-        elif 'list' in tree:
-            tree = tree['list']
-        elif 'entriesValue' in tree and 'entriesHashCode' in tree:
-            return {k: process_json(v) for k, v in zip(tree['entriesHashCode'], tree['entriesValue'])}
-        else:
-            return tree
     json.dump(process_json(tree), f, indent=2)
 
 write = write_json

@@ -111,7 +111,7 @@ class CharaData(DBView):
         return res
 
     def process_result(self, res, exclude_falsy=True, condense=True):
-        self.index['ActionParts'].chara_id = int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}')
+        self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
         if '_WeaponType' in res:
             res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
         if '_ElementalType' in res:

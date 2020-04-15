@@ -203,7 +203,7 @@ class ActionParts(DBView):
     BURST_ATK_DISPLACEMENT = 5
     def __init__(self, index):
         super().__init__(index, 'ActionParts')
-        self.chara_id = None
+        self.animation_reference = None
 
     def get_burst_action_parts(self, pk, fields=None, exclude_falsy=True, hide_ref=False):
         sub_parts = super().get((pk, pk+self.BURST_ATK_DISPLACEMENT), by='_ref', fields=fields, order='_ref ASC', mode=DBManager.RANGE, exclude_falsy=exclude_falsy)
@@ -236,8 +236,8 @@ class ActionParts(DBView):
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']
                 animation = []
-                if self.chara_id:
-                    animation = self.index['CharacterMotion'].get_by_state_ref(ms, self.chara_id, exclude_falsy=exclude_falsy)
+                if self.animation_reference is not None:
+                    animation = self.index[self.animation_reference[0]].get_by_state_ref(ms, self.animation_reference[1], exclude_falsy=exclude_falsy)
                 if not animation:
                     animation = self.index['CharacterMotion'].get(ms, exclude_falsy=exclude_falsy)
                 if animation:

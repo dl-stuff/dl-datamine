@@ -132,7 +132,28 @@ class EnemyParam(DBView):
             if ab in res and res[ab] and (data := self.index['EnemyAbility'].get(res[ab], exclude_falsy=exclude_falsy)):
                 res[ab] = data
         resists = {}
+        id_adjust = {
+            7: 9,
+            8: None,
+            9: 7,
+            10: 8,
+            11: 10
+        }
+        # data['Poison'] = ep['_RegistAbnormalRate01']
+        # data['Burn'] = ep['_RegistAbnormalRate02']
+        # data['Freeze'] = ep['_RegistAbnormalRate03']
+        # data['Paralysis'] = ep['_RegistAbnormalRate04']
+        # data['Blind'] = ep['_RegistAbnormalRate05']
+        # data['Stun'] = ep['_RegistAbnormalRate06']
+        # data['Bog'] = ep['_RegistAbnormalRate07']
+        # data['Sleep'] = ep['_RegistAbnormalRate08']
+        # data['Curse'] = ep['_RegistAbnormalRate09']
+        # data['Frostbite'] = ep['_RegistAbnormalRate10']
+
         for k, v in AFFLICTION_TYPES.items():
+            k = id_adjust.get(k, k)
+            if k is None:
+                continue
             resist_key = f'_RegistAbnormalRate{k:02}'
             if resist_key in res:
                 resists[v] = res[resist_key]
