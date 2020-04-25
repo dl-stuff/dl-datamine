@@ -3,7 +3,7 @@ import os
 from loader.Database import DBManager, DBTableMetadata
 
 EntryId = 'EntryId'
-def load_table(db, data, table, key=None):
+def load_table(db, data, table, key=None, stdout_log=False):
     if isinstance(data, dict):
         keys = data.keys()
         values = data.values()
@@ -13,7 +13,8 @@ def load_table(db, data, table, key=None):
     else:
         return
     if len(values) == 0:
-        print(f'Skip {table}')
+        if stdout_log:
+            print(f'Skip {table}')
         return
     row = next(iter(values))
     pk = next(iter(row))
@@ -36,17 +37,17 @@ def load_table(db, data, table, key=None):
         for k, v in zip(keys, values):
             load_table(db, v, table, key=k)
 
-def load_json(db, path, table):
+def load_json(db, path, table, stdout_log=False):
     db.drop_table(table)
     with open(path) as f:
         load_table(db, json.load(f), table)
 
-def load_master(db, path):
+def load_master(db, path, stdout_log=False):
     for root, _, files in os.walk(path):
         for fn in files:
             path = os.path.join(root, fn)
             table = os.path.basename(os.path.splitext(path)[0])
-            load_json(db, path, table)
+            load_json(db, path, table, stdout_log)
 
 if __name__ == '__main__':
     db = DBManager()

@@ -1,4 +1,5 @@
 import argparse
+from time import monotonic
 
 from loader.Database import DBManager, DBViewIndex
 from exporter.Adventurers import CharaData
@@ -15,6 +16,9 @@ if __name__ == '__main__':
     parser.add_argument('-mode', type=str, help='output mode', default='json')
     args = parser.parse_args()
 
+    start = monotonic()
+    print('export: ', flush=True, end = '')
+
     index = DBViewIndex()
     views = {}
     for view_class in (CharaData, DragonData, EnemyParam, WeaponData, AmuletData, PlayerAction):
@@ -22,3 +26,4 @@ if __name__ == '__main__':
     if args.mode == 'json':
         for view in views.values():
             view.export_all_to_folder(out_dir=args.o)
+    print(f'{monotonic()-start:.4f}s', flush=True)

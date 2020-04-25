@@ -6,6 +6,8 @@ from collections import defaultdict
 
 DB_FILE = 'dl.sqlite'
 
+TEXT_REGIONS = ['JP', 'CN']
+
 def check_target_path(target):
     if not os.path.exists(target):
         try:
@@ -222,8 +224,9 @@ class DBManager:
                         fields.append(f'{rtbl.name}{k}.{v} AS {k}{v}')
                 joins.append(f'{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}')
                 if rtbl.name == 'TextLabel' and not k.endswith('En'): # special case bolb
-                    fields.append(f'{rtbl.name}JP{k}.{rv[0]} AS {k}JP')
-                    joins.append(f'{join_mode} JOIN {rtbl.name}JP AS {rtbl.name}JP{k} ON {tbl.name}.{k}={rtbl.name}JP{k}.{rk}')
+                    for region in TEXT_REGIONS:
+                        fields.append(f'{rtbl.name}{region}{k}.{rv[0]} AS {k}{region}')
+                        joins.append(f'{join_mode} JOIN {rtbl.name}{region} AS {rtbl.name}{region}{k} ON {tbl.name}.{k}={rtbl.name}{region}{k}.{rk}')
             else:
                 fields.append(f'{tbl.name}.{k}')
         field_str = ','.join(fields)

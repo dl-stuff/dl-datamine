@@ -4,3 +4,4 @@
 *.lnk
 *.txt
 *.sqlite
+/manifest/

@@ -24,7 +24,7 @@ class ParsedManifest(dict):
         return list(filter(lambda x: pattern.search(x[0]), self.items()))
 
     def get_by_diff(self, other):
-        return list(filter(lambda x: x[0] not in other.keys(), self.items()))
+        return list(filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items()))
 
 
 def check_target_path(target):
@@ -177,7 +177,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
             if stdout_log:
                 print(f'Merged YCbCr {dest}')
 
-def merge_indexed(all_indexed_images, stdout_log=False, combine_all=False):
+def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
     for dest, images in all_indexed_images.items():
         alpha = images['a']
         color = images['c']
@@ -258,11 +258,10 @@ def merge_images(image_list, stdout_log=False, do_indexed=False):
 
 
 class Extractor:
-    def __init__(self, jp_manifest, en_manifest, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', stdout_log=True):
-        self.pm = {
-            'jp': ParsedManifest(jp_manifest),
-            'en': ParsedManifest(en_manifest)
-        }
+    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', stdout_log=True):
+        self.pm = {}
+        for region, manifest in manifests.items():
+            self.pm[region] = ParsedManifest(manifest)
         self.dl_dir = dl_dir
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
@@ -319,6 +318,7 @@ class Extractor:
         loop.run_until_complete(self.download_and_extract(download_list, None, region))
 
 if __name__ == '__main__':
+    import sys
     IMAGE_PATTERNS = {
         # r'^images/icon/': None,
         # r'^images/outgame': None
@@ -335,12 +335,18 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
         # r'^images/outgame/unitdetail/chara': '../portrait/character',
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
+        r'_gluonresources/meshes/weapon': None
     }
 
-    ex = Extractor('jpmanifest_with_asset_labels.txt', 'enmanifest_with_asset_labels.txt', ex_dir=None, stdout_log=True)
-    if os.path.exists('jpmanifest_old.txt'):
-        ex.download_and_extract_by_diff('jpmanifest_old.txt', region='jp')
-    if os.path.exists('enmanifest_old.txt'):
-        ex.download_and_extract_by_diff('enmanifest_old.txt', region='en')
-    
-    # ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+    manifests = {'jp': 'manifest/jpmanifest_with_asset_labels.txt'}
+
+    ex = Extractor(manifests, ex_dir=None, stdout_log=True)
+
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'diff':
+            if os.path.exists('jpmanifest_old.txt'):
+                ex.download_and_extract_by_diff('manifest/jpmanifest_old.txt', region='jp')
+        else:
+            ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
+    else:
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
