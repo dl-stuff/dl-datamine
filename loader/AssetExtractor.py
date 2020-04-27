@@ -231,8 +231,8 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 if stdout_log:
                     print(f'Saved {dest}_{key}')
 
-IMAGE_CATEGORY = re.compile(r'(.+?)_(sprite|alpha|alphaA8|Y|Cb|Cr)$')
-IMAGE_ALPHA_INDEX = re.compile(r'(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|Y|Cb|Cr)$')
+IMAGE_CATEGORY = re.compile(r'(.+?)_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
+IMAGE_ALPHA_INDEX = re.compile(r'(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
 def merge_images(image_list, stdout_log=False, do_indexed=False):
     all_categorized_images = defaultdict(lambda: {})
     all_indexed_images = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {})))
@@ -276,9 +276,14 @@ class Extractor:
             assert resp.status == 200
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}')
-            with open(dl_target, 'wb') as f:
-                f.write(await resp.read())
             
+            try:
+                with open(dl_target, 'wb') as f:
+                    f.write(await resp.read())
+            except:
+                with open(os.path.join(dl_target, os.path.basename(dl_target)), 'wb') as f:
+                    f.write(await resp.read())
+
             _, ext = os.path.splitext(dl_target)
             if len(ext) > 0:
                 if self.stdout_log:
@@ -335,7 +340,9 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
         # r'^images/outgame/unitdetail/chara': '../portrait/character',
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
-        r'_gluonresources/meshes/weapon': None
+        # r'_gluonresources/meshes/weapon': None
+        r'atlascompress': 'compare',
+        r'images/ingame/ui': 'compare',
     }
 
     manifests = {'jp': 'manifest/jpmanifest_with_asset_labels.txt'}
@@ -344,7 +351,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
-            if os.path.exists('jpmanifest_old.txt'):
+            if os.path.exists('manifest/jpmanifest_old.txt'):
                 ex.download_and_extract_by_diff('manifest/jpmanifest_old.txt', region='jp')
         else:
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')

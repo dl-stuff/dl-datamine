@@ -220,7 +220,7 @@ class ActionParts(DBView):
                 del r['_ref']
 
             for label in self.HIT_LABELS:
-                if label not in r:
+                if label not in r or not r[label]:
                     continue
                 res = self.LV_SUFFIX.match(r[label])
                 if res:
@@ -347,7 +347,7 @@ class SkillData(DBView):
             action_parts = [action['_Parts']] if isinstance(action['_Parts'], dict) else action['_Parts']
             for part in action_parts:
                 for label in ActionParts.HIT_LABELS:
-                    if label in part:
+                    if label in part and part[label]:
                         base_label = None
                         if isinstance(part[label], list):
                             part_list = part[label]

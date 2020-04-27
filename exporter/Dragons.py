@@ -1,5 +1,6 @@
 import json
 import os
+from tabulate import tabulate
 
 from loader.Database import DBViewIndex, DBView, DBDict
 from exporter.Shared import AbilityData, SkillData, PlayerAction
@@ -60,7 +61,53 @@ class DragonData(DBView):
         out_dir = os.path.join(out_dir, 'dragons')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True, full_abilities=False)
 
+    def simplified_combos(self):
+        all_data = self.get_all(exclude_falsy=False)
+        for res in all_data:
+            if '_AnimFileName' in res and res['_AnimFileName']:
+                anim_key = int(res['_AnimFileName'][1:].replace('_', ''))
+            else:
+                anim_key = int(f'{res["_BaseId"]}{res["_VariationId"]:02}')
+            self.index['ActionParts'].animation_reference = ('DragonMotion', anim_key)
+            print('\n'+res['_Name'], '-', res['_SecondName'] or '')
+            base_action_id = res['_DefaultSkill']
+            default_skill = [self.index['PlayerAction'].get(base_action_id+i, exclude_falsy=False) for i in range(0, res['_ComboMax'])]
+            for combo in default_skill:
+                if not combo:
+                    continue
+                combo_parts = []
+                for part in sorted(combo['_Parts'], key=lambda ds: ds['_seconds']):
+                    command_type = part['commandType']
+                    seconds = part['_seconds']
+                    duration = part['_duration']
+                    speed = part['_speed']
+
+                    if command_type == 'PARTS_MOTION':
+                        try:
+                            duration = part['_animation'][0]['duration']
+                        except:
+                            pass
+                    elif command_type == 'SEND_SIGNAL' or command_type == 'ACTIVE_CANCEL':
+                        command_type = f'{command_type}_{part["_actionId"] % 100:02}'
+                    elif command_type == 'BULLET':
+                        duration = part['_delayTime']
+
+                    combo_data = [
+                        command_type, 
+                        seconds, 
+                        round(seconds*60), 
+                        duration, 
+                        round(duration*60), 
+                        speed
+                    ]
+                    combo_parts.append(combo_data)
+
+                print(combo['_Id'] % 100)
+                print(tabulate(combo_parts, headers=['Type', 'seconds', '(f)', 'duration', '(f)', 'speed'], floatfmt=".4f"))
+            
+
 if __name__ == '__main__':
     index = DBViewIndex()
     view = DragonData(index)
-    view.export_all_to_folder()
+    # view.export_all_to_folder()
+    view.simplified_combos()
