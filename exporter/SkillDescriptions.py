@@ -8,11 +8,12 @@ from exporter.Mappings import AFFLICTION_TYPES
 
 SKILL_DESC_ELEMENT = re.compile(r'(flame|water|wind|light|shadow)(?:-based)? damage to (.+?)[\.,](.*)')
 ELEMENTAL_FORMAT = {
-    'flame': '{{{{ColorText|Red|{mod:.2%}}}}}',
-    'water': '{{{{ColorText|Blue|{mod:.2%}}}}}',
-    'wind': '{{{{ColorText|Green|{mod:.2%}}}}}',
-    'light': '{{{{ColorText|Yellow|{mod:.2%}}}}}',
-    'shadow': '{{{{ColorText|Purple|{mod:.2%}}}}}',
+    'flame': '{{{{ColorText|Red|{mod:.1%}}}}}',
+    'water': '{{{{ColorText|Blue|{mod:.1%}}}}}',
+    'wind': '{{{{ColorText|Green|{mod:.1%}}}}}',
+    'light': '{{{{ColorText|Yellow|{mod:.1%}}}}}',
+    'shadow': '{{{{ColorText|Purple|{mod:.1%}}}}}',
+    'neutral': '{{{{ColorText|Black|{mod:.1%}}}}}',
 }
 NUMBER_FORMAT = "'''{}'''"
 PERCENT_FORMAT = "'''{}%'''"
@@ -32,6 +33,9 @@ KS_PAST_TENSE = {
     'Dispel': 'Buffed',
     'Break': 'Broken'
 }
+
+def dmg_formatter(dmg_fmt, modifier):
+    return dmg_fmt.format(mod=modifier).replace('.0', '')
 
 def describe_skill(data, wiki_format=False):
     descriptions_by_level = {}
@@ -77,39 +81,42 @@ def describe_skill(data, wiki_format=False):
             if len(v1) == 0:
                 continue
             desc_id = f'_Description{level}'
-            if desc_id not in data or not data[desc_id]:
-                continue
+            hit_mod_counter = Counter()
             hit_text = defaultdict(lambda: [])
             hit_dot = {}
             dot_text = set()
-            dmg_fmt = '{mod:.2%}'
+            dmg_fmt = ELEMENTAL_FORMAT['neutral'] if wiki_format else '{mod:.2%}'
             number_fmt = NUMBER_FORMAT if wiki_format else '{}'
             percent_fmt = PERCENT_FORMAT if wiki_format else '{}%'
-            targets = ''
-            element = 'neutral'
-            res = SKILL_DESC_ELEMENT.search(data[desc_id].replace('\\n', ' '))
-            if res:
-                element = res.group(1)
-                if wiki_format:
-                    dmg_fmt = ELEMENTAL_FORMAT[res.group(1)]
-                targets = res.group(2)
+            targets = 'enemies'
+            element = 'UNKNOWN'
+            original_desc = '???'
+            if desc_id in data and data[desc_id]:
+                original_desc = data[desc_id].replace('\\n', ' ')
+                res = SKILL_DESC_ELEMENT.search(original_desc)
+                if res:
+                    element = res.group(1)
+                    if wiki_format:
+                        dmg_fmt = ELEMENTAL_FORMAT[res.group(1)]
+                    targets = res.group(2)
             killer_states = set()
             # first pass
             for base_label, hit_attr in v1.items():
                 if '_DamageAdjustment' in hit_attr:
                     hit_count = hit_attr_counter[base_label]
                     modifier = hit_attr['_DamageAdjustment']
-                    hit_text[None].append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_fmt.format(mod=modifier)}')
+                    # hit_text[None].append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_fmt.format(mod=modifier)}')
+                    hit_mod_counter[modifier] += hit_count
                     for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
                         if ks in hit_attr:
                             killer_states.add(hit_attr[ks])
                 if '_ActionCondition1' in hit_attr:
                     act_cond = hit_attr['_ActionCondition1']
                     if '_Type' in act_cond and act_cond['_Type'] in AFFLICTION_TYPES.values() and '_SlipDamagePower' in act_cond:
-                        name = act_cond['_Type']
+                        name = act_cond['_Type'].lower()
                         name_fmt = name if not wiki_format else f'[[Conditions#Afflictions|{name}]]'
                     elif '_Text' in act_cond and act_cond['_Text'] == 'Bleeding':
-                        name = 'Bleeding'
+                        name = 'bleeding'
                         name_fmt = name if not wiki_format else f'[[Conditions#Special_Effects|bleeding]]'
                     else:
                         continue
@@ -118,14 +125,22 @@ def describe_skill(data, wiki_format=False):
                     duration = int(act_cond['_DurationSec'] * 10)/10
                     rate = int(act_cond['_Rate'])
                     hit_dot[base_label] = (name_fmt, modifier, interval, duration, rate)
-                    dot_text.add(f'inflicts {name_fmt} for {duration} seconds - dealing {dmg_fmt.format(mod=modifier)} damage every {number_fmt.format(interval)} seconds - with {percent_fmt.format(rate)} base chance')
-            if len(hit_text[None]) == 0:
+                    dot_text.add(f'inflicts {name_fmt} for {duration} seconds - dealing {dmg_formatter(dmg_fmt, modifier)} damage every {number_fmt.format(interval)} seconds - with {percent_fmt.format(rate)} base chance')
+
+            hit_text = []
+            for modifier, hit_count in hit_mod_counter.items():
+                hit_text.append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_formatter(dmg_fmt, modifier)}')
+
+            if len(hit_text) == 0:
                 continue
-            description = 'Deals ' + ' and '.join(hit_text[None]) + f' {element} damage to {targets}'
+            description = 'Deals ' + ' and '.join(hit_text) + f' {element} damage to {targets}'
             if len(dot_text) > 0:
-                description += (', and ' if len(hit_text[None]) > 0 else '') + ' and '.join(dot_text)
+                description += (', and ' if len(hit_text) > 0 else '') + ' and '.join(dot_text)
+
             # killer states pass
             for ks in killer_states:
+                hit_mod_counter = Counter()
+                hit_text = []
                 dot_text = set()
                 for base_label, hit_attr in v1.items():
                     current_ks = [hit_attr[ks] for ks in ('_KillerState1', '_KillerState2', '_KillerState3') if ks in hit_attr]
@@ -133,16 +148,21 @@ def describe_skill(data, wiki_format=False):
                         hit_count = hit_attr_counter[base_label]
                         killer_modifier = 1 if ks not in current_ks else hit_attr['_KillerStateDamageRate']
                         modifier = hit_attr['_DamageAdjustment'] * killer_modifier
-                        hit_text[ks].append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_fmt.format(mod=modifier)}')
+                        # hit_text[ks].append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_fmt.format(mod=modifier)}')
+                        hit_mod_counter[modifier] += hit_count
                         if base_label in hit_dot:
                             modifier = hit_dot[base_label][1] * killer_modifier
-                            dot_text.add(f'{dmg_fmt.format(mod=modifier)} from {hit_dot[base_label][0]}')
+                            dot_text.add(f'{dmg_formatter(dmg_fmt, modifier)} from {hit_dot[base_label][0]}')
                 description += ('.\n' if not wiki_format else '.<br/>')
-                description += f'{KS_PAST_TENSE.get(ks, ks)} foes take ' + ' and '.join(hit_text[ks]) + f' {element} damage'
+
+                for modifier, hit_count in hit_mod_counter.items():
+                    hit_text.append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_formatter(dmg_fmt, modifier)}')
+
+                description += f'{KS_PAST_TENSE.get(ks, ks)} foes take ' + ' and '.join(hit_text) + f' {element} damage'
                 if len(dot_text) > 0:
-                    description += (', and ' if len(hit_text[ks]) > 0 else '') + ' and '.join(dot_text)
+                    description += (', and ' if len(hit_text) > 0 else '') + ' and '.join(dot_text)
             description += '.'
-            descriptions_by_level[level] = (data[f'{desc_id}'].replace('\\n', ' '), description)
+            descriptions_by_level[level] = (original_desc, description)
     return descriptions_by_level
 
 if __name__ == '__main__':
@@ -164,7 +184,6 @@ if __name__ == '__main__':
     else:
         skills = view.get_all(exclude_falsy=True)
         with open('DESC_F.txt', 'w') as f_desc, open('DESC_N.txt', 'w') as n_desc:
-            f_desc.write('__NOTOC__\n')
             for skill in skills:
                 skill = view.process_result(skill)
                 try:
@@ -180,8 +199,8 @@ if __name__ == '__main__':
                         # f_desc.write(f'<div><h5>{skill_id} - {skill_name} LV{lv}</h5>')
                         # f_desc.write(f'<h6>Original:</h6><p>{o}</p>')
                         # f_desc.write(f'<h6>Generated:</h6><p>{d}</p>')
-                        f_desc.write(f'<p>LV{lv} <p><b>Original:</b><br/>{o}</p> <p><b>Generated:</b><br/>{d}</p></p>')
-                    f_desc.write('</div>\n')
+                        f_desc.write(f'<p>LV{lv}\n<div><b>Original:</b><br/>\n{o}</div>\n<div><b>Wiki:</b><br/>\n{{{{#cargo_query:tables=Skills|fields=Description{lv}|where=SkillId={skill_id}}}}}</div>\n<div><b>Generated:</b><br/>\n{d}</div>\n</p>')
+                    f_desc.write('</div>\n\n')
                 elif skill_name:
                     n_desc.write(skill_id)
                     n_desc.write(' - ')
