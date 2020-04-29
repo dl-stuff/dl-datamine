@@ -32,6 +32,12 @@ class CommandType(Enum):
     FIRE_STOCK_BULLET = 59
     CONDITION_TEXT = 63 # unsure where text is sourced, not in TextLabel
     SETTING_HIT = 66
+    EFFECT_MM1 = 100 # megaman stuff
+    EFFECT_MM2 = 101 # megaman stuff
+    CHANGE_MODE = 108 # megaman stuff
+    SHADER = 101
+    ADD_HIT = 105
+    ACTION_CONDITON = 111
 
     @classmethod
     def _missing_(cls, value):
@@ -152,6 +158,9 @@ ACTION_PART = DBTableMetadata(
         '_animationName': DBTableMetadata.TEXT, 
         '_isVisible': DBTableMetadata.INT, 
         '_isActionClear': DBTableMetadata.INT,
+
+        # ACTION_CONDITON
+        '_actionConditionId': DBTableMetadata.INT,
     }
 )
 
@@ -168,6 +177,8 @@ PROCESSORS[CommandType.PARABOLA_BULLET] = build_bullet
 PROCESSORS[CommandType.PIVOT_BULLET] = build_bullet
 PROCESSORS[CommandType.FIRE_STOCK_BULLET] = build_bullet
 PROCESSORS[CommandType.SETTING_HIT] = build_db_data
+PROCESSORS[CommandType.ADD_HIT] = build_db_data
+PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
 
 def load_actions(db, path):
     file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')

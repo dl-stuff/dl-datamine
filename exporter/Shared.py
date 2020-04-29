@@ -233,6 +233,9 @@ class ActionParts(DBView):
                     if hit_attr:
                         r[label] = hit_attr
 
+            if '_actionConditionId' in r and r['_actionConditionId']:
+                r['_actionConditionId'] = self.index['ActionCondition'].get(r['_actionConditionId'], exclude_falsy=exclude_falsy)
+
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']
                 animation = []
@@ -335,7 +338,7 @@ class SkillData(DBView):
         if full_abilities:
             skill_data = self.get_all_from(self.index['AbilityData'], '_Ability', skill_data, exclude_falsy=exclude_falsy)
         else:
-            skill_data = self.get_all_from(self.index['AbilityData'], '_Ability', skill_data, exclude_falsy=exclude_falsy)
+            skill_data = self.get_last_from(self.index['AbilityData'], '_Ability', skill_data, exclude_falsy=exclude_falsy)
         if full_transSkill and '_TransSkill' in skill_data and skill_data['_TransSkill']:
             next_trans_skill = self.get(skill_data['_TransSkill'], exclude_falsy=exclude_falsy, full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
             trans_skill_group = {
