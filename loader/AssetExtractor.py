@@ -341,18 +341,23 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/chara': '../portrait/character',
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
         # r'_gluonresources/meshes/weapon': None
-        r'atlascompress': 'compare',
-        r'images/ingame/ui': 'compare',
+        r'^prefabs/outgame/fort/facility': None
     }
 
-    manifests = {'jp': 'manifest/jpmanifest_with_asset_labels.txt'}
+    manifests = {
+        'jp': 'manifest/jpmanifest_with_asset_labels.txt',
+        'en': 'manifest/enmanifest_with_asset_labels.txt'
+    }
 
     ex = Extractor(manifests, ex_dir=None, stdout_log=True)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
-            if os.path.exists('manifest/jpmanifest_old.txt'):
-                ex.download_and_extract_by_diff('manifest/jpmanifest_old.txt', region='jp')
+            for region in ('jp', 'en'):
+                try:
+                    ex.download_and_extract_by_diff(f'manifest/{region}manifest_old.txt', region=region)
+                except:
+                    continue
         else:
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
