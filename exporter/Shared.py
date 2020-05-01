@@ -15,21 +15,23 @@ def get_valid_filename(s):
 class ActionCondition(DBView):
     def __init__(self, index):
         super().__init__(index, 'ActionCondition', labeled_fields=['_Text', '_TextEx'])
-        self.get_skills = True
+        self.seen_skills = set()
 
     def process_result(self, res, exclude_falsy=True):
         if '_Type' in res:
             res['_Type'] = AFFLICTION_TYPES.get(res['_Type'], res['_Type'])
         if '_EnhancedBurstAttack' in res and res['_EnhancedBurstAttack']:
-            res['_EnhancedBurstAttack'] = self.index['PlayerAction'].get(res['_EnhancedBurstAttack'], exclude_falsy=exclude_falsy, burst_action=True)
-        if self.get_skills:
+            res['_EnhancedBurstAttack'] = self.index['PlayerAction'].get(res['_EnhancedBurstAttack'], exclude_falsy=exclude_falsy)
+        reset_seen_skills = len(self.seen_skills) == 0
+        if res['_Id'] not in self.seen_skills:
+            self.seen_skills.add(res['_Id'])
             for s in ('_EnhancedSkill1', '_EnhancedSkill2', '_EnhancedSkillWeapon'):
-                if s in res and res[s]:
-                    self.get_skills = False
+                if s in res and res[s] and res[s] not in self.seen_skills:
                     skill = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy)
                     if skill:
                         res[s] = skill
-                    self.get_skills = True
+        if reset_seen_skills:
+            self.seen_skills = set()
         return res
 
     def get(self, key, fields=None, exclude_falsy=True):
@@ -200,14 +202,15 @@ class CharacterMotion(DBView):
 class ActionParts(DBView):
     LV_SUFFIX = re.compile(r'(.*LV)(\d{2})')
     HIT_LABELS = ['_hitLabel', '_hitAttrLabel', '_abHitAttrLabel']
-    BURST_ATK_DISPLACEMENT = 5
+    # BURST_ATK_DISPLACEMENT = 1
     def __init__(self, index):
         super().__init__(index, 'ActionParts')
         self.animation_reference = None
 
-    def get_burst_action_parts(self, pk, fields=None, exclude_falsy=True, hide_ref=False):
-        sub_parts = super().get((pk, pk+self.BURST_ATK_DISPLACEMENT), by='_ref', fields=fields, order='_ref ASC', mode=DBManager.RANGE, exclude_falsy=exclude_falsy)
-        return self.process_result(sub_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
+    # # figure out how it works again bleh
+    # def get_burst_action_parts(self, pk, fields=None, exclude_falsy=True, hide_ref=False):
+    #     # sub_parts = super().get((pk, pk+self.BURST_ATK_DISPLACEMENT), by='_ref', fields=fields, order='_ref ASC', mode=DBManager.RANGE, exclude_falsy=exclude_falsy)
+    #     # return self.process_result(sub_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 
     def process_result(self, action_parts, exclude_falsy=True, hide_ref=True):
         if isinstance(action_parts, dict):
@@ -257,24 +260,32 @@ class ActionParts(DBView):
         return DBDict(filter(lambda x: bool(x[1]) or x[0] in ('_seconds', '_seq'), res.items()))
 
 class PlayerAction(DBView):
+    BURST_MARKER_DISPLACEMENT = 4
     def __init__(self, index):
         super().__init__(index, 'PlayerAction')
 
-    def process_result(self, player_action, exclude_falsy=True, full_query=True, burst_action=False):
+    def process_result(self, player_action, exclude_falsy=True, full_query=True):
         pa_id = player_action['_Id']
-        if burst_action:
-            action_parts = self.index['ActionParts'].get_burst_action_parts(pa_id, exclude_falsy=exclude_falsy)
-        else:
-            action_parts = self.index['ActionParts'].get(pa_id, by='_ref', order='_seq ASC', exclude_falsy=exclude_falsy)
+        action_parts = self.index['ActionParts'].get(pa_id, by='_ref', order='_seq ASC', exclude_falsy=exclude_falsy)
         if action_parts:
             player_action['_Parts'] = action_parts
+        if '_BurstMarkerId' in player_action and player_action['_BurstMarkerId'] and (marker := self.get(player_action['_BurstMarkerId'], exclude_falsy=exclude_falsy)):
+            player_action['_BurstMarkerId'] = marker
+        else:
+            try:
+                if action_parts[0]['_motionState'] == 'charge_13':
+                    player_action['_BurstMarkerId'] = pa_id + PlayerAction.BURST_MARKER_DISPLACEMENT
+                    if marker := self.get(player_action['_BurstMarkerId'], exclude_falsy=exclude_falsy):
+                        player_action['_BurstMarkerId'] = marker
+            except:
+                pass
         return player_action
 
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True, burst_action=False):
+    def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
         player_action = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query or not player_action:
             return player_action
-        return self.process_result(player_action, exclude_falsy=exclude_falsy, full_query=full_query, burst_action=burst_action)
+        return self.process_result(player_action, exclude_falsy=exclude_falsy, full_query=full_query)
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)

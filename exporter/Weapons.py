@@ -41,6 +41,41 @@ class WeaponData(DBView):
         out_dir = os.path.join(out_dir, 'weapons')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
+class WeaponType(DBView):
+    ACTION_IDS = (
+        '_DefaultSkill01',
+        '_DefaultSkill02',
+        '_DefaultSkill03',
+        '_DefaultSkill04',
+        '_DefaultSkill05',
+        '_DefaultSkill05Ex',
+        '_BurstChargePhase1',
+        '_BurstChargePhase2',
+        '_BurstPhase1',
+        '_BurstPhase2',
+        '_ChargeCancel',
+        '_ChargeMarker',
+        '_DashSkill'
+    )
+    def __init__(self, index):
+        super().__init__(index, 'WeaponType')
+
+    def process_result(self, res, exclude_falsy=True, full_query=True):
+        if not full_query:
+            return res
+        for act in WeaponType.ACTION_IDS:
+            if act in res and res[act] and (action := self.index['PlayerAction'].get(res[act], exclude_falsy=exclude_falsy)):
+                res[act] = action
+        return res
+
+    @staticmethod
+    def outfile_name(res, ext='.json'):
+        return f'{res["_Label"]}{ext}'
+
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, '_weapon_types')
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
+
 if __name__ == '__main__':
     index = DBViewIndex()
     view = WeaponData(index)

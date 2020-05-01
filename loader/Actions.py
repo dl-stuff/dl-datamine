@@ -200,7 +200,7 @@ def load_actions(db, path):
                         except:
                             r['_host'], r['_Id'] = None, 0
                     row = next(iter(raw))
-                    pk = '_Id'
+                    pk = '_resourcePath'
                     meta = DBTableMetadata(table, pk=pk)
                     meta.init_from_row(row)
                     db.create_table(meta)

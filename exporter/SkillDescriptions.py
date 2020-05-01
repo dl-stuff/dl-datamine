@@ -109,8 +109,9 @@ ACT_COND_FMT = {
         def_down_format,
         atk_down_format,
         cc_format
-    ],
+    ]
 }
+ACT_COND_FMT[6] = ACT_COND_FMT[2]
 
 def float_formatter(fmt, modifier):
     return fmt.format(mod=modifier).replace('.0', '')
@@ -197,6 +198,7 @@ def describe_skill(data, wiki_format=False, extra_info=None):
             dp_gain = 0
             rcv_value = 0
             rcv_target = None
+            reflect_mod = 0
             # first pass
             for base_label, hit_attr in v1.items():
                 try:
@@ -220,6 +222,10 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                     if hit_attr['_RecoveryValue'] > rcv_value:
                         rcv_value = hit_attr['_RecoveryValue']
                         rcv_target = TARGET_GROUP.get(hit_attr['_TargetGroup'], hit_attr['_TargetGroup'])
+                except:
+                    pass
+                try:
+                    reflect_mod = max(hit_attr['_DamageCounterCoef'], reflect_mod)
                 except:
                     pass
                 try:
@@ -255,8 +261,12 @@ def describe_skill(data, wiki_format=False, extra_info=None):
             description = ''
             if len(hit_text) > 0:
                 description = 'Deals ' + ' and '.join(hit_text) + f' {element} damage to {targets}'
-            elif rcv_value > 0:
-                description = f'Restores HP to {rcv_target} with {float_formatter(percent_fmt, rcv_value)} '
+            if rcv_value > 0:
+                if len(description) == 0:
+                    description = 'Restores'
+                else:
+                    description = 'and restores'
+                description += f'HP to {rcv_target} with {float_formatter(percent_fmt, rcv_value)} '
                 if wiki_format:
                     description += '[[Healing Formula|recovery potency]]'
                 else:
@@ -267,6 +277,9 @@ def describe_skill(data, wiki_format=False, extra_info=None):
             if dp_gain > 0:
                 # raises the dragon gauge by 3% if the attack connects
                 effect_text.add(f'raises the dragon gauge by {float_formatter(percent_fmt, dp_gain/10)} if the attack connects')
+            
+            if reflect_mod > 0:
+                description += f'. Additional bonus neutral-element damage will be dealt equal to {float_formatter(percent_fmt, reflect_mod*100)} of the damage taken'
 
             if act_cond_effects:
                 for target, act_cond_effect_list in act_cond_effects.items():
@@ -277,12 +290,8 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                         for fmt in ACT_COND_FMT[target]:
                             try:
                                 effect_text.add(fmt(act_cond, percent_fmt, number_fmt, wiki_format))
-                                # succeed = True
-                                break
                             except:
                                 pass
-                        # if not succeed:
-                        #     print(data['_Name'], act_cond)
             
             effect_text = list(effect_text)+list(dot_text)
             if len(effect_text) > 0:
@@ -356,12 +365,13 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                 'targets': targets,
                 'element': element
             }
+        lb = '<br/>' if wiki_format else '\n'
         for s in related_skills.values():
             c_gen_disc, _, c_seen_id = describe_skill(s, wiki_format=wiki_format, extra_info=extra_info)
             seen_id.update(c_seen_id)
             for lv, d2 in c_gen_disc.items():
                 try:
-                    gen_desc_by_level[lv] += ' ' + d2
+                    gen_desc_by_level[lv] += lb + d2
                 except:
                     gen_desc_by_level[lv] = d2
 
@@ -376,7 +386,7 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                 for lv, d in gen_disc.items():
                     gen_disc[lv] = f'Shift {ROMAN[idx+1]}: {d}'
                     if idx >= 1:
-                        gen_desc_by_level[lv] += '\n' + gen_disc[lv]
+                        gen_desc_by_level[lv] += lb + gen_disc[lv]
 
     return gen_desc_by_level, og_desc_by_level, seen_id
 

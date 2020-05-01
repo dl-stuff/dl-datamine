@@ -49,7 +49,7 @@ class CharaModeData(DBView):
         if '_UniqueComboId' in res and res['_UniqueComboId']:
             res['_UniqueComboId'] = self.index['CharaUniqueCombo'].get(res['_UniqueComboId'], exclude_falsy=exclude_falsy)
         if '_BurstAttackId' in res and res['_BurstAttackId']:
-            res['_BurstAttackId'] = self.index['PlayerAction'].get(res['_BurstAttackId'], exclude_falsy=exclude_falsy, burst_action=True)
+            res['_BurstAttackId'] = self.index['PlayerAction'].get(res['_BurstAttackId'], exclude_falsy=exclude_falsy)
         return res
 
 class CharaData(DBView):
@@ -135,8 +135,9 @@ class CharaData(DBView):
             res = self.last_abilities(res)
         else:
             res = self.all_abilities(res)
-        # chara_id = f'{res["_BaseId"]}{res["_VariationId"]:02}'
-        # res['_Animations'] = self.index['CharacterMotion'].get(chara_id, by='ref')
+        
+        if '_BurstAttack' in res and res['_BurstAttack'] and (ba := self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)):
+            res['_BurstAttack'] = ba
 
         return res
 
@@ -158,4 +159,5 @@ class CharaData(DBView):
 if __name__ == '__main__':
     index = DBViewIndex()
     view = CharaData(index)
-    view.export_all_to_folder()
+    # view.export_all_to_folder()
+    res = view.get(10650202)
