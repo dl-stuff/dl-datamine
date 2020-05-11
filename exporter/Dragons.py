@@ -31,8 +31,11 @@ class DragonData(DBView):
         else:
             anim_key = int(f'{res["_BaseId"]}{res["_VariationId"]:02}')
         self.index['ActionParts'].animation_reference = ('DragonMotion', anim_key)
-        if '_Skill1' in res:
-            res['_Skill1'] = self.index['SkillData'].get(res['_Skill1'], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
+        for s in ('_Skill1', '_Skill2'):
+            try:
+                res[s] = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
+            except:
+                pass
         inner = (1, 2) if full_abilities else (2,)
         outer = (1, 2)
         for i in outer:

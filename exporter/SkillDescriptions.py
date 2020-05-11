@@ -119,6 +119,8 @@ def float_formatter(fmt, modifier):
 def all_killer_state(killer_states):
     return ' and '.join([KS_PAST_TENSE.get(ks, ks).lower() for ks in killer_states[:-1] if ks not in (CRISIS, ALL, ALL_CRISIS)])
 
+skill_mods = []
+
 def describe_skill(data, wiki_format=False, extra_info=None):
     og_desc_by_level = {}
     gen_desc_by_level = {}
@@ -200,11 +202,13 @@ def describe_skill(data, wiki_format=False, extra_info=None):
             rcv_target = None
             reflect_mod = 0
             # first pass
+            total_mods = 0
             for base_label, hit_attr in v1.items():
                 try:
                     if hit_attr['_TargetGroup'] == 3:
                         hit_count = hit_attr_counter[base_label]
                         modifier = hit_attr['_DamageAdjustment']
+                        total_mods += modifier * hit_count
                         # hit_text[None].append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {dmg_fmt.format(mod=modifier)}')
                         hit_mod_counter[modifier] += hit_count
                         for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
@@ -251,6 +255,11 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                     rate = int(act_cond['_Rate'])
                     hit_dot[base_label] = (name_fmt, modifier, interval, duration, rate)
                     dot_text.add(f'inflicts {name_fmt} for {float_formatter(number_fmt, duration)} seconds - dealing {float_formatter(dmg_fmt, modifier)} damage every {float_formatter(number_fmt, interval)} seconds - with {float_formatter(percent_fmt, rate)} base chance')
+                except:
+                    pass
+            if total_mods > 0:
+                try:
+                    skill_mods.append((data['_Name'], level, 'Normal', total_mods))
                 except:
                     pass
 
@@ -317,6 +326,7 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                 hit_mod_counter = Counter()
                 hit_text = []
                 dot_text = set()
+                total_mods = 0
                 for base_label, hit_attr in v1.items():
                     current_ks = [hit_attr[ks] for ks in ('_KillerState1', '_KillerState2', '_KillerState3') if ks in hit_attr]
                     if '_DamageAdjustment' in hit_attr:
@@ -339,6 +349,7 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                         if base_label in hit_dot:
                             modifier = hit_dot[base_label][1] * killer_modifier
                             dot_text.add(f'{float_formatter(dmg_fmt, modifier)} from {hit_dot[base_label][0]}')
+                        total_mods += modifier * hit_count
 
                 for modifier, hit_count in hit_mod_counter.items():
                     hit_text.append(f'{hit_count} hit{"s" if hit_count > 1 else ""} of {float_formatter(dmg_fmt, modifier)}')
@@ -356,6 +367,14 @@ def describe_skill(data, wiki_format=False, extra_info=None):
                 if len(dot_text) > 0:
                     description += (', and ' if len(hit_text) > 0 else '') + ' and '.join(dot_text)
                 description += '.'
+                if total_mods > 0:
+                    try:
+                        skill_mods.append((data['_Name'], level, all_ks, total_mods))
+                    except:
+                        try:
+                            skill_mods.append((data['_Name'], level, ks, total_mods))
+                        except:
+                            pass
             gen_desc_by_level[level] = description
 
         # recursion
@@ -418,7 +437,7 @@ if __name__ == '__main__':
                     skill_name = '???'
                 skill_id = skill['_Id']
                 if skill_id in all_seen_id:
-                    print(f'Skip {skill_name} - {skill_id}')
+                    # print(f'Skip {skill_name} - {skill_id}')
                     continue
                 skill = view.process_result(skill)
                 gen_disc, og_disc, seen_id = describe_skill(skill, wiki_format=True)
@@ -443,3 +462,9 @@ if __name__ == '__main__':
                             n_desc.write(skill[k])
                             break
                     n_desc.write('\n')
+
+    from tabulate import tabulate
+    print(tabulate(
+        sorted(skill_mods, key=lambda s: s[3], reverse=True),
+        headers=['Name', 'Level', 'State', 'Mods']
+    ))

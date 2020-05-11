@@ -233,7 +233,7 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
 
 IMAGE_CATEGORY = re.compile(r'(.+?)_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
 IMAGE_ALPHA_INDEX = re.compile(r'(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
-def merge_images(image_list, stdout_log=False, do_indexed=False):
+def merge_images(image_list, stdout_log=False, do_indexed=True):
     all_categorized_images = defaultdict(lambda: {})
     all_indexed_images = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {})))
     for images in image_list:
@@ -303,7 +303,7 @@ class Extractor:
                 return texture_2d
 
     async def download_and_extract(self, download_list, extract, region='jp'):
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
             result = await asyncio.gather(*[
                 self.down_ex(session, source, region, target, extract)
                 for target, source in download_list
@@ -341,7 +341,8 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/chara': '../portrait/character',
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
         # r'_gluonresources/meshes/weapon': None
-        r'^prefabs/outgame/fort/facility': None
+        # r'^prefabs/outgame/fort/facility': None
+        r'^emotion/story/chara/100004_11': None
     }
 
     manifests = {
@@ -349,7 +350,7 @@ if __name__ == '__main__':
         'en': 'manifest/enmanifest_with_asset_labels.txt'
     }
 
-    ex = Extractor(manifests, ex_dir=None, stdout_log=True)
+    ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
