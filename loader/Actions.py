@@ -223,4 +223,4 @@ def load_actions(db, path):
 if __name__ == '__main__':
     from loader.Database import DBManager
     db = DBManager()
-    load_actions(db, './extract/actions')
+    load_actions(db, './_extract/jp/actions')

@@ -342,7 +342,7 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
-        r'^emotion/story/chara/100004_11': None
+        r'^emotion/story/chara/': None
     }
 
     manifests = {
@@ -350,9 +350,9 @@ if __name__ == '__main__':
         'en': 'manifest/enmanifest_with_asset_labels.txt'
     }
 
-    ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
 
     if len(sys.argv) > 1:
+        ex = Extractor(manifests, ex_dir=None, stdout_log=True)
         if sys.argv[1] == 'diff':
             for region in ('jp', 'en'):
                 try:
@@ -362,4 +362,5 @@ if __name__ == '__main__':
         else:
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
+        ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')

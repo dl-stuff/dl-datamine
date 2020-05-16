@@ -34,6 +34,7 @@ LABEL_PATTERNS_CN = {
 LABEL_PATTERNS_JP = {
     r'^master$': 'master',
     r'^actions$': 'actions',
+    r'^aiscript$': 'aiscript',
     r'^characters/motion': 'characters_motion',
     r'characters/motion/animationclips$': 'characters_motion',
     r'^dragon/motion': 'dragon_motion',

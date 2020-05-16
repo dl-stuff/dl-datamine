@@ -83,7 +83,8 @@ class CharaData(DBView):
         for i in (1, 2, 3):
             for j in (1, 2, 3, 4):
                 ab = f'_Abilities{i}{j}'
-                res[ab] = self.index['AbilityData'].get(res[ab], full_query=True, exclude_falsy=exclude_falsy)
+                if ab in res and (abd := self.index['AbilityData'].get(res[ab], full_query=True, exclude_falsy=exclude_falsy)):
+                    res[ab] = self.index['AbilityData'].get(res[ab], full_query=True, exclude_falsy=exclude_falsy)
         for i in (1, 2, 3, 4, 5):
             ex = f'_ExAbilityData{i}'
             if ex in res and res[ex]:
@@ -133,7 +134,7 @@ class CharaData(DBView):
 
         if condense:
             res = self.last_abilities(res)
-        else:
+        else:        
             res = self.all_abilities(res)
         
         if '_BurstAttack' in res and res['_BurstAttack'] and (ba := self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)):
