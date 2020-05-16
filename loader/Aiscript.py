@@ -109,7 +109,7 @@ def s(v):
             Root.GLOBAL_VAR.add(v)
             return v
         else:
-            return f'self.{v}'
+            return f'self.var_{v}'
     else:
         return v
 FMT_COMPARE = {
@@ -195,8 +195,8 @@ def fmt_end(inst):
 
 def fmt_func(inst):
     name = inst.params[0].values[0]
-    fn_params = ', '.join(map(lambda fp: fp.py_str(comment=False), inst.function_params))
-    return f'{INDENT*inst.depth}{s(name)}({fn_params})'
+    # fn_params = ', '.join(map(lambda fp: fp.py_str(comment=False), inst.function_params))
+    return f'{INDENT*inst.depth}self.{name}()'
 
 def fmt_jump(inst):
     depth = inst.depth - inst.jump_target.depth
@@ -219,33 +219,33 @@ def fmt_sub(inst):
 def fmt_timer(inst):
     value = inst.params[0].values[0]
     if value == 'true':
-        return f'{INDENT*inst.depth}_RecTimer.on()'
+        return f'{INDENT*inst.depth}RecTimer.on()'
     else:
-        return f'{INDENT*inst.depth}_RecTimer.off()'
+        return f'{INDENT*inst.depth}RecTimer.off()'
 
 def fmt_alivenum(inst):
     value = inst.params[0].values[0]
     name = inst.params[1].values[0]
-    return f'{INDENT*inst.depth}{s(name)} = _alive({value})'
+    return f'{INDENT*inst.depth}{s(name)} = alive({value})'
 
 def fmt_move(inst):
     action = Move(inst.params[0].values[0])
-    return f'{INDENT*inst.depth}_move({action})'
+    return f'{INDENT*inst.depth}move({action})'
 
 def fmt_turn(inst):
     action = Turn(inst.params[0].values[0])
-    return f'{INDENT*inst.depth}_turn({action})'
+    return f'{INDENT*inst.depth}turn({action})'
 
 def fmt_action(inst):
     name = inst.params[0].values[0]
-    return f'{INDENT*inst.depth}_action[{s(name)}]()'
+    return f'{INDENT*inst.depth}action({s(name)})'
 
 def fmt_cleardmgcnt(inst):
     s('_indirectDmgCnt')
     return f'{INDENT*inst.depth}self._indirectDmgCnt = 0'
 
 def fmt_wake(inst):
-    return f'{INDENT*inst.depth}_wake()'
+    return f'{INDENT*inst.depth}wake()'
 
 def fmt_orderalivefarther(inst):
     return f'{INDENT*inst.depth}self.next_order = {Order.AliveFarther}'
@@ -256,9 +256,9 @@ def fmt_ordercloser(inst):
 def fmt_unusualposture(inst):
     value = inst.params[0].values[0]
     if value == 'true':
-        return f'{INDENT*inst.depth}_UnusualPosture.on()'
+        return f'{INDENT*inst.depth}UnusualPosture.on()'
     else:
-        return f'{INDENT*inst.depth}_UnusualPosture.off()'
+        return f'{INDENT*inst.depth}UnusualPosture.off()'
 
 def fmt_gmsetturn(inst):
     value = inst.params[0].values[0]
@@ -280,7 +280,7 @@ def fmt_gmsetbanditevent(inst):
     return f'{INDENT*inst.depth}self.bandit_event = _event[\'{value}\']'
 
 def fmt_rechprate(inst):
-    return f'{INDENT*inst.depth}_recHPRate()'
+    return f'{INDENT*inst.depth}recHPRate()'
 
 FMT_PYTHON = {
     Command.Def: fmt_def,
@@ -320,102 +320,8 @@ FMT_PYTHON = {
 class Root:
     HEADER = """import random
 from enum import Enum
+from .._aiscript import *
 
-class Move(Enum):
-	none = 0
-	approch = 1
-	escape = 2
-	escapeTL = 3
-	pivot = 4
-	anchor = 5
-
-class Turn(Enum):
-	none = 0
-	target = 1
-	worldCenter = 2
-	north = 3
-	east = 4
-	south = 5
-	west = 6
-	pivot = 7
-	anchor = 8
-
-class Target(Enum):
-	NONE = 0
-	MYSELF_00 = 1
-	ALLY_HP_02 = 4
-	ALLY_HP_03 = 5
-	ALLY_HP_04 = 6
-	ALLY_DISTANCE_00 = 7
-	ALLY_DISTANCE_01 = 8
-	ALLY_STRENGTH_00 = 9
-	ALLY_STRENGTH_01 = 10
-	ALLY_BUFF_00 = 11
-	ALLY_BUFF_01 = 12
-	ALLY_BUFF_04 = 15
-	HOSTILE_DISTANCE_00 = 16
-	HOSTILE_DISTANCE_01 = 17
-	HOSTILE_HP_00 = 18
-	HOSTILE_STRENGTH_00 = 19
-	HOSTILE_STRENGTH_01 = 20
-	HOSTILE_TARGET_00 = 21
-	HOSTILE_TARGET_01 = 22
-	HOSTILE_TARGET_02 = 23
-	HOSTILE_RANDOM_00 = 24
-	HOSTILE_FRONT_00 = 25
-	HOSTILE_BEHIND_00 = 26
-	ALL_DISTANCE_00 = 27
-	ALL_DISTANCE_01 = 28
-	ALL_RANDOM_00 = 29
-	PLAYER1_TARGET = 30
-	PLAYER2_TARGET = 31
-	PLAYER3_TARGET = 32
-	PLAYER4_TARGET = 33
-	PLAYER_RANDOM = 34
-	HOSTILE_SWOON = 35
-	HOSTILE_BIND = 36
-	PLAYER_RANDOM_INDIRECT = 37
-	PLAYER_RANDOM_DIRECT = 38
-	HOSTILE_OUT_MARKER_00 = 39
-	HOSTILE_OUT_MARKER_01 = 40
-	HOSTILE_OUT_MARKER_02 = 41
-	SPECIAL_HATE = 42
-	HOSTILE_DISTANCE_NO_LIMIT = 43
-	REGISTERED_01 = 44
-	REGISTERED_02 = 45
-	REGISTERED_03 = 46
-	REGISTERED_04 = 47
-
-def _move(move_type):
-    pass
-
-def _turn(move_type):
-    pass
-
-def _wake():
-    pass
-
-def _recHPRate():
-    pass
-
-def _alive(idx):
-    pass
-
-class RecTimer:
-    def on(self):
-        pass
-    def off(self):
-        pass
-_RecTimer = RecTimer()
-
-class Pose:
-    def on(self):
-        pass
-    def off(self):
-        pass
-_UnusualPosture = Pose()
-
-_action = {}
 _action_set = {}
 _event = {}
 """
@@ -437,6 +343,7 @@ _event = {}
     def py_str(self, comment=False):
         children = '\n'.join(map(lambda c: c.py_str(), self.children))
         global_str = ' = None\n'.join(Root.GLOBAL_VAR)
+        # return f'{Root.HEADER}\nclass {self.NAME}:\n{children}\n{Root.FOOTER}{global_str} = None\n'
         return f'{Root.HEADER}{global_str} = None\n\nclass {self.NAME}:\n{children}'
 
 class Param:
