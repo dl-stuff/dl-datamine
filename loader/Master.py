@@ -16,8 +16,13 @@ def load_table(db, data, table, key=None, stdout_log=False):
         if stdout_log:
             print(f'Skip {table}')
         return
-    row = next(iter(values))
-    pk = next(iter(row))
+    try:
+        row = next(iter(values))
+        pk = next(iter(row))
+    except:
+        if stdout_log:
+            print(f'Skip {table}')
+        return
     if isinstance(row, dict) and pk.startswith('_'):
         if key:
             if '_Id' in row:

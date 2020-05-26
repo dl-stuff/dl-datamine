@@ -157,8 +157,54 @@ class CharaData(DBView):
         out_dir = os.path.join(out_dir, 'adventurers')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
+import re
+from unidecode import unidecode
+def snakey(name):
+    return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name)).replace(' ', '_').replace('_amp', '_and')
+
+def same(lst):
+    if lst[1:] == lst[:-1]:
+        return lst[0]
+    else:
+        return lst[-1]
+
 if __name__ == '__main__':
     index = DBViewIndex()
     view = CharaData(index)
-    # view.export_all_to_folder()
-    res = view.get(10650202)
+    all_res = view.get_all(exclude_falsy=False)
+    skill_share_data = {}
+    for res in all_res:
+        res_data = {
+            'limit': res['_HoldEditSkillCost'],
+        }
+        name = f'{res["_BaseId"]}_{res["_VariationId"]:02}' if not res['_Name'] else snakey(res['_Name']) if not res['_SecondName'] else snakey(res['_SecondName'])
+        skill_share_id = res['_EditSkillId']
+        if res['_EditSkillLevelNum'] > 0:
+            skill = index['SkillData'].get(res['_Skill'+str(res['_EditSkillLevelNum'])], exclude_falsy=False)
+            res_data['s'] = res['_EditSkillLevelNum']
+            # res_data['name'] = snakey(skill['_Name'])
+            res_data['cost'] = res['_EditSkillCost']
+            res_data['type'] = skill['_SkillType']
+            sp_s_list = [
+                skill['_SpEdit'],
+                skill['_SpLv2Edit'],
+                skill['_SpLv3Edit'],
+                skill['_SpLv4Edit'],
+            ]
+            res_data['sp'] = same(sp_s_list)
+        skill_share_data[name] = res_data
+
+    with open('skillshare.json', 'w', newline='') as f:
+        json.dump(skill_share_data, f, indent=2)
+    # with open('skillshare.csv', 'w') as f:
+    #     f.write('name')
+    #     for k in res_data.keys():
+    #         f.write(',')
+    #         f.write(k)
+    #     f.write('\n')
+    #     for name, data in skill_share_data.items():
+    #         f.write(name)
+    #         for v in data.values():
+    #             f.write(',')
+    #             f.write(str(v))
+    #         f.write('\n')

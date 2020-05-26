@@ -63,7 +63,10 @@ def unpack_Texture2D(data, dest, stdout_log=False):
     # check_target_path(dest)
     # img = data.image
     # img.save(dest)
-    return data.image
+    try:
+        return data.image
+    except:
+        return None
 
 def unpack_MonoBehaviour(data, dest, stdout_log=False):
     if stdout_log:
@@ -231,7 +234,7 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 if stdout_log:
                     print(f'Saved {dest}_{key}')
 
-IMAGE_CATEGORY = re.compile(r'(.+?)_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
+IMAGE_CATEGORY = re.compile(r'(.+?)_(sprite|C|alpha|alphaA8|A|Y|Cb|Cr)$')
 IMAGE_ALPHA_INDEX = re.compile(r'(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
 def merge_images(image_list, stdout_log=False, do_indexed=True):
     all_categorized_images = defaultdict(lambda: {})
@@ -248,6 +251,8 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
             res = IMAGE_CATEGORY.match(dest)
             if res:
                 dest, category = res.groups()
+                if category == 'C':
+                    category = 'sprite'
                 all_categorized_images[dest][category] = img
                 continue
             all_categorized_images[dest]['sprite'] = img
@@ -342,7 +347,7 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
-        r'^emotion/story/chara/': None
+        r'eventlocalized': None
     }
 
     manifests = {
@@ -363,4 +368,4 @@ if __name__ == '__main__':
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
         ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='en')
