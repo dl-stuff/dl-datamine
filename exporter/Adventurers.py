@@ -12,6 +12,10 @@ MODE_CHANGE_TYPES = {
     3: 'Dragon'
 }
 
+class EditSkillCharaOffset(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'EditSkillCharaOffset')
+
 class ExAbilityData(AbilityData):
     def __init__(self, index):
         DBView.__init__(self, index, 'ExAbilityData', labeled_fields=['_Name', '_Details'])
@@ -29,7 +33,6 @@ class CharaUniqueCombo(DBView):
             base_action_id = res['_ActionId']
             res['_ActionId'] = [self.index['PlayerAction'].get(base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
         return res
-
 
 class CharaModeData(DBView):
     def __init__(self, index):
@@ -140,6 +143,9 @@ class CharaData(DBView):
         if '_BurstAttack' in res and res['_BurstAttack'] and (ba := self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)):
             res['_BurstAttack'] = ba
 
+        if '_EditSkillRelationId' in res and res['_EditSkillRelationId']:
+            res['_EditSkillRelationId'] = self.index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')
+
         return res
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condense=True):
@@ -177,7 +183,22 @@ if __name__ == '__main__':
         res_data = {
             'limit': res['_HoldEditSkillCost'],
         }
-        name = f'{res["_BaseId"]}_{res["_VariationId"]:02}' if not res['_Name'] else snakey(res['_Name']) if not res['_SecondName'] else snakey(res['_SecondName'])
+        if res['_EditSkillRelationId'] > 1:
+            modifiers = index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')[0]
+            if modifiers['_SpOffset'] > 1:
+                res_data['mod_sp'] = modifiers['_SpOffset']
+            if modifiers['_StrengthOffset'] != 0.699999988079071:
+                res_data['mod_att'] = modifiers['_StrengthOffset']
+            if modifiers['_BuffDebuffOffset'] != 1:
+                res_data['mod_buff'] = modifiers['_BuffDebuffOffset']
+        try:
+            name = snakey(res['_Name']) if not res['_SecondName'] else snakey(res['_SecondName'])
+        except:
+            continue
+        if name == 'The_Prince':
+            name = 'Euden'
+        if name == 'Gala_Prince':
+            name = 'Gala_Euden'
         skill_share_id = res['_EditSkillId']
         if res['_EditSkillLevelNum'] > 0:
             skill = index['SkillData'].get(res['_Skill'+str(res['_EditSkillLevelNum'])], exclude_falsy=False)
@@ -192,6 +213,7 @@ if __name__ == '__main__':
                 skill['_SpLv4Edit'],
             ]
             res_data['sp'] = same(sp_s_list)
+
         skill_share_data[name] = res_data
 
     with open('skillshare.json', 'w', newline='') as f:
