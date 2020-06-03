@@ -266,7 +266,7 @@ class PlayerAction(DBView):
 
     def process_result(self, player_action, exclude_falsy=True, full_query=True):
         pa_id = player_action['_Id']
-        action_parts = self.index['ActionParts'].get(pa_id, by='_ref', order='_seq ASC', exclude_falsy=exclude_falsy)
+        action_parts = self.index['ActionParts'].get(pa_id, by='_ref', order='_seconds ASC', exclude_falsy=exclude_falsy)
         if action_parts:
             player_action['_Parts'] = action_parts
         if '_BurstMarkerId' in player_action and player_action['_BurstMarkerId'] and (marker := self.get(player_action['_BurstMarkerId'], exclude_falsy=exclude_falsy)):

@@ -32,6 +32,8 @@ class CharaUniqueCombo(DBView):
         if '_ActionId' in res and res['_ActionId']:            
             base_action_id = res['_ActionId']
             res['_ActionId'] = [self.index['PlayerAction'].get(base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
+        if '_BuffHitAttribute' in res and res['_BuffHitAttribute']:
+            res['_BuffHitAttribute'] = self.index['PlayerActionHitAttribute'].get(res['_BuffHitAttribute'], exclude_falsy=exclude_falsy)
         return res
 
 class CharaModeData(DBView):
@@ -180,9 +182,9 @@ if __name__ == '__main__':
     all_res = view.get_all(exclude_falsy=False)
     skill_share_data = {}
     for res in all_res:
-        res_data = {
-            'limit': res['_HoldEditSkillCost'],
-        }
+        res_data = {}
+        if res['_HoldEditSkillCost'] != 10:
+            res_data['limit'] = res['_HoldEditSkillCost']
         if res['_EditSkillRelationId'] > 1:
             modifiers = index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')[0]
             if modifiers['_SpOffset'] > 1:
@@ -199,7 +201,6 @@ if __name__ == '__main__':
             name = 'Euden'
         if name == 'Gala_Prince':
             name = 'Gala_Euden'
-        skill_share_id = res['_EditSkillId']
         if res['_EditSkillLevelNum'] > 0:
             skill = index['SkillData'].get(res['_Skill'+str(res['_EditSkillLevelNum'])], exclude_falsy=False)
             res_data['s'] = res['_EditSkillLevelNum']
@@ -213,6 +214,8 @@ if __name__ == '__main__':
                 skill['_SpLv4Edit'],
             ]
             res_data['sp'] = same(sp_s_list)
+        else:
+            continue
 
         skill_share_data[name] = res_data
 

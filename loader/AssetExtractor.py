@@ -330,7 +330,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        # r'^images/icon/': None,
+        r'^images/icon/': None,
         # r'^images/outgame': None
 
         # r'^images/icon/ability/l': '../icon/ability',
@@ -347,7 +347,7 @@ if __name__ == '__main__':
         # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
-        r'eventlocalized': None
+        # r'characters/model': None
     }
 
     manifests = {
@@ -368,4 +368,4 @@ if __name__ == '__main__':
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
         ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='en')
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
