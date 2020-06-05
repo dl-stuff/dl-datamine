@@ -55,18 +55,85 @@ def write_json(f, data):
     tree = data.read_type_tree()
     json.dump(process_json(tree), f, indent=2)
 
-def unpack_Texture2D(data, dest, stdout_log=False):
+def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
     if stdout_log:
         print('Texture2D', dest, flush=True)
-    # dest, _ = os.path.splitext(dest)
-    # dest = dest + '.png'
-    # check_target_path(dest)
-    # img = data.image
-    # img.save(dest)
     try:
-        return data.image
+        texture_2d[data.path_id]['root'] = (dest, data.image)
     except:
-        return None
+        texture_2d[data.path_id] = {}
+        texture_2d[data.path_id]['root'] = (dest, data.image)
+
+
+from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
+from UnityPy.export.SpriteHelper import get_triangles
+SPRITE_ROTATION = {
+    SpritePackingRotation.kSPRFlipHorizontal: Image.FLIP_TOP_BOTTOM,
+    SpritePackingRotation.kSPRFlipVertical: Image.FLIP_LEFT_RIGHT,
+    SpritePackingRotation.kSPRRotate180: Image.ROTATE_180,
+    SpritePackingRotation.kSPRRotate90: Image.ROTATE_270
+}
+
+
+def unpack_Sprite(data, dest, texture_2d, stdout_log=False):
+    if stdout_log:
+        print('Sprite', dest, flush=True)
+
+    m_Sprite = data
+    atlas = None
+    if m_Sprite.m_SpriteAtlas:
+        atlas = m_Sprite.m_SpriteAtlas.read()
+    elif m_Sprite.m_AtlasTags:
+        # looks like the direct pointer is empty, let's try to find the Atlas via its name
+        for obj in m_Sprite.assets_file.objects.values():
+            if obj.type == "SpriteAtlas":
+                atlas = obj.read()
+                if atlas.name == m_Sprite.m_AtlasTags[0]:
+                    break
+                atlas = None
+    if atlas:
+        sprite_atlas_data = atlas.render_data_map[m_Sprite.m_RenderDataKey]
+    else:
+        sprite_atlas_data = m_Sprite.m_RD
+
+    rect = sprite_atlas_data.textureRect
+    rect_size = (int(rect.right - rect.left), int(rect.bottom - rect.top))
+
+    rotation = None
+    settings_raw = sprite_atlas_data.settingsRaw
+    if settings_raw.packed == 1:
+        try:
+            rotation = SPRITE_ROTATION[settings_raw.packingRotation]
+        except:
+            pass
+        
+    mask = None
+    if settings_raw.packingMode == SpritePackingMode.kSPMTight:
+        mask = Image.new('1', rect_size, color=0)
+        draw = ImageDraw.ImageDraw(mask)
+        for triangle in get_triangles(m_Sprite):
+            draw.polygon(triangle, fill=1)
+
+        # # apply the mask
+        # if sprite_image.mode == "RGBA":
+        #     # the image already has an alpha channel,
+        #     # so we have to use composite to keep it
+        #     empty_img = Image.new(sprite_image.mode, sprite_image.size, color=0)
+        #     sprite_image = Image.composite(sprite_image, empty_img, mask)
+        # else:
+        #     # add mask as alpha-channel to keep the polygon clean
+        #     sprite_image.putalpha(mask)
+
+
+    s_tuple = (dest, rect, rotation, mask)
+    try:
+        texture_2d[sprite_atlas_data.texture.path_id]['sprites'].append(s_tuple)
+    except KeyError:
+        try:
+            texture_2d[sprite_atlas_data.texture.path_id]['sprites'] = [s_tuple]
+        except KeyError:
+            texture_2d[sprite_atlas_data.texture.path_id] = {}
+            texture_2d[sprite_atlas_data.texture.path_id]['sprites'] = [s_tuple]
 
 def unpack_MonoBehaviour(data, dest, stdout_log=False):
     if stdout_log:
@@ -77,7 +144,6 @@ def unpack_MonoBehaviour(data, dest, stdout_log=False):
 
     with open(dest, 'w', encoding='utf8', newline='') as f:
         write_json(f, data)
-    return None
 
 def unpack_GameObject(data, destination_folder, stdout_log):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
@@ -87,21 +153,21 @@ def unpack_GameObject(data, destination_folder, stdout_log):
     mono_list = []
     for idx, obj in enumerate(data.components):
         obj_type_str = str(obj.type)
-        if obj_type_str in UNPACK:
-            subdata = obj.read()
-            if obj_type_str == 'MonoBehaviour':
-                json_data = subdata.read_type_tree()
-                if json_data:
-                    mono_list.append(json_data)
-            elif obj_type_str == 'GameObject':
-                UNPACK[obj_type_str](subdata, os.path.join(dest, '{:02}'.format(idx)))
+        subdata = obj.read()
+        if obj_type_str == 'MonoBehaviour':
+            json_data = subdata.read_type_tree()
+            if json_data:
+                mono_list.append(json_data)
+        elif obj_type_str == 'GameObject':
+            UNPACK[obj_type_str](subdata, os.path.join(dest, '{:02}'.format(idx)))
+        elif stdout_log:
+            print(f'Unsupported type {obj_type_str}')
     if len(mono_list) > 0:
         check_target_path(dest)
         with open(dest, 'w', encoding='utf8', newline='') as f:
             json.dump(mono_list, f, indent=2)
-    return None
 
-def unpack(obj, ex_target, ex_dir, ex_img_dir, stdout_log=False):
+def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
     obj_type_str = str(obj.type)
     if ex_dir is None and obj_type_str != 'Texture2D':
         return None
@@ -117,15 +183,19 @@ def unpack(obj, ex_target, ex_dir, ex_img_dir, stdout_log=False):
             dest = os.path.join(ex_target, data.name)
             method = UNPACK[obj_type_str]
         if method:
-            if obj_type_str == 'Texture2D':
+            if obj_type_str == 'Texture2D' or obj_type_str == 'Sprite':
                 dest = os.path.join(ex_img_dir, dest)
+                method(data, dest, texture_2d, stdout_log)
             else:
                 dest = os.path.join(ex_dir, dest)
-            return dest, method(data, dest, stdout_log)
+                method(data, dest, stdout_log)
+    elif stdout_log:
+        print(f'Unsupported type {obj_type_str}')
             
 
 UNPACK = {
-    'Texture2D': unpack_Texture2D, 
+    'Texture2D': unpack_Texture2D,
+    'Sprite': unpack_Sprite,
     'MonoBehaviour': unpack_MonoBehaviour,
     'GameObject': unpack_GameObject,
     'AnimationClip': unpack_MonoBehaviour,
@@ -144,28 +214,25 @@ def merge_YCbCr(Y_img, Cb_img, Cr_img):
 
 def merge_categorized(all_categorized_images, stdout_log=False):
     for dest, sorted_images in all_categorized_images.items():
+        image = None
         if len(sorted_images) == 1:
             image = next(iter(sorted_images.values()))
             dest = os.path.splitext(dest)[0] + '.png'
-            check_target_path(dest)
-            image.save(dest)
             if stdout_log:
                 print(f'Saved {dest}')
             continue
-        if 'sprite' in sorted_images:
-            base = sorted_images['sprite']
+        if 'color' in sorted_images:
+            image = sorted_images['color']
             if 'alphaA8' in sorted_images:
                 _, _, _, a = sorted_images['alphaA8'].split()
             elif (alpha := 'alpha') in sorted_images or (alpha := 'A') in sorted_images:
                 a = sorted_images[alpha].convert('L')
-            base.putalpha(a)
+            image.putalpha(a)
             dest = os.path.splitext(dest)[0] + '.png'
-            check_target_path(dest)
-            base.save(dest)
             if stdout_log:
                 print(f'Merged RGBA {dest}')
         if 'Y' in sorted_images:
-            merged = merge_YCbCr(sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
+            image = merge_YCbCr(sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
             if 'alpha' in sorted_images:
                 a = sorted_images['alpha'].convert('L')
             elif sorted_images['Y'].size == (1024, 1024):
@@ -173,12 +240,30 @@ def merge_categorized(all_categorized_images, stdout_log=False):
             else:
                 a = None
             if a is not None:
-                merged.putalpha(a)
+                image.putalpha(a)
             dest = os.path.splitext(dest)[0] + '.png'
-            check_target_path(dest)
-            merged.save(dest)
             if stdout_log:
                 print(f'Merged YCbCr {dest}')
+
+        if image is not None:
+            check_target_path(dest)
+            image.save(dest)
+            try:
+                flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
+                for s_dest, s_box, flip, mask in sorted_images['sprites']:
+                    s_img = flipped.crop((s_box.left, s_box.top, s_box.right, s_box.bottom))
+                    if flip is not None:
+                        s_img = s_img.transpose(flip)
+                    s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
+                    if mask is not None:
+                        s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
+                    s_dest = os.path.splitext(s_dest)[0] + '.png'
+                    check_target_path(s_dest)
+                    s_img.save(s_dest)
+                    if stdout_log:
+                        print(f'Merged Sprite {s_dest}')
+            except KeyError:
+                pass
 
 def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
     for dest, images in all_indexed_images.items():
@@ -242,7 +327,8 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
     for images in image_list:
         if images is None:
             continue
-        for dest, img in images.items():
+        for _, data in images.items():
+            dest, img = data['root']
             res = IMAGE_ALPHA_INDEX.match(dest)
             if res:
                 dest, designation, index, category = res.groups()
@@ -252,10 +338,12 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
             if res:
                 dest, category = res.groups()
                 if category == 'C':
-                    category = 'sprite'
+                    category = 'color'
                 all_categorized_images[dest][category] = img
                 continue
-            all_categorized_images[dest]['sprite'] = img
+            all_categorized_images[dest]['color'] = img
+            if 'sprites' in data:
+                all_categorized_images[dest]['sprites'] = data['sprites']
 
     merge_categorized(all_categorized_images, stdout_log=stdout_log)
     if do_indexed:
@@ -301,9 +389,7 @@ class Extractor:
             texture_2d = {}
             for asset in am.assets.values():
                 for obj in asset.objects.values():
-                    result = unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, stdout_log=self.stdout_log)
-                    if result and result[1]:
-                        texture_2d[result[0]] = result[1]
+                    unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, texture_2d, stdout_log=self.stdout_log)
             if len(texture_2d) > 0:
                 return texture_2d
 
@@ -330,24 +416,10 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^images/icon/': None,
+        # r'^images/icon/': None,
         # r'^images/outgame': None
-
-        # r'^images/icon/ability/l': '../icon/ability',
-        # r'^images/icon/amulet/l': '../icon/wyrmprint',
-        # r'^images/icon/chara/l': '../icon/character',
-        # r'^images/icon/element/m': '../icon/element',
-        # r'^images/icon/weapontype/m': '../icon/weapontype',
-        # r'^images/icon/skill/l': '../icon/skill',
-        # r'^images/icon/stamp/l/framed': '../icon/stamp',
-        # r'^images/icon/status': '../icon/status',
-        # r'^images/icon/weapon/l': '../icon/weapon',
-        # r'^images/outgame/unitdetail/amulet': '../portrait/amulet',
-        # r'^images/outgame/unitdetail/chara': '../portrait/character',
-        # r'^images/outgame/unitdetail/dragon': '../portrait/dragon',
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
-        # r'characters/model': None
     }
 
     manifests = {
@@ -357,14 +429,15 @@ if __name__ == '__main__':
 
 
     if len(sys.argv) > 1:
-        ex = Extractor(manifests, ex_dir=None, stdout_log=True)
         if sys.argv[1] == 'diff':
+            ex = Extractor(manifests, ex_dir=None, stdout_log=True)
             for region in ('jp', 'en'):
                 try:
                     ex.download_and_extract_by_diff(f'manifest/{region}manifest_old.txt', region=region)
                 except:
                     continue
         else:
+            ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
         ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
