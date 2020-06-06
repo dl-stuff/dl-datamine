@@ -312,6 +312,15 @@ class SkillChainData(DBView):
     def __init__(self, index):
         super().__init__(index, 'SkillChainData')
 
+    def process_result(self, res):
+        for r in res:
+            r['_Skill'] = self.index['SkillData'].get(r['_Id'], full_chainSkill=False)
+        return res
+
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, expand_one=True):
+        res = super().get(pk, by=by, fields=fields, order=order, mode=mode, exclude_falsy=exclude_falsy, expand_one=expand_one)
+        return self.process_result(res)
+
 class SkillData(DBView):
     TRANS_PREFIX = '_Trans'
     def __init__(self, index):
@@ -337,7 +346,7 @@ class SkillData(DBView):
         return data
 
     def process_result(self, skill_data, exclude_falsy=True, 
-        full_query=True, full_abilities=False, full_transSkill=True):
+        full_query=True, full_abilities=False, full_transSkill=True, full_chainSkill=True):
         if not full_query:
             return skill_data
         # Actions
@@ -361,15 +370,15 @@ class SkillData(DBView):
                 trans_skill_group[next_trans_skill['_Id']] = next_trans_skill
             skill_data['_TransSkill'] = trans_skill_group
         # ChainGroupId
-        if '_ChainGroupId' in skill_data and skill_data['_ChainGroupId']:
+        if full_chainSkill and '_ChainGroupId' in skill_data and skill_data['_ChainGroupId']:
             skill_data['_ChainGroupId'] = self.index['SkillChainData'].get(skill_data['_ChainGroupId'], by='_GroupId', exclude_falsy=exclude_falsy)
         return skill_data
 
     def get(self, pk, fields=None, exclude_falsy=True, 
-        full_query=True, full_abilities=False, full_transSkill=True):
+        full_query=True, full_abilities=False, full_transSkill=True, full_chainSkill=True):
         skill_data = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         return self.process_result(skill_data, exclude_falsy=exclude_falsy, 
-        full_query=full_query, full_abilities=full_abilities, full_transSkill=full_transSkill)
+        full_query=full_query, full_abilities=full_abilities, full_transSkill=full_transSkill, full_chainSkill=full_chainSkill)
 
 if __name__ == '__main__':
     index = DBViewIndex()

@@ -14,9 +14,10 @@ EN = 'en'
 CN = 'cn'
 
 MANIFESTS = {
-    JP: 'manifest/jpmanifest_with_asset_labels.txt',
-    EN: 'manifest/enmanifest_with_asset_labels.txt',
-    CN: 'manifest/cnmanifest_with_asset_labels.txt'
+    JP: 'manifest/assetbundle.manifest.json',
+    EN: 'manifest/assetbundle.en_us.manifest.json',
+    CN: 'manifest/assetbundle.zh_cn.manifest.json',
+    # TW: 'manifest/assetbundle.zh_tw.manifest.json'
 }
 
 MASTER = 'master'

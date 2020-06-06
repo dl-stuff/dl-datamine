@@ -5,13 +5,14 @@ import aiohttp
 import asyncio
 import re
 import concurrent
+from queue import SimpleQueue
 from collections import defaultdict
 
 from PIL import Image, ImageDraw
 from UnityPy import AssetsManager
 
-class ParsedManifest(dict):
-    def __init__(self, manifest=None):
+class ParsedManifestFlat(dict):
+    def __init__(self, manifest):
         super().__init__({})
         with open(manifest) as f:
             for line in f:
@@ -25,6 +26,115 @@ class ParsedManifest(dict):
 
     def get_by_diff(self, other):
         return list(filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items()))
+
+
+class AssetEntry:
+    URL_FORMAT = 'http://dragalialost.akamaized.net/dl/assetbundles/Android/{h}/{hash}'
+    def __init__(self, asset):
+        self.name = asset['name']
+        self.hash = asset['hash']
+        self.url = AssetEntry.URL_FORMAT.format(h=self.hash[0:2], hash=self.hash)
+        if 'dependencies' in asset and asset['dependencies']:
+            self.dependencies = asset['dependencies']
+        else:
+            self.dependencies = None
+        self.size = asset['size']
+        self.group = asset['group']
+        self.dependents = None
+
+    def map_dependencies(self, pm):
+        if self.dependencies:
+            mapped = []
+            for dep in self.dependencies:
+                mapped.append(pm[dep])
+                if pm[dep].dependents:
+                    pm[dep].dependents.append(self)
+                else:
+                    pm[dep].dependents = [self]
+            self.dependencies = mapped
+
+    def __repr__(self):
+        if self.dependencies:
+            return f'{self.name} ({self.hash})\n-> {self.dependencies}'
+        else:
+            return f'{self.name} ({self.hash})'
+
+    def __eq__(self, other):
+        return self.hash == other.hash
+
+    def __ne__(self, other):
+        return self.hash != other.hash
+
+
+class ParsedManifest(dict):
+    def __init__(self, manifest):
+        super().__init__({})
+        self.path = manifest
+        with open(manifest) as f:
+            tree = json.load(f)
+        for category in tree['categories']:
+            for asset in category['assets']:
+                self[asset['name']] = AssetEntry(asset)
+        for asset in tree['rawAssets']:
+            self[asset['name']] = AssetEntry(asset)
+        for asset in self.values():
+            asset.map_dependencies(self)
+
+    DO_NOT_EXPAND = {'shader'}
+    @staticmethod
+    def expand_dependencies(targets):
+        q = SimpleQueue()
+        seen = set()
+        results = {}
+        for k, v in targets:
+            q.put((k, v))
+        while not q.empty():
+            k, v = q.get()
+            if k not in ParsedManifest.DO_NOT_EXPAND and v.name not in seen:
+                seen.add(v.name)
+                try:
+                    results[k].append(v.url)
+                except:
+                    results[k] = [v.url]
+                if v.dependencies:
+                    for dep in v.dependencies:
+                        q.put((k, dep))
+        return list(results.items())
+
+    @staticmethod
+    def link_dependencies(targets):
+        results = {}
+        has_dep = []
+        for k, v in targets:
+            if v.dependents:
+                has_dep.append(v)
+            else:
+                results[k] = [v.url]
+        for v in has_dep:
+            found = False
+            for dep in v.dependents:
+                if dep.name in results:
+                    results[dep.name].append(v.url)
+                    found = True
+            if not found:
+                results[v.name] = [v.url]
+        return list(results.items())
+
+    def get_by_pattern(self, pattern, expand=False):
+        if not isinstance(pattern, re.Pattern):
+            pattern = re.compile(pattern, flags=re.IGNORECASE)
+        targets = filter(lambda x: pattern.search(x[0]), self.items())
+        if expand:
+            return ParsedManifest.expand_dependencies(targets)
+        else:
+            return ParsedManifest.link_dependencies(targets)
+
+    def get_by_diff(self, other, expand=False):
+        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
+        if expand:
+            return ParsedManifest.expand_dependencies(targets)
+        else:
+            return ParsedManifest.link_dependencies(targets)
 
 
 def check_target_path(target):
@@ -59,10 +169,14 @@ def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
     if stdout_log:
         print('Texture2D', dest, flush=True)
     try:
-        texture_2d[data.path_id]['root'] = (dest, data.image)
+        tpl = (dest, data.image)
+        try:
+            texture_2d[data.path_id]['root'] = tpl
+        except KeyError:
+            texture_2d[data.path_id] = {}
+            texture_2d[data.path_id]['root'] = tpl
     except:
-        texture_2d[data.path_id] = {}
-        texture_2d[data.path_id]['root'] = (dest, data.image)
+        pass
 
 
 from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
@@ -114,17 +228,6 @@ def unpack_Sprite(data, dest, texture_2d, stdout_log=False):
         for triangle in get_triangles(m_Sprite):
             draw.polygon(triangle, fill=1)
 
-        # # apply the mask
-        # if sprite_image.mode == "RGBA":
-        #     # the image already has an alpha channel,
-        #     # so we have to use composite to keep it
-        #     empty_img = Image.new(sprite_image.mode, sprite_image.size, color=0)
-        #     sprite_image = Image.composite(sprite_image, empty_img, mask)
-        # else:
-        #     # add mask as alpha-channel to keep the polygon clean
-        #     sprite_image.putalpha(mask)
-
-
     s_tuple = (dest, rect, rotation, mask)
     try:
         texture_2d[sprite_atlas_data.texture.path_id]['sprites'].append(s_tuple)
@@ -160,18 +263,19 @@ def unpack_GameObject(data, destination_folder, stdout_log):
                 mono_list.append(json_data)
         elif obj_type_str == 'GameObject':
             UNPACK[obj_type_str](subdata, os.path.join(dest, '{:02}'.format(idx)))
-        elif stdout_log:
-            print(f'Unsupported type {obj_type_str}')
+        # elif stdout_log:
+        #     print(f'Unsupported type {obj_type_str}')
     if len(mono_list) > 0:
         check_target_path(dest)
         with open(dest, 'w', encoding='utf8', newline='') as f:
             json.dump(mono_list, f, indent=2)
 
+IMAGE_TYPES = {'Texture2D', 'Sprite'}
 def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
     obj_type_str = str(obj.type)
-    if ex_dir is None and obj_type_str != 'Texture2D':
-        return None
-    if ex_img_dir is None and obj_type_str == 'Texture2D':
+    if (ex_dir is None and obj_type_str not in IMAGE_TYPES) or (ex_img_dir is None and obj_type_str in IMAGE_TYPES):
+        if stdout_log:
+            print(f'Skipped {ex_target}')
         return None
     if obj_type_str in UNPACK:
         data = obj.read()
@@ -183,14 +287,14 @@ def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
             dest = os.path.join(ex_target, data.name)
             method = UNPACK[obj_type_str]
         if method:
-            if obj_type_str == 'Texture2D' or obj_type_str == 'Sprite':
+            if obj_type_str in IMAGE_TYPES:
                 dest = os.path.join(ex_img_dir, dest)
                 method(data, dest, texture_2d, stdout_log)
             else:
                 dest = os.path.join(ex_dir, dest)
                 method(data, dest, stdout_log)
-    elif stdout_log:
-        print(f'Unsupported type {obj_type_str}')
+    # elif stdout_log:
+    #     print(f'Unsupported type {obj_type_str}')
             
 
 UNPACK = {
@@ -214,64 +318,70 @@ def merge_YCbCr(Y_img, Cb_img, Cr_img):
 
 def merge_categorized(all_categorized_images, stdout_log=False):
     for dest, sorted_images in all_categorized_images.items():
-        image = None
-        if len(sorted_images) == 1:
-            image = next(iter(sorted_images.values()))
-            dest = os.path.splitext(dest)[0] + '.png'
-            if stdout_log:
-                print(f'Saved {dest}')
-            continue
-        if 'color' in sorted_images:
-            image = sorted_images['color']
-            if 'alphaA8' in sorted_images:
-                _, _, _, a = sorted_images['alphaA8'].split()
-            elif (alpha := 'alpha') in sorted_images or (alpha := 'A') in sorted_images:
-                a = sorted_images[alpha].convert('L')
-            image.putalpha(a)
-            dest = os.path.splitext(dest)[0] + '.png'
-            if stdout_log:
-                print(f'Merged RGBA {dest}')
-        if 'Y' in sorted_images:
-            image = merge_YCbCr(sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
-            if 'alpha' in sorted_images:
-                a = sorted_images['alpha'].convert('L')
-            elif sorted_images['Y'].size == (1024, 1024):
-                a = wyrmprint_alpha
-            else:
-                a = None
-            if a is not None:
-                image.putalpha(a)
-            dest = os.path.splitext(dest)[0] + '.png'
-            if stdout_log:
-                print(f'Merged YCbCr {dest}')
+        try:
+            image = None
+            if 'color' in sorted_images:
+                image = sorted_images['color']
+                if 'alphaA8' in sorted_images:
+                    _, _, _, a = sorted_images['alphaA8'].split()
+                elif (alpha := 'alpha') in sorted_images or (alpha := 'A') in sorted_images:
+                    a = sorted_images[alpha].convert('L')
+                else:
+                    a = None
+                if a:
+                    image.putalpha(a)
+                dest = os.path.splitext(dest)[0] + '.png'
+                check_target_path(dest)
+                image.save(dest)
+                if stdout_log:
+                    print(f'Merged RGBA {dest}')
 
-        if image is not None:
-            check_target_path(dest)
-            image.save(dest)
-            try:
-                flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
-                for s_dest, s_box, flip, mask in sorted_images['sprites']:
-                    s_img = flipped.crop((s_box.left, s_box.top, s_box.right, s_box.bottom))
-                    if flip is not None:
-                        s_img = s_img.transpose(flip)
-                    s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
-                    if mask is not None:
-                        s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
-                    s_dest = os.path.splitext(s_dest)[0] + '.png'
-                    check_target_path(s_dest)
-                    s_img.save(s_dest)
-                    if stdout_log:
-                        print(f'Merged Sprite {s_dest}')
-            except KeyError:
-                pass
+            if 'Y' in sorted_images:
+                image = merge_YCbCr(sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
+                if 'alpha' in sorted_images:
+                    a = sorted_images['alpha'].convert('L')
+                elif sorted_images['Y'].size == (1024, 1024):
+                    a = wyrmprint_alpha
+                else:
+                    a = None
+                if a:
+                    image.putalpha(a)
+                check_target_path(dest)
+                dest = os.path.splitext(dest)[0] + '.png'
+                image.save(dest)
+                if stdout_log:
+                    print(f'Merged YCbCr {dest}')
+            if image is not None:
+                try:
+                    flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
+                    for s_dest, s_box, flip, mask in sorted_images['sprites']:
+                        s_img = flipped.crop((s_box.left, s_box.top, s_box.right, s_box.bottom))
+                        if flip is not None:
+                            s_img = s_img.transpose(flip)
+                        s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
+                        if mask is not None:
+                            s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
+                        s_dest = os.path.splitext(s_dest)[0] + '.png'
+                        check_target_path(s_dest)
+                        s_img.save(s_dest)
+                        if stdout_log:
+                            print(f'Merged Sprite {s_dest}')
+                except KeyError:
+                    pass
+        except Exception as e:
+            print(dest, sorted_images.keys())
+            print(str(e))
 
 def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
     for dest, images in all_indexed_images.items():
         alpha = images['a']
         color = images['c']
         dest = os.path.splitext(dest)[0]
-        with open(dest + '.json', 'r') as f:
-            data = json.load(f)
+        try:
+            with open(dest + '.json', 'r') as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            continue
         mapping = data['partsTextureIndexTable']
         position = data['partsDataTable'][0]['position']
         size = data['partsDataTable'][0]['size']
@@ -351,7 +461,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
 
 
 class Extractor:
-    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', stdout_log=True):
+    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', expand=False, stdout_log=True):
         self.pm = {}
         for region, manifest in manifests.items():
             self.pm[region] = ParsedManifest(manifest)
@@ -360,22 +470,30 @@ class Extractor:
         self.ex_img_dir = ex_img_dir
         self.extract_list = []
         self.stdout_log = stdout_log
+        self.expand = expand
 
-    async def down_ex(self, session, source, region, target, extract):
-        dl_target = os.path.join(self.dl_dir, region, target)
-        check_target_path(dl_target)
-        
-        async with session.get(source) as resp:
-            assert resp.status == 200
-            if self.stdout_log:
-                print(f'Download {dl_target} from {source}')
+    async def down_ex(self, session, source_list, region, target, extract):
+        base_dl_target = os.path.join(self.dl_dir, region, target)
+        check_target_path(base_dl_target)
+
+        texture_2d = {}
+        for idx, source in enumerate(source_list):
+            if len(source_list) > 1:
+                dl_target = base_dl_target + str(idx)
+            else:
+                dl_target = base_dl_target
             
-            try:
-                with open(dl_target, 'wb') as f:
-                    f.write(await resp.read())
-            except:
-                with open(os.path.join(dl_target, os.path.basename(dl_target)), 'wb') as f:
-                    f.write(await resp.read())
+            async with session.get(source) as resp:
+                assert resp.status == 200
+                if self.stdout_log:
+                    print(f'Download {dl_target} from {source}')
+                
+                try:
+                    with open(dl_target, 'wb') as f:
+                        f.write(await resp.read())
+                except:
+                    with open(os.path.join(dl_target, os.path.basename(dl_target)), 'wb') as f:
+                        f.write(await resp.read())
 
             _, ext = os.path.splitext(dl_target)
             if len(ext) > 0:
@@ -386,12 +504,11 @@ class Extractor:
                 extract = os.path.dirname(target).replace('/', '_')
             ex_target = os.path.join(region, extract)
             am = AssetsManager(dl_target)
-            texture_2d = {}
             for asset in am.assets.values():
                 for obj in asset.objects.values():
                     unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, texture_2d, stdout_log=self.stdout_log)
-            if len(texture_2d) > 0:
-                return texture_2d
+        if len(texture_2d) > 0:
+            return texture_2d
 
     async def download_and_extract(self, download_list, extract, region='jp'):
         async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
@@ -403,13 +520,13 @@ class Extractor:
 
     def download_and_extract_by_pattern(self, label_patterns, region='jp'):
         for pat, extract in label_patterns.items():
-            download_list = self.pm[region].get_by_pattern(pat)
+            download_list = self.pm[region].get_by_pattern(pat, expand=self.expand)
             loop = asyncio.get_event_loop()
             loop.run_until_complete(self.download_and_extract(download_list, extract, region))
 
     def download_and_extract_by_diff(self, old_manifest, region='jp'):
         old_manifest = ParsedManifest(old_manifest)
-        download_list = self.pm[region].get_by_diff(old_manifest)
+        download_list = self.pm[region].get_by_diff(old_manifest, expand=self.expand)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.download_and_extract(download_list, None, region))
 
@@ -422,23 +539,25 @@ if __name__ == '__main__':
         # r'^prefabs/outgame/fort/facility': None
     }
 
-    manifests = {
-        'jp': 'manifest/jpmanifest_with_asset_labels.txt',
-        'en': 'manifest/enmanifest_with_asset_labels.txt'
+    MANIFESTS = {
+        'jp': 'manifest/assetbundle.manifest.json',
+        'en': 'manifest/assetbundle.en_us.manifest.json',
+        'cn': 'manifest/assetbundle.zh_cn.manifest.json',
+        'tw': 'manifest/assetbundle.zh_tw.manifest.json'
     }
-
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
-            ex = Extractor(manifests, ex_dir=None, stdout_log=True)
-            for region in ('jp', 'en'):
-                try:
-                    ex.download_and_extract_by_diff(f'manifest/{region}manifest_old.txt', region=region)
-                except:
-                    continue
+            ex = Extractor(MANIFESTS, ex_dir=None, stdout_log=False)
+            if len(sys.argv) > 2:
+                region = sys.argv[2]
+                ex.download_and_extract_by_diff(f'{MANIFESTS[region]}.old', region=region)
+            else:
+                for region, manifest in MANIFESTS.items():
+                    ex.download_and_extract_by_diff(f'{manifest}.old', region=region)
         else:
-            ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
+            ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
-        ex = Extractor(manifests, ex_dir='./_images', stdout_log=True)
+        ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
