@@ -1,5 +1,6 @@
 import json
 import os
+from operator import itemgetter
 
 from loader.Database import DBViewIndex, DBView
 from loader.Actions import CommandType
@@ -146,7 +147,21 @@ class CharaData(DBView):
             res['_BurstAttack'] = ba
 
         if '_EditSkillRelationId' in res and res['_EditSkillRelationId']:
-            res['_EditSkillRelationId'] = self.index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')
+            edit_skill_rel = self.index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')
+            exclude = ('_Id', '_TargetWeaponType')
+            not_id = list(filter(lambda k: k not in exclude, edit_skill_rel[0].keys()))
+            reduced_edit_skill_rel = {}
+            for esr in edit_skill_rel:
+                vals = itemgetter(*not_id)(esr)
+                if vals in reduced_edit_skill_rel:
+                    for exc in exclude:
+                        reduced_edit_skill_rel[vals][exc]+= 1 << esr[exc]
+                else:
+                    for exc in exclude:
+                        esr[exc] = 1 << esr[exc]
+                    reduced_edit_skill_rel[vals] = esr
+            
+            res['_EditSkillRelationId'] = list(reduced_edit_skill_rel.values())
 
         return res
 
