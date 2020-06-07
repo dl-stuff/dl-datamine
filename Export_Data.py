@@ -1,5 +1,6 @@
 import argparse
 from time import monotonic
+from tqdm import tqdm
 
 from loader.Database import DBManager, DBViewIndex
 from exporter.Adventurers import CharaData
@@ -22,17 +23,12 @@ CLASSES = [
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Export data from database.')
     parser.add_argument('-o', type=str, help='output directory', default='out')
-    parser.add_argument('-mode', type=str, help='output mode', default='json')
     args = parser.parse_args()
 
     start = monotonic()
-    print('export: ', flush=True, end = '')
-
     index = DBViewIndex()
     views = {}
-    for view_class in CLASSES:
-        views[view_class.__name__] = view_class(index)
-    if args.mode == 'json':
-        for view in views.values():
-            view.export_all_to_folder(out_dir=args.o)
-    print(f'{monotonic()-start:.4f}s', flush=True)
+    for view_class in tqdm(CLASSES, desc='export'):
+        view = view_class(index)
+        view.export_all_to_folder(out_dir=args.o)
+    print(f'\ntotal: {monotonic()-start:.4f}s', flush=True)
