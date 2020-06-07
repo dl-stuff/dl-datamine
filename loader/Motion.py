@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata
 
 MOTION_FIELDS = {
@@ -75,7 +76,7 @@ def load_motion(db, path, meta, ref_pattern, state_ref):
     db.drop_table(meta.name)
     db.create_table(meta)
     for root, _, files in os.walk(path):
-        for file_name in files:
+        for file_name in tqdm(files, desc='motion'):
             file_path = os.path.join(root, file_name)
             try:
                 with open(file_path) as f:

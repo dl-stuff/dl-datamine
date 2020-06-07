@@ -1,6 +1,7 @@
 import os
 import argparse
 from time import monotonic
+from tqdm import tqdm
 
 from loader.AssetExtractor import Extractor
 from loader.Database import DBManager
@@ -36,9 +37,21 @@ LABEL_PATTERNS_JP = {
     r'^master$': 'master',
     r'^actions$': 'actions',
     r'^aiscript$': 'aiscript',
-    r'^characters/motion': 'characters_motion',
+    r'^characters/motion/axe': 'characters_motion',
+    r'^characters/motion/bow': 'characters_motion',
+    r'^characters/motion/can': 'characters_motion',
+    r'^characters/motion/dag': 'characters_motion',
+    r'^characters/motion/kat': 'characters_motion',
+    r'^characters/motion/lan': 'characters_motion',
+    r'^characters/motion/rod': 'characters_motion',
+    r'^characters/motion/swd': 'characters_motion',
     r'characters/motion/animationclips$': 'characters_motion',
     r'^dragon/motion': 'dragon_motion',
+}
+LABEL_PATTERNS = {
+    JP: LABEL_PATTERNS_JP,
+    EN: LABEL_PATTERNS_EN,
+    CN: LABEL_PATTERNS_CN,
 }
 IMAGE_PATTERNS = {
     r'^images/icon': 'icon',
@@ -54,17 +67,13 @@ if __name__ == '__main__':
     # if args.do_images:
     #     ex = Extractor(MANIFEST_JP, MANIFEST_EN, ex_dir='images', stdout_log=True)
     #     ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+    start = monotonic()
+    
     in_dir = '_extract'
     if args.do_prep:
-        print('prepare: ', flush=True, end = '')
-        start = monotonic()
         ex = Extractor(MANIFESTS, ex_dir=in_dir, stdout_log=False)
-        ex.download_and_extract_by_pattern(LABEL_PATTERNS_CN, region='cn')
-        ex.download_and_extract_by_pattern(LABEL_PATTERNS_EN, region='en')
-        ex.download_and_extract_by_pattern(LABEL_PATTERNS_JP, region='jp')
-        print(f'{monotonic()-start:.4f}s', flush=True)
-    start = monotonic()
-    print('load database: ', flush=True, end = '')
+        for region, labels in LABEL_PATTERNS.items():
+            ex.download_and_extract_by_pattern(labels, region=region)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')
@@ -72,4 +81,5 @@ if __name__ == '__main__':
     load_actions(db, os.path.join(in_dir, JP, ACTIONS))
     load_character_motion(db, os.path.join(in_dir, JP, CHARACTERS_MOTION))
     load_dragon_motion(db, os.path.join(in_dir, JP, DRAGON_MOTION))
-    print(f'{monotonic()-start:.4f}s', flush=True)
+    
+    print(f'\ntotal: {monotonic()-start:.4f}s')

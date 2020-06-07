@@ -1,5 +1,6 @@
 import json
 import os
+from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata
 from enum import Enum
 import re
@@ -186,7 +187,7 @@ def load_actions(db, path):
     db.create_table(ACTION_PART)
     sorted_data = []
     for root, _, files in os.walk(path):
-        for file_name in files:
+        for file_name in tqdm(files, desc='action'):
             if file_name == 'ActionPartsList.json':
                 table = 'ActionPartsList'
                 db.drop_table(table)

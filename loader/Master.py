@@ -1,5 +1,6 @@
 import json
 import os
+from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata
 
 EntryId = 'EntryId'
@@ -49,7 +50,7 @@ def load_json(db, path, table, stdout_log=False):
 
 def load_master(db, path, stdout_log=False):
     for root, _, files in os.walk(path):
-        for fn in files:
+        for fn in tqdm(files, desc='master'):
             path = os.path.join(root, fn)
             table = os.path.basename(os.path.splitext(path)[0])
             load_json(db, path, table, stdout_log)

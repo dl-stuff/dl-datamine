@@ -5,6 +5,7 @@ import aiohttp
 import asyncio
 import re
 import concurrent
+from tqdm import tqdm
 from queue import SimpleQueue
 from collections import defaultdict
 
@@ -482,18 +483,19 @@ class Extractor:
                 dl_target = base_dl_target + str(idx)
             else:
                 dl_target = base_dl_target
+            if os.path.exists(dl_target) and os.path.isdir(dl_target):
+                dl_target = os.path.join(dl_target, os.path.basename(dl_target))
             
-            async with session.get(source) as resp:
-                assert resp.status == 200
-                if self.stdout_log:
-                    print(f'Download {dl_target} from {source}')
-                
-                try:
+            if self.stdout_log:
+                print(f'Download {dl_target} from {source}', flush=True)
+            try:
+                async with session.get(source, timeout=10) as resp:
+                    assert resp.status == 200
                     with open(dl_target, 'wb') as f:
                         f.write(await resp.read())
-                except:
-                    with open(os.path.join(dl_target, os.path.basename(dl_target)), 'wb') as f:
-                        f.write(await resp.read())
+            except asyncio.TimeoutError:
+                print('Timeout', dl_target)
+                continue
 
             _, ext = os.path.splitext(dl_target)
             if len(ext) > 0:
@@ -512,13 +514,14 @@ class Extractor:
 
     async def download_and_extract(self, download_list, extract, region='jp'):
         async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
-            result = await asyncio.gather(*[
+            result = [await f for f in tqdm(asyncio.as_completed([
                 self.down_ex(session, source, region, target, extract)
                 for target, source in download_list
-            ])
+            ]), desc=region, total=len(download_list))]
             merge_images(result, self.stdout_log)
 
     def download_and_extract_by_pattern(self, label_patterns, region='jp'):
+        download_list = []
         for pat, extract in label_patterns.items():
             download_list = self.pm[region].get_by_pattern(pat, expand=self.expand)
             loop = asyncio.get_event_loop()
@@ -537,6 +540,8 @@ if __name__ == '__main__':
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
+        # r'characters/motion/animationclips$': 'characters_motion',
+        # r'^dragon/motion': 'dragon_motion',
     }
 
     MANIFESTS = {
@@ -551,6 +556,7 @@ if __name__ == '__main__':
             ex = Extractor(MANIFESTS, ex_dir=None, stdout_log=False)
             if len(sys.argv) > 2:
                 region = sys.argv[2]
+                print(f'{region}: ', flush=True, end='')
                 ex.download_and_extract_by_diff(f'{MANIFESTS[region]}.old', region=region)
             else:
                 for region, manifest in MANIFESTS.items():
@@ -559,5 +565,5 @@ if __name__ == '__main__':
             ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
-        ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+        ex = Extractor(MANIFESTS, stdout_log=False)
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, ex_dir='./_images', region='jp')
