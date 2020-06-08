@@ -16,8 +16,9 @@ CLASSES = [
     EnemyParam,
     WeaponData,
     AmuletData,
+    WeaponType,
+    PlayerActionHitAttribute,
     PlayerAction,
-    WeaponType
 ]
 
 if __name__ == '__main__':
@@ -28,7 +29,7 @@ if __name__ == '__main__':
     start = monotonic()
     index = DBViewIndex()
     views = {}
-    for view_class in tqdm(CLASSES, desc='export'):
+    for view_class in CLASSES:
         view = view_class(index)
         view.export_all_to_folder(out_dir=args.o)
     print(f'\ntotal: {monotonic()-start:.4f}s', flush=True)

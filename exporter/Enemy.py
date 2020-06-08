@@ -2,6 +2,7 @@ import os
 import json
 import re
 from collections import defaultdict
+from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from exporter.Shared import ActionCondition, get_valid_filename
@@ -189,7 +190,7 @@ class EnemyParam(DBView):
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         sorted_res = defaultdict(lambda: [])
-        for res in all_res:
+        for res in tqdm(all_res, desc='enemies'):
             if '_ParamGroupName' in res:
                 if (match := self.PARAM_GROUP.match(res['_ParamGroupName'])):
                     sorted_res[match.group(1)].append(self.process_result(res, exclude_falsy=exclude_falsy))

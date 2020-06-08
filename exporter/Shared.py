@@ -4,10 +4,11 @@ import re
 import os
 import errno
 from collections import defaultdict
+from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from loader.Actions import CommandType
-from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES, KILLER_STATE
+from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES, KILLER_STATE, TRIBE_TYPES, TARGET_ACTION_TYPES, ELEMENTS
 
 def get_valid_filename(s):
     return re.sub(r'(?u)[^-\w. ]', '', s)
@@ -36,6 +37,8 @@ class ActionCondition(DBView):
 
     def get(self, key, fields=None, exclude_falsy=True):
         res = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
+        if not res:
+            return None
         return self.process_result(res, exclude_falsy=exclude_falsy)
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
@@ -44,7 +47,7 @@ class ActionCondition(DBView):
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         sorted_res = defaultdict(lambda: [])
-        for res in all_res:
+        for res in tqdm(all_res, desc='_act_cond'):
             res = self.process_result(res, exclude_falsy=exclude_falsy)
             try:
                 sorted_res[int(res['_Id'] / 100000000)].append(res)
@@ -56,94 +59,249 @@ class ActionCondition(DBView):
             with open(output, 'w', newline='', encoding='utf-8') as fp:
                 json.dump(res_list, fp, indent=2, ensure_ascii=False)
 
+class ActionGrant(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'ActionGrant')
+
+    def process_result(self, res, exclude_falsy=True):
+        res['_TargetAction'] = TARGET_ACTION_TYPES.get(res['_TargetAction'], res['_TargetAction'])
+        grant_cond = self.index['ActionCondition'].get(res['_GrantCondition'], exclude_falsy=exclude_falsy)
+        if grant_cond:
+            res['_GrantCondition'] = grant_cond
+        return res
+
+    def get(self, pk, by=None, fields=None, order=None, exclude_falsy=False):
+        res = super().get(pk, by=by, fields=fields, order=order, exclude_falsy=exclude_falsy)
+        return self.process_result(res, exclude_falsy=exclude_falsy)
+
 class AbilityData(DBView):
     STAT_ABILITIES = {
         2: 'strength',
         3: 'defense',
-        4: 'skill_haste',
-        8: 'shapeshift_time',
-        10: 'attack_speed',
-        12: 'fs_charge_rate'
+        4: 'skill haste',
+        8: 'shapeshift time',
+        10: 'attack speed',
+        12: 'fs charge rate'
     }
 
-    ABILITY_TYPES: Dict[int, Callable[[List[int], str], str]] = {
-        1: lambda ids, _: AbilityData.STAT_ABILITIES.get(ids[0], f'stat {ids[0]}'),
-        2: lambda ids, _: f'affliction_res {AFFLICTION_TYPES.get(ids[0], ids[0])}',
-        3: lambda ids, _: f'affliction_proc_rate {AFFLICTION_TYPES.get(ids[0], ids[0])}',
-        4: lambda ids, _: f'tribe_res {ids}',
-        5: lambda ids, _: f'bane {ids}',
-        6: lambda ids, _: 'damage',
-        7: lambda ids, _: f'critical_rate',
-        8: lambda ids, _: f'recovery_potency',
-        9: lambda ids, _: f'gauge_accelerator',
-        11: lambda ids, _: f'striking_haste',
-        14: lambda ids, s: f'action_condition {ids, s}',
-        16: lambda ids, _: f'debuff_chance',
-        17: lambda ids, _: f'skill_prep',
-        18: lambda ids, _: f'buff_tim',
-        20: lambda ids, _: f'punisher {AFFLICTION_TYPES.get(ids[0], ids[0])}',
-        21: lambda ids, _: f'player_exp',
-        25: lambda ids, _: f'cond_action_grant {ids}',
-        26: lambda ids, _: f'critical_damage',
-        27: lambda ids, _: f'shapeshift_prep',
-        30: lambda ids, _: f'specific_bane {ids}',
-        35: lambda ids, _: f'gauge_inhibitor',
-        36: lambda ids, _: f'dragon_damage',
-        39: lambda ids, _: f'action_grant {ids}',
-        40: lambda _, s: f'gauge_def/skillboost {s}',
-        43: lambda ids, _: f'ability_ref {ids}',
-        44: lambda ids, _: f'action {ids}',
-        48: lambda ids, _: f'dragon_timer_decrease_rate',
-        49: lambda ids, _: f'shapeshift_fill',
-        51: lambda ids, _: f'random_buff {ids}',
-        52: lambda ids, _: f'critical_rate',
-        54: lambda _, s: f'combo_dmg_boost {s}',
-        55: lambda ids, _: f'combo_time',
-    }
-    ACT_COND_TYPE = 14
-    REF_TYPE = 43
-    SUB_ABILITY_FIELDS = [
-        '_AbilityType{i}', 
-        '_VariousId{i}a', '_VariousId{i}b', '_VariousId{i}c',
-        '_VariousId{i}str',
-        '_AbilityLimitedGroupId{i}',
-        '_TargetAction{i}',
-        '_AbilityType{i}UpValue'
-    ]
+    @staticmethod
+    def a_ids(res, i):
+        a_ids = [res[f'_VariousId{i}{a}'] for a in ('a', 'b', 'c', '') if f'_VariousId{i}{a}' in res and res[f'_VariousId{i}{a}']]
+        return a_ids
+
+    @staticmethod
+    def a_str(res, i):
+        return res.get(f'_VariousId{i}str', None)
+
+    @staticmethod
+    def generic_description(name):
+        def f(ad, res, i):
+            a_ids = AbilityData.a_ids(res, i)
+            a_str = AbilityData.a_str(res, i)
+            if a_ids or a_str:
+                res[f'_Description{i}'] = f'{name} {a_ids, a_str}'
+            else:
+                res[f'_Description{i}'] = name
+            return res
+        return f
+
+    @staticmethod
+    def link_various_ids(ad, res, i, view='ActionCondition'):
+        a_ids = []
+        for a in ('a', 'b', 'c', ''):
+            key = f'_VariousId{i}{a}'
+            if key in res and res[key]:
+                a_ids.append(res[key])
+                res[key] = ad.index[view].get(res[key], exclude_falsy=True)
+        return res, a_ids
+
+    @staticmethod
+    def link_various_str(ad, res, i, view='PlayerActionHitAttribute'):
+        a_str = None
+        key = f'_VariousId{i}str'
+        if key in res and res[key]:
+            a_str = res[key]
+            res[key] = ad.index[view].get(res[key], by='_Id', exclude_falsy=True)
+        return res, a_str
+
+    @staticmethod
+    def stat_ability(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'stat {AbilityData.STAT_ABILITIES.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def affliction_resist(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'affliction resist {AFFLICTION_TYPES.get(a_id, a_id)}'
+        return res
+        
+    @staticmethod
+    def affliction_proc_rate(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'affliction proc rate {AFFLICTION_TYPES.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def tribe_resist(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'tribe resist {TRIBE_TYPES.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def tribe_bane(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'tribe bane {TRIBE_TYPES.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def action_condition(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(ad, res, i)
+        res, a_str = AbilityData.link_various_str(ad, res, i)
+        res[f'_Description{i}'] = f'action condition {a_ids, a_str}'
+        return res
+
+    @staticmethod
+    def affliction_punisher(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'affliction punisher {AFFLICTION_TYPES.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def conditional_action_grant(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(ad, res, i, view='ActionGrant')
+        res[f'_Description{i}'] = f'conditional action grant {a_ids}'
+        return res
+
+    @staticmethod
+    def elemental_resist(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'elemental resist {ELEMENTS.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def action_grant(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(ad, res, i, view='ActionGrant')
+        res[f'_Description{i}'] = f'action grant {a_ids}'
+        return res
+
+    @staticmethod
+    def ability_reference(ad, res, i):
+        a_ids = []
+        for a in ('a', 'b', 'c', ''):
+            key = f'_VariousId{i}{a}'
+            if key in res and res[key]:
+                a_ids.append(res[key])
+                res[key] = ad.index['AbilityData'].get(res[key], exclude_falsy=True)
+        res[f'_Description{i}'] = f'ability reference {a_ids}'
+        return res
+
+    @staticmethod
+    def skill_reference(ad, res, i):
+        a_ids = []
+        for a in ('a', 'b', 'c', ''):
+            key = f'_VariousId{i}{a}'
+            if key in res and res[key]:
+                a_ids.append(res[key])
+                res[key] = ad.index['SkillData'].get(res[key], exclude_falsy=True)
+        res[f'_Description{i}'] = f'skill reference {a_ids}'
+        return res
+
+    @staticmethod
+    def random_action_condition(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(ad, res, i)
+        res, a_str = AbilityData.link_various_str(ad, res, i)
+        res[f'_Description{i}'] = f'random action condition {a_ids, a_str}'
+        return res
+
+    @staticmethod
+    def elemental_damage(ad, res, i):
+        a_id = AbilityData.a_ids(res, i)[0]
+        res[f'_Description{i}'] = f'elemental damage {ELEMENTS.get(a_id, a_id)}'
+        return res
 
     def __init__(self, index):
         super().__init__(index, 'AbilityData', labeled_fields=['_Name', '_Details', '_HeadText'])
     
-    def process_result(self, ability_data, fields=None, full_query=True, exclude_falsy=True):
+    def process_result(self, res, fields=None, full_query=True, exclude_falsy=True):
         try:
-            ability_data['_ConditionType'] = ABILITY_CONDITION_TYPES.get(ability_data['_ConditionType'], ability_data['_ConditionType'])
+            res['_ConditionType'] = ABILITY_CONDITION_TYPES.get(res['_ConditionType'], res['_ConditionType'])
         except:
             pass
         for i in (1, 2, 3):
-            if f'_AbilityType{i}' in ability_data and ability_data[f'_AbilityType{i}']:
-                a_type = ability_data[f'_AbilityType{i}']
-                a_ids = {f'_VariousId{i}{a}': ability_data[f'_VariousId{i}{a}'] for a in ('a', 'b', 'c') if f'_VariousId{i}{a}' in ability_data and ability_data[f'_VariousId{i}{a}']}
-                if f'_VariousId{i}' in ability_data and ability_data[f'_VariousId{i}']:
-                    a_ids[f'_VariousId{i}'] = ability_data[f'_VariousId{i}']
-                a_str = ability_data.get(f'_VariousId{i}str', None)
-                if a_type in self.ABILITY_TYPES:
-                    ability_data[f'_Description{i}'] = self.ABILITY_TYPES[a_type](list(a_ids.values()), a_str)
-                if full_query:
-                    for ak, value in a_ids.items():
-                        if a_type == self.REF_TYPE:
-                            ability_data[ak] = self.get(value, fields=fields, full_query=True, exclude_falsy=exclude_falsy)
-                        elif a_type == self.ACT_COND_TYPE:
-                            ability_data[ak] = self.index['ActionCondition'].get(value, exclude_falsy=exclude_falsy)
-                    if a_type == self.ACT_COND_TYPE and a_str:
-                        ak = f'_VariousId{i}str'
-                        ability_data[ak] = self.index['PlayerActionHitAttribute'].get(ability_data[ak], by='_Id', exclude_falsy=exclude_falsy)
-        return ability_data
+            try:
+                res[f'_TargetAction{i}'] = TARGET_ACTION_TYPES[res[f'_TargetAction{i}']]
+            except:
+                pass
+            try:
+                res = ABILITY_TYPES[res[f'_AbilityType{i}']](self, res, i)
+            except KeyError:
+                pass
+        return res
 
     def get(self, key, fields=None, full_query=True, exclude_falsy=True):
-        ability_data = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
+        res = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
-            return ability_data
-        return self.process_result(ability_data, fields, full_query, exclude_falsy)
+            return res
+        return self.process_result(res, fields, full_query, exclude_falsy)
+
+ABILITY_TYPES = {
+    1: AbilityData.stat_ability,
+    2: AbilityData.affliction_resist,
+    3: AbilityData.affliction_proc_rate,
+    4: AbilityData.tribe_resist,
+    5: AbilityData.tribe_bane,
+    6: AbilityData.generic_description('damage'),
+    7: AbilityData.generic_description('critical rate'),
+    8: AbilityData.generic_description('recovery potency'),
+    9: AbilityData.generic_description('gauge accelerator'),
+    # 10
+    11: AbilityData.generic_description('striking haste'),
+    # 12 13
+    14: AbilityData.action_condition,
+    # 15
+    16: AbilityData.generic_description('debuff chance'),
+    17: AbilityData.generic_description('skill prep'),
+    18: AbilityData.generic_description('buff time'),
+    # 19
+    20: AbilityData.affliction_punisher,
+    21: AbilityData.generic_description('player exp'),
+    22: AbilityData.generic_description('adv exp'),
+    23: AbilityData.generic_description('rupies'),
+    24: AbilityData.generic_description('mana'),
+    25: AbilityData.conditional_action_grant,
+    26: AbilityData.generic_description('critical damage'),
+    27: AbilityData.generic_description('shapeshift prep'),
+    28: AbilityData.elemental_resist,
+    29: AbilityData.generic_description('specific enemy resist'),
+    30: AbilityData.generic_description('specific enemy bane'),
+    # 31 32
+    33: AbilityData.generic_description('event points'),
+    34: AbilityData.generic_description('event drops'),
+    35: AbilityData.generic_description('gauge inhibitor'),
+    36: AbilityData.generic_description('dragon damage'),
+    37: AbilityData.generic_description('enemy ability resist'),
+    # 38
+    39: AbilityData.action_grant,
+    40: AbilityData.generic_description('gauge defense & skill damage'),
+    41: AbilityData.generic_description('event point feh'),
+    # 42: something dragonform related
+    43: AbilityData.ability_reference,
+    44: AbilityData.skill_reference,
+    46: AbilityData.generic_description('dragon gauge flat increaase'),
+    # 47
+    48: AbilityData.generic_description('dragon gauge decrease rate'),
+    49: AbilityData.generic_description('conditional shapeshift fill'),
+    51: AbilityData.random_action_condition,
+    52: AbilityData.generic_description('buff icon critical rate'),
+    # 53
+    54: AbilityData.generic_description('combo damage boost'),
+    55: AbilityData.generic_description('combo time'),
+    56: AbilityData.generic_description('dragondrive'),
+    57: AbilityData.elemental_damage,
+    58: AbilityData.generic_description('dragondrive defense'),
+    59: AbilityData.generic_description('debuff time'),
+}
 
 class PlayerActionHitAttribute(DBView):
     def __init__(self, index):
@@ -165,17 +323,21 @@ class PlayerActionHitAttribute(DBView):
         res = super().get(pk, by, fields, order, mode, exclude_falsy)
         return self.process_result(res, exclude_falsy=exclude_falsy)
         
+    S_PATTERN = re.compile(r'S\d+')
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
         out_dir = os.path.join(out_dir, '_hit_attr')
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         sorted_res = defaultdict(lambda: [])
-        for res in all_res:
+        for res in tqdm(all_res, desc='_hit_attr'):
             res = self.process_result(res, exclude_falsy=exclude_falsy)
             try:
                 k1, _ = res['_Id'].split('_', 1)
-                sorted_res[k1].append(res)
+                if PlayerActionHitAttribute.S_PATTERN.match(k1):
+                    sorted_res['S'].append(res)
+                else:
+                    sorted_res[k1].append(res)
             except:
                 sorted_res[res['_Id']].append(res)
         for group_name, res_list in sorted_res.items():
@@ -236,8 +398,8 @@ class ActionParts(DBView):
                     if hit_attr:
                         r[label] = hit_attr
 
-            if '_actionConditionId' in r and r['_actionConditionId']:
-                r['_actionConditionId'] = self.index['ActionCondition'].get(r['_actionConditionId'], exclude_falsy=exclude_falsy)
+            if '_actionConditionId' in r and r['_actionConditionId'] and (act_cond := self.index['ActionCondition'].get(r['_actionConditionId'], exclude_falsy=exclude_falsy)):
+                r['_actionConditionId'] = act_cond
 
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']
@@ -261,6 +423,7 @@ class ActionParts(DBView):
 
 class PlayerAction(DBView):
     BURST_MARKER_DISPLACEMENT = 4
+    # REF = set()
     def __init__(self, index):
         super().__init__(index, 'PlayerAction')
 
@@ -285,6 +448,7 @@ class PlayerAction(DBView):
         player_action = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query or not player_action:
             return player_action
+        # PlayerAction.REF.add(pk)
         return self.process_result(player_action, exclude_falsy=exclude_falsy, full_query=full_query)
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
@@ -293,7 +457,7 @@ class PlayerAction(DBView):
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         sorted_res = defaultdict(lambda: [])
-        for res in all_res:
+        for res in tqdm(all_res, desc='_actions'):
             res = self.process_result(res, exclude_falsy=exclude_falsy)
             try:
                 k1, _ = res['_ActionName'].split('_', 1)
@@ -302,6 +466,8 @@ class PlayerAction(DBView):
                 sorted_res[k1].append(res)
             except:
                 sorted_res[res['_ActionName']].append(res)
+            # if res['_Id'] not in PlayerAction.REF:
+            #     sorted_res['UNUSED'].append(res)
         for group_name, res_list in sorted_res.items():
             out_name = get_valid_filename(f'{group_name}{ext}')
             output = os.path.join(out_dir, out_name)
@@ -369,6 +535,10 @@ class SkillData(DBView):
                 next_trans_skill = self.get(next_trans_skill['_TransSkill'], exclude_falsy=exclude_falsy, full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
                 trans_skill_group[next_trans_skill['_Id']] = next_trans_skill
             skill_data['_TransSkill'] = trans_skill_group
+        
+        if '_TransBuff' in skill_data and skill_data['_TransBuff'] and (tb := self.index['PlayerAction'].get(skill_data['_TransBuff'], exclude_falsy=exclude_falsy)):
+            skill_data['_TransBuff'] = tb
+
         # ChainGroupId
         if full_chainSkill and '_ChainGroupId' in skill_data and skill_data['_ChainGroupId']:
             skill_data['_ChainGroupId'] = self.index['SkillChainData'].get(skill_data['_ChainGroupId'], by='_GroupId', exclude_falsy=exclude_falsy)

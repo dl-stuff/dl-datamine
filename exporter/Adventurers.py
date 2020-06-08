@@ -146,6 +146,9 @@ class CharaData(DBView):
         if '_BurstAttack' in res and res['_BurstAttack'] and (ba := self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)):
             res['_BurstAttack'] = ba
 
+        if '_DashAttack' in res and res['_DashAttack'] and (da := self.index['PlayerAction'].get(res['_DashAttack'], exclude_falsy=exclude_falsy)):
+            res['_DashAttack'] = da
+
         if '_EditSkillRelationId' in res and res['_EditSkillRelationId']:
             edit_skill_rel = self.index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')
             exclude = ('_Id', '_TargetWeaponType')

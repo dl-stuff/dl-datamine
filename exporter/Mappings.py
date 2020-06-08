@@ -49,39 +49,39 @@ KILLER_STATE = {
 }
 
 ABILITY_CONDITION_TYPES = {
-    1: 'hp_geq',
-    2: 'hp_leq',
-    4: 'buff_effect',
+    1: 'hp geq',
+    2: 'hp leq',
+    4: 'buff effect',
     5: 'transformed',
     6: 'break',
     8: 'doublebuff',
     9: 'combo',
     11: 'slayer/striker',
     12: 'claws',
-    14: 'hp_drop_under',
+    14: 'hp drop under',
     15: 'prep',
     16: 'overdrive',
-    18: 'yaten_s1',
+    18: 'energized skill shift',
     19: 'energized',
     20: 'bleed',
-    21: 'every_combo',
-    25: 's1_charge_under',
-    28: 's2_charge_under',
-    29: 'affliction_proc',
-    30: 'affliction_resisted',
+    21: 'every combo',
+    25: 's1 charge under',
+    28: 's2 charge under',
+    29: 'affliction proc',
+    30: 'affliction resisted',
     31: 'transform',
     32: 'teammates alive',
     34: 'energy level',
     36: 'energy buffed',
-    37: 'hp_lt',
+    37: 'hp lt',
     39: 'primed',
-    43: 'def_down_proc',
-    44: 'buff_icons',
-    45: 'on_crit',
-    46: 'knocked_back',
-    47: 'not_knocked_back',
+    43: 'def down proc',
+    44: 'buff icons',
+    45: 'on crit',
+    46: 'knocked back',
+    47: 'not knocked back',
     48: 'buffed',
-    50: 'enemy_has_def_down'
+    50: 'enemy has def down'
 }
 
 TRIBE_TYPES = {
@@ -93,4 +93,13 @@ TRIBE_TYPES = {
     6: 'Demon',
     7: 'Human',
     8: 'Dragon'
+}
+
+TARGET_ACTION_TYPES = {
+    1: 'auto',
+    2: 'force strike',
+    3: 'skill 1',
+    4: 'skill 2',
+    5: 'skill 3',
+    6: 'skill',
 }

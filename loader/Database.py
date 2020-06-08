@@ -2,6 +2,7 @@ import sqlite3
 import json
 import os
 import errno
+from tqdm import tqdm
 from collections import defaultdict
 
 DB_FILE = 'dl.sqlite'
@@ -293,7 +294,7 @@ class DBView:
     def export_all_to_folder(self, out_dir, ext='.json', exclude_falsy=True, **kargs):
         all_res = self.get_all(exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
-        for res in all_res:
+        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             res = self.process_result(res, exclude_falsy=exclude_falsy, **kargs)
             out_name = self.outfile_name(res, ext)
             output = os.path.join(out_dir, out_name)
