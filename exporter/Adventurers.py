@@ -194,7 +194,7 @@ def same(lst):
     else:
         return lst[-1]
 
-if __name__ == '__main__':
+def export_skill_share_json():
     index = DBViewIndex()
     view = CharaData(index)
     all_res = view.get_all(exclude_falsy=False)
@@ -251,3 +251,7 @@ if __name__ == '__main__':
     #             f.write(',')
     #             f.write(str(v))
     #         f.write('\n')
+
+
+if __name__ == '__main__':
+    export_skill_share_json()

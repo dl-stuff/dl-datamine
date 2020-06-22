@@ -33,7 +33,7 @@ class CommandType(Enum):
     FIRE_STOCK_BULLET = 59
     CONDITION_TEXT = 63 # unsure where text is sourced, not in TextLabel
     SETTING_HIT = 66
-    EFFECT_MM1 = 100 # megaman stuff
+    FORMATION_BULLET = 100 # megaman stuff
     EFFECT_MM2 = 101 # megaman stuff
     CHANGE_MODE = 108 # megaman stuff
     SHADER = 101
@@ -68,12 +68,34 @@ def build_bullet(meta, ref, seq, data):
         db_data['_abHitAttrLabel'] = ab_label
     return db_data
 
+def build_formation_bullet(meta, ref, seq, data):
+    bullet_num = 0
+    bullet_data = None
+    for c in data['_child']:
+        try:
+            if c['bulletData']['_hitAttrLabel']:
+                bullet_num += 1
+                bullet_data = c['bulletData']
+        except:
+            pass
+    if bullet_data:
+        db_data = build_db_data(meta, ref, seq, bullet_data)
+        db_data['commandType'] = 100
+        db_data['_bulletNum'] = bullet_num
+        return db_data
+    else:
+        return None
 
 def build_marker(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
     charge_lvl_sec = db_data['_chargeLvSec']
+    if '_nextLevelMarkerCount' in data and data['_nextLevelMarkerCount']:
+        for lvl in data['_nextLevelMarkerData']:
+            charge_lvl_sec.extend(lvl['_chargeLvSec'])
     if not any(charge_lvl_sec):
         db_data['_chargeLvSec'] = None
+    else:
+        db_data['_chargeLvSec'] = charge_lvl_sec
     return db_data
 
 def build_animation(meta, ref, seq, data):
@@ -177,6 +199,7 @@ PROCESSORS[CommandType.ANIMATION] = build_animation
 PROCESSORS[CommandType.PARABOLA_BULLET] = build_bullet
 PROCESSORS[CommandType.PIVOT_BULLET] = build_bullet
 PROCESSORS[CommandType.FIRE_STOCK_BULLET] = build_bullet
+PROCESSORS[CommandType.FORMATION_BULLET] = build_formation_bullet
 PROCESSORS[CommandType.SETTING_HIT] = build_db_data
 PROCESSORS[CommandType.ADD_HIT] = build_db_data
 PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
@@ -218,7 +241,8 @@ def load_actions(db, path):
                             if command_type in PROCESSORS.keys():
                                 builder = PROCESSORS[command_type]
                                 db_data = builder(ACTION_PART, ref, seq, data)
-                                sorted_data.append(db_data)
+                                if db_data is not None:
+                                    sorted_data.append(db_data)
     db.insert_many(ACTION_PART.name, sorted_data)
 
 if __name__ == '__main__':

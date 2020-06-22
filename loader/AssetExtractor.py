@@ -249,6 +249,14 @@ def unpack_MonoBehaviour(data, dest, stdout_log=False):
     with open(dest, 'w', encoding='utf8', newline='') as f:
         write_json(f, data)
 
+def unpack_TextAsset(data, dest, stdout_log=False):
+    if stdout_log:
+        print('TextAsset', dest, flush=True)
+    check_target_path(dest)
+
+    with open(dest, 'w', encoding='utf8', newline='') as f:
+        f.write(data.text)
+
 def unpack_GameObject(data, destination_folder, stdout_log):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
     if stdout_log:
@@ -302,6 +310,7 @@ UNPACK = {
     'Texture2D': unpack_Texture2D,
     'Sprite': unpack_Sprite,
     'MonoBehaviour': unpack_MonoBehaviour,
+    'TextAsset': unpack_TextAsset,
     'GameObject': unpack_GameObject,
     'AnimationClip': unpack_MonoBehaviour,
     'AnimatorOverrideController': unpack_MonoBehaviour
@@ -323,12 +332,16 @@ def merge_categorized(all_categorized_images, stdout_log=False):
             image = None
             if 'color' in sorted_images:
                 image = sorted_images['color']
-                if 'alphaA8' in sorted_images:
-                    _, _, _, a = sorted_images['alphaA8'].split()
-                elif (alpha := 'alpha') in sorted_images or (alpha := 'A') in sorted_images:
-                    a = sorted_images[alpha].convert('L')
-                else:
-                    a = None
+                a = None
+                for alpha in ('alpha', 'A', 'alphaA8'):
+                    try:
+                        alpha_img = sorted_images[alpha]
+                        if alpha_img.mode == 'RGB':
+                            a = alpha_img.convert('L')
+                        else:
+                            _, _, _, a = alpha_img.split()
+                    except KeyError:
+                        continue
                 if a:
                     image.putalpha(a)
                 dest = os.path.splitext(dest)[0] + '.png'
@@ -460,7 +473,6 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
     if do_indexed:
         merge_indexed(all_indexed_images, stdout_log=stdout_log)
 
-
 class Extractor:
     def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', expand=False, stdout_log=True):
         self.pm = {}
@@ -488,14 +500,16 @@ class Extractor:
             
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}', flush=True)
-            try:
-                async with session.get(source, timeout=10) as resp:
-                    assert resp.status == 200
-                    with open(dl_target, 'wb') as f:
-                        f.write(await resp.read())
-            except asyncio.TimeoutError:
-                print('Timeout', dl_target)
-                continue
+
+            async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
+                try:
+                    async with session.get(source, timeout=60) as resp:
+                        assert resp.status == 200
+                        with open(dl_target, 'wb') as f:
+                            f.write(await resp.read())
+                except asyncio.TimeoutError:
+                    print('Timeout', dl_target)
+                    continue
 
             _, ext = os.path.splitext(dl_target)
             if len(ext) > 0:
@@ -505,20 +519,23 @@ class Extractor:
             if extract is None:
                 extract = os.path.dirname(target).replace('/', '_')
             ex_target = os.path.join(region, extract)
-            am = AssetsManager(dl_target)
-            for asset in am.assets.values():
-                for obj in asset.objects.values():
-                    unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, texture_2d, stdout_log=self.stdout_log)
+            self.extract_target(dl_target, ex_target, texture_2d)
         if len(texture_2d) > 0:
             return texture_2d
 
+    def extract_target(self, dl_target, ex_target, texture_2d):
+        am = AssetsManager(dl_target)
+        for asset in am.assets.values():
+            for obj in asset.objects.values():
+                unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, texture_2d, stdout_log=self.stdout_log)
+
     async def download_and_extract(self, download_list, extract, region='jp'):
-        async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
-            result = [await f for f in tqdm(asyncio.as_completed([
-                self.down_ex(session, source, region, target, extract)
-                for target, source in download_list
-            ]), desc=region, total=len(download_list))]
-            merge_images(result, self.stdout_log)
+        # async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
+        result = [await f for f in tqdm(asyncio.as_completed([
+            self.down_ex(None, source, region, target, extract)
+            for target, source in download_list
+        ]), desc=region, total=len(download_list))]
+        merge_images(result, self.stdout_log)
 
     def download_and_extract_by_pattern(self, label_patterns, region='jp'):
         download_list = []
@@ -533,6 +550,21 @@ class Extractor:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.download_and_extract(download_list, None, region))
 
+    def local_extract(self, input_dir):
+        result = []
+        for root, _, files in os.walk(input_dir):
+            for file_name in tqdm(files, desc='local'):
+                _, ext = os.path.splitext(file_name)
+                if len(ext) > 0:
+                    if self.stdout_log:
+                        print('Skipped', file_name)
+                    continue
+                texture_2d = {}
+                self.extract_target(os.path.join(root, file_name), 'local', texture_2d)
+                if texture_2d:
+                    result.append(texture_2d)
+        merge_images(result, self.stdout_log)
+
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
@@ -540,8 +572,18 @@ if __name__ == '__main__':
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
+
+        # r'^characters/motion/axe': 'characters_motion',
+        # r'^characters/motion/bow': 'characters_motion',
+        # r'^characters/motion/can': 'characters_motion',
+        # r'^characters/motion/dag': 'characters_motion',
+        # r'^characters/motion/kat': 'characters_motion',
+        # r'^characters/motion/lan': 'characters_motion',
+        # r'^characters/motion/rod': 'characters_motion',
+        # r'^characters/motion/swd': 'characters_motion',
         # r'characters/motion/animationclips$': 'characters_motion',
-        # r'^dragon/motion': 'dragon_motion',
+
+        r'^dragon/motion': 'dragon_motion',
     }
 
     MANIFESTS = {
@@ -566,4 +608,5 @@ if __name__ == '__main__':
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
         ex = Extractor(MANIFESTS, stdout_log=False)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, ex_dir='./_images', region='jp')
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+        # ex.local_extract('_apk')
