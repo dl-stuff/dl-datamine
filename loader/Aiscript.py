@@ -342,7 +342,7 @@ _event = {}
 
     def py_str(self, comment=False):
         children = '\n'.join(map(lambda c: c.py_str(), self.children))
-        global_str = ' = None\n'.join(Root.GLOBAL_VAR)
+        global_str = ' = None\n'.join(sorted(list(Root.GLOBAL_VAR)))
         # return f'{Root.HEADER}\nclass {self.NAME}:\n{children}\n{Root.FOOTER}{global_str} = None\n'
         return f'{Root.HEADER}{global_str} = None\n\nclass {self.NAME}:\n{children}'
 

@@ -120,22 +120,30 @@ class ParsedManifest(dict):
             if not found:
                 results[v.name] = [v.url]
         return list(results.items())
+    
+    @staticmethod
+    def flatten(targets):
+        return [(k, [v.url]) for k, v in targets]
 
-    def get_by_pattern(self, pattern, expand=False):
+    def get_by_pattern(self, pattern, mode=0):
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(lambda x: pattern.search(x[0]), self.items())
-        if expand:
+        if mode == 2:
             return ParsedManifest.expand_dependencies(targets)
-        else:
+        elif mode == 1:
             return ParsedManifest.link_dependencies(targets)
+        else:
+            return ParsedManifest.flatten(targets)
 
-    def get_by_diff(self, other, expand=False):
+    def get_by_diff(self, other, mode=0):
         targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
-        if expand:
+        if mode == 2:
             return ParsedManifest.expand_dependencies(targets)
-        else:
+        elif mode == 1:
             return ParsedManifest.link_dependencies(targets)
+        else:
+            return ParsedManifest.flatten(targets)
 
 
 def check_target_path(target):
@@ -474,7 +482,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
         merge_indexed(all_indexed_images, stdout_log=stdout_log)
 
 class Extractor:
-    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', expand=False, stdout_log=True):
+    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, stdout_log=True):
         self.pm = {}
         for region, manifest in manifests.items():
             self.pm[region] = ParsedManifest(manifest)
@@ -483,7 +491,7 @@ class Extractor:
         self.ex_img_dir = ex_img_dir
         self.extract_list = []
         self.stdout_log = stdout_log
-        self.expand = expand
+        self.mf_mode = mf_mode
 
     async def down_ex(self, session, source_list, region, target, extract):
         base_dl_target = os.path.join(self.dl_dir, region, target)
@@ -494,10 +502,7 @@ class Extractor:
             if len(source_list) > 1:
                 dl_target = base_dl_target + str(idx)
             else:
-                dl_target = base_dl_target
-            if os.path.exists(dl_target) and os.path.isdir(dl_target):
-                dl_target = os.path.join(dl_target, os.path.basename(dl_target))
-            
+                dl_target = base_dl_target            
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}', flush=True)
 
@@ -505,10 +510,15 @@ class Extractor:
                 try:
                     async with session.get(source, timeout=60) as resp:
                         assert resp.status == 200
+                        if os.path.exists(dl_target) and os.path.isdir(dl_target):
+                            dl_target = os.path.join(dl_target, os.path.basename(dl_target))
                         with open(dl_target, 'wb') as f:
                             f.write(await resp.read())
                 except asyncio.TimeoutError:
                     print('Timeout', dl_target)
+                    continue
+                except Exception as e:
+                    print(str(e))
                     continue
 
             _, ext = os.path.splitext(dl_target)
@@ -540,13 +550,13 @@ class Extractor:
     def download_and_extract_by_pattern(self, label_patterns, region='jp'):
         download_list = []
         for pat, extract in label_patterns.items():
-            download_list = self.pm[region].get_by_pattern(pat, expand=self.expand)
+            download_list = self.pm[region].get_by_pattern(pat, mode=self.mf_mode)
             loop = asyncio.get_event_loop()
             loop.run_until_complete(self.download_and_extract(download_list, extract, region))
 
     def download_and_extract_by_diff(self, old_manifest, region='jp'):
         old_manifest = ParsedManifest(old_manifest)
-        download_list = self.pm[region].get_by_diff(old_manifest, expand=self.expand)
+        download_list = self.pm[region].get_by_diff(old_manifest, mode=self.mf_mode)
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.download_and_extract(download_list, None, region))
 
@@ -583,7 +593,10 @@ if __name__ == '__main__':
         # r'^characters/motion/swd': 'characters_motion',
         # r'characters/motion/animationclips$': 'characters_motion',
 
-        r'^dragon/motion': 'dragon_motion',
+        # r'^dragon/motion': 'dragon_motion',
+        
+        r'110363': None,
+        r'110364': None,
     }
 
     MANIFESTS = {
@@ -607,6 +620,6 @@ if __name__ == '__main__':
             ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
-        ex = Extractor(MANIFESTS, stdout_log=False)
+        ex = Extractor(MANIFESTS, stdout_log=False, mf_mode=1)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
         # ex.local_extract('_apk')
