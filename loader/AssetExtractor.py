@@ -506,20 +506,19 @@ class Extractor:
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}', flush=True)
 
-            async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
-                try:
-                    async with session.get(source, timeout=60) as resp:
-                        assert resp.status == 200
-                        if os.path.exists(dl_target) and os.path.isdir(dl_target):
-                            dl_target = os.path.join(dl_target, os.path.basename(dl_target))
-                        with open(dl_target, 'wb') as f:
-                            f.write(await resp.read())
-                except asyncio.TimeoutError:
-                    print('Timeout', dl_target)
-                    continue
-                except Exception as e:
-                    print(str(e))
-                    continue
+            try:
+                async with session.get(source, timeout=60) as resp:
+                    assert resp.status == 200
+                    if os.path.exists(dl_target) and os.path.isdir(dl_target):
+                        dl_target = os.path.join(dl_target, os.path.basename(dl_target))
+                    with open(dl_target, 'wb') as f:
+                        f.write(await resp.read())
+            except asyncio.TimeoutError:
+                print('Timeout', dl_target)
+                continue
+            except Exception as e:
+                print(str(e))
+                continue
 
             _, ext = os.path.splitext(dl_target)
             if len(ext) > 0:
@@ -540,12 +539,12 @@ class Extractor:
                 unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, texture_2d, stdout_log=self.stdout_log)
 
     async def download_and_extract(self, download_list, extract, region='jp'):
-        # async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
-        result = [await f for f in tqdm(asyncio.as_completed([
-            self.down_ex(None, source, region, target, extract)
-            for target, source in download_list
-        ]), desc=region, total=len(download_list))]
-        merge_images(result, self.stdout_log)
+        async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
+            result = [await f for f in tqdm(asyncio.as_completed([
+                self.down_ex(session, source, region, target, extract)
+                for target, source in download_list
+            ]), desc=region, total=len(download_list))]
+            merge_images(result, self.stdout_log)
 
     def download_and_extract_by_pattern(self, label_patterns, region='jp'):
         download_list = []
