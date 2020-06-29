@@ -262,8 +262,12 @@ def unpack_TextAsset(data, dest, stdout_log=False):
         print('TextAsset', dest, flush=True)
     check_target_path(dest)
 
-    with open(dest, 'w', encoding='utf8', newline='') as f:
-        f.write(data.text)
+    try:
+        with open(dest, 'w', encoding='utf8', newline='') as f:
+            f.write(data.text)
+    except UnicodeDecodeError:
+        with open(dest, 'wb') as f:
+            f.write(data.script)
 
 def unpack_GameObject(data, destination_folder, stdout_log):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
@@ -577,7 +581,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        # r'^images/icon/': None,
+        r'^images/icon/others': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
@@ -593,9 +597,6 @@ if __name__ == '__main__':
         # r'characters/motion/animationclips$': 'characters_motion',
 
         # r'^dragon/motion': 'dragon_motion',
-        
-        r'110363': None,
-        r'110364': None,
     }
 
     MANIFESTS = {

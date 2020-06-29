@@ -66,6 +66,10 @@ def build_bullet(meta, ref, seq, data):
     ab_label = data['_arrangeBullet']['_abHitAttrLabel']
     if ab_label:
         db_data['_abHitAttrLabel'] = ab_label
+    cond_data = data['_conditionData']
+    if cond_data['_conditionType']:
+        db_data['_conditionType'] = cond_data['_conditionType']
+        db_data['_conditionValue'] = cond_data['_conditionValue']
     return db_data
 
 def build_formation_bullet(meta, ref, seq, data):
@@ -151,7 +155,6 @@ ACTION_PART = DBTableMetadata(
         # HIT/BULLET
         '_bulletSpeed': DBTableMetadata.REAL,
         '_delayTime': DBTableMetadata.REAL,
-        '_collisionHitInterval': DBTableMetadata.REAL,
         '_isHitDelete': DBTableMetadata.INT,
         '_hitLabel': DBTableMetadata.TEXT,
         '_hitAttrLabel': DBTableMetadata.TEXT,
@@ -160,6 +163,18 @@ ACTION_PART = DBTableMetadata(
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
         '_lifetime': DBTableMetadata.REAL,
+        '_conditionType': DBTableMetadata.INT,
+        '_conditionValue': DBTableMetadata.BLOB,
+
+        # COLLISION
+        '_collision': DBTableMetadata.INT,
+        '_collisionPosId': DBTableMetadata.INT,
+        '_collisionParams_01': DBTableMetadata.REAL, # Length
+        '_collisionParams_02': DBTableMetadata.REAL, # Width
+        '_collisionParams_03': DBTableMetadata.REAL, # Height
+        '_collisionParams_05': DBTableMetadata.REAL, # Angle
+        '_collisionParams_06': DBTableMetadata.REAL,
+        '_collisionHitInterval': DBTableMetadata.REAL,
 
         # SEND_SIGNAL
         '_signalType': DBTableMetadata.INT,

@@ -10,7 +10,8 @@ from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
 MODE_CHANGE_TYPES = {
     1: 'Skill',
     2: 'Hud',
-    3: 'Dragon'
+    3: 'Dragon',
+    4: 'Buff'
 }
 
 class EditSkillCharaOffset(DBView):
@@ -130,7 +131,7 @@ class CharaData(DBView):
         
         if '_ModeChangeType' in res and res['_ModeChangeType']:
             res['_ModeChangeType'] = MODE_CHANGE_TYPES.get(res['_ModeChangeType'], res['_ModeChangeType'])
-        for m in ('_ModeId1', '_ModeId2', '_ModeId3'):
+        for m in ('_ModeId1', '_ModeId2', '_ModeId3', '_ModeId4'):
             if m in res:
                 res[m] = self.index['CharaModeData'].get(res[m], exclude_falsy=exclude_falsy, full_query=True)
 

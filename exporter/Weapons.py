@@ -76,7 +76,38 @@ class WeaponType(DBView):
         out_dir = os.path.join(out_dir, '_weapon_types')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
-if __name__ == '__main__':
+
+# class Agito2_Mjolnir(WeaponBase):
+#     ele = ['flame']
+#     wt = 'axe'
+#     att = 1781
+#     s3 = agito_buffs['flame'][1]
+
+from unidecode import unidecode
+def export_py_def():
     index = DBViewIndex()
     view = WeaponData(index)
-    view.export_all_to_folder()
+    all_res = view.get_all(exclude_falsy=False)
+    with open('weapons.py', 'w') as f:
+        for r in filter(lambda r: r['_FormId'] >= 60000, all_res):
+            r = view.process_result(r)
+            f.write('class Agito')
+            f.write(str(r['_GradeId']))
+            f.write('_')
+            f.write(re.sub(r'[^0-9a-zA-Z ]', '', unidecode(r['_Name'].strip())).replace(' ', '_'))
+            f.write('(WeaponBase):\n    ele = [\'')
+            f.write(r['_ElementalType'].lower())
+            f.write('\']\n    wt = \'')
+            f.write(r['_Type'].lower())
+            f.write('\'\n    att = ')
+            f.write(str(r['_MaxAtk']))
+            f.write('\n    s3 = agito_buffs[\'')
+            f.write(r['_ElementalType'].lower())
+            f.write('\'][1]\n\n')
+
+
+if __name__ == '__main__':
+    export_py_def()
+    # index = DBViewIndex()
+    # view = WeaponData(index)
+    # view.export_all_to_folder()
