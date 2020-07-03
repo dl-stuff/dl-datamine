@@ -135,9 +135,14 @@ class CharaData(DBView):
             if m in res:
                 res[m] = self.index['CharaModeData'].get(res[m], exclude_falsy=exclude_falsy, full_query=True)
 
+        skill_ids = {0}
         for s in ('_Skill1', '_Skill2'):
             if s in res and res[s]:
+                skill_ids.add(res[s])
                 res[s] = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy, full_query=True)
+
+        if '_EditSkillId' in res and res['_EditSkillId'] not in skill_ids:
+            res['_EditSkillId'] = self.index['SkillData'].get(res['_EditSkillId'], exclude_falsy=exclude_falsy, full_query=True)
 
         if condense:
             res = self.last_abilities(res)
@@ -195,6 +200,10 @@ def same(lst):
     else:
         return lst[-1]
 
+SPECIAL_EDIT_SKILL = {
+    101502035: 2,
+    101502011: 1
+}
 def export_skill_share_json():
     index = DBViewIndex()
     view = CharaData(index)
@@ -220,9 +229,17 @@ def export_skill_share_json():
             name = 'Euden'
         if name == 'Gala_Prince':
             name = 'Gala_Euden'
-        if res['_EditSkillLevelNum'] > 0:
-            skill = index['SkillData'].get(res['_Skill'+str(res['_EditSkillLevelNum'])], exclude_falsy=False)
-            res_data['s'] = res['_EditSkillLevelNum']
+        if res['_EditSkillId'] > 0:
+            skill = index['SkillData'].get(res['_EditSkillId'], exclude_falsy=False)
+            if res['_EditSkillId'] == res['_Skill1']:
+                res_data['s'] = 1
+            elif res['_EditSkillId'] == res['_Skill2']:
+                res_data['s'] = 2
+            else:
+                try:
+                    res_data['s'] = SPECIAL_EDIT_SKILL[res['_EditSkillId']]
+                except:
+                    res_data['s'] = -1
             # res_data['name'] = snakey(skill['_Name'])
             res_data['cost'] = res['_EditSkillCost']
             res_data['type'] = skill['_SkillType']

@@ -58,6 +58,7 @@ ABILITY_CONDITION_TYPES = {
     9: 'combo',
     11: 'slayer/striker',
     12: 'claws',
+    13: 'chain hp geq',
     14: 'hp drop under',
     15: 'prep',
     16: 'overdrive',

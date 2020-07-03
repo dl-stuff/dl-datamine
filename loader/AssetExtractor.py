@@ -581,7 +581,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^images/icon/others': None,
+        # r'^images/icon/others': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
@@ -597,6 +597,7 @@ if __name__ == '__main__':
         # r'characters/motion/animationclips$': 'characters_motion',
 
         # r'^dragon/motion': 'dragon_motion',
+        r'^images/uilocalized2/atlascompress/uilocalized2': None,
     }
 
     MANIFESTS = {

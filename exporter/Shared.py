@@ -393,6 +393,11 @@ class ActionParts(DBView):
                     hit_attrs = self.index['PlayerActionHitAttribute'].get(base_label, by='_Id', order='_Id ASC', mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
                     if hit_attrs:
                         r[label] = hit_attrs
+                elif 'CMB' in r[label]:
+                    base_label = r[label]
+                    hit_attrs = self.index['PlayerActionHitAttribute'].get(base_label, by='_Id', order='_Id ASC', mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+                    if hit_attrs:
+                        r[label] = hit_attrs
                 else:
                     hit_attr = self.index['PlayerActionHitAttribute'].get(r[label], by='_Id', exclude_falsy=exclude_falsy)
                     if hit_attr:
