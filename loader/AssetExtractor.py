@@ -511,7 +511,7 @@ class Extractor:
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}', flush=True)
 
-            if self.overwrite or os.path.exists(dl_target):
+            if self.overwrite or not os.path.exists(dl_target):
                 try:
                     async with session.get(source, timeout=60) as resp:
                         assert resp.status == 200
@@ -583,7 +583,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^images/icon/others': None,
+        r'^fonts': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
