@@ -171,9 +171,11 @@ class DBManager:
         self.conn.executemany(query, self.list_dict_values(data, tbl))
         self.conn.commit()
 
-    def select_all(self, table, d_type=DBDict):
+    def select_all(self, table, where=None, d_type=DBDict):
         tbl = self.check_table(table)
         query = f'SELECT {tbl.named_fields} FROM {table}'
+        if where:
+            query += ' WHERE {}'
         return self.query_many(
             query=query,
             param=(),
@@ -273,8 +275,8 @@ class DBView:
             res = res[0]
         return res
 
-    def get_all(self, exclude_falsy=False):
-        res = self.database.select_all(self.name)
+    def get_all(self, exclude_falsy=False, where=None):
+        res = self.database.select_all(self.name, where)
         if exclude_falsy:
             res = [self.remove_falsy_fields(r) for r in res]
         return res

@@ -486,7 +486,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
         merge_indexed(all_indexed_images, stdout_log=stdout_log)
 
 class Extractor:
-    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, stdout_log=True):
+    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, overwrite=False, stdout_log=True):
         self.pm = {}
         for region, manifest in manifests.items():
             self.pm[region] = ParsedManifest(manifest)
@@ -496,6 +496,7 @@ class Extractor:
         self.extract_list = []
         self.stdout_log = stdout_log
         self.mf_mode = mf_mode
+        self.overwrite = overwrite
 
     async def down_ex(self, session, source_list, region, target, extract):
         base_dl_target = os.path.join(self.dl_dir, region, target)
@@ -510,19 +511,20 @@ class Extractor:
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}', flush=True)
 
-            try:
-                async with session.get(source, timeout=60) as resp:
-                    assert resp.status == 200
-                    if os.path.exists(dl_target) and os.path.isdir(dl_target):
-                        dl_target = os.path.join(dl_target, os.path.basename(dl_target))
-                    with open(dl_target, 'wb') as f:
-                        f.write(await resp.read())
-            except asyncio.TimeoutError:
-                print('Timeout', dl_target)
-                continue
-            except Exception as e:
-                print(str(e))
-                continue
+            if self.overwrite or os.path.exists(dl_target):
+                try:
+                    async with session.get(source, timeout=60) as resp:
+                        assert resp.status == 200
+                        if os.path.exists(dl_target) and os.path.isdir(dl_target):
+                            dl_target = os.path.join(dl_target, os.path.basename(dl_target))
+                        with open(dl_target, 'wb') as f:
+                            f.write(await resp.read())
+                except asyncio.TimeoutError:
+                    print('Timeout', dl_target)
+                    continue
+                except Exception as e:
+                    print(str(e))
+                    continue
 
             _, ext = os.path.splitext(dl_target)
             if len(ext) > 0:
@@ -581,7 +583,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        # r'^images/icon/others': None,
+        r'^images/icon/others': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
@@ -597,7 +599,7 @@ if __name__ == '__main__':
         # r'characters/motion/animationclips$': 'characters_motion',
 
         # r'^dragon/motion': 'dragon_motion',
-        r'^images/uilocalized2/atlascompress/uilocalized2': None,
+        # r'^images/uilocalized2/atlascompress/uilocalized2': None,
     }
 
     MANIFESTS = {
