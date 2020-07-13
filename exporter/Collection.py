@@ -41,7 +41,7 @@ def make_chara_json(res):
         'Weapon': res['_WeaponType'],
         'Rarity': res['_Rarity'],
         'Spiral': bool(res['_MaxLimitBreakCount'] == 5),
-        'SkillShare': res['_EditSkillLevelNum'] * (-1 if res['_DefaultIsUnlockEditSkill'] else 1)
+        'SkillShare': -1 if res['_DefaultIsUnlockEditSkill'] else 1 if res['_EditSkillLevelNum'] else 0
     }
 
 def make_dragon_json(res):
@@ -81,8 +81,8 @@ def make_weapon_json(res):
     }
 
 
-def make_json(out, outfile, view, id_fn, data_fn, where=None):
-    all_res = view.get_all(exclude_falsy=False, where=where)
+def make_json(out, outfile, view, id_fn, data_fn, where=None, order='_BaseId ASC, _VariationId ASC'):
+    all_res = view.get_all(exclude_falsy=False, where=where, order=order)
     data = {}
     for res in all_res:
         if not res['_IsPlayable']:
