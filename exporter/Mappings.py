@@ -62,6 +62,7 @@ ABILITY_CONDITION_TYPES = {
     14: 'hp drop under',
     15: 'prep',
     16: 'overdrive',
+    17: 'affliction',
     18: 'energized skill shift',
     19: 'energized',
     20: 'bleed',
