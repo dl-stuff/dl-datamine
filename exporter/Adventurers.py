@@ -14,16 +14,21 @@ MODE_CHANGE_TYPES = {
     4: 'Buff'
 }
 
+
 class EditSkillCharaOffset(DBView):
     def __init__(self, index):
         super().__init__(index, 'EditSkillCharaOffset')
 
+
 class ExAbilityData(AbilityData):
     def __init__(self, index):
-        DBView.__init__(self, index, 'ExAbilityData', labeled_fields=['_Name', '_Details'])
+        DBView.__init__(self, index, 'ExAbilityData',
+                        labeled_fields=['_Name', '_Details'])
+
 
 class CharaUniqueCombo(DBView):
     AVOID = {6}
+
     def __init__(self, index):
         super().__init__(index, 'CharaUniqueCombo')
 
@@ -31,12 +36,15 @@ class CharaUniqueCombo(DBView):
         res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
-        if '_ActionId' in res and res['_ActionId']:            
+        if '_ActionId' in res and res['_ActionId']:
             base_action_id = res['_ActionId']
-            res['_ActionId'] = [self.index['PlayerAction'].get(base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
+            res['_ActionId'] = [self.index['PlayerAction'].get(
+                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
         if '_BuffHitAttribute' in res and res['_BuffHitAttribute']:
-            res['_BuffHitAttribute'] = self.index['PlayerActionHitAttribute'].get(res['_BuffHitAttribute'], exclude_falsy=exclude_falsy)
+            res['_BuffHitAttribute'] = self.index['PlayerActionHitAttribute'].get(
+                res['_BuffHitAttribute'], exclude_falsy=exclude_falsy)
         return res
+
 
 class CharaModeData(DBView):
     def __init__(self, index):
@@ -49,19 +57,25 @@ class CharaModeData(DBView):
         if not full_query:
             return res
         if '_ActionId' in res and res['_ActionId']:
-            res['_ActionId'] = self.index['PlayerAction'].get(res['_ActionId'], exclude_falsy=exclude_falsy)
+            res['_ActionId'] = self.index['PlayerAction'].get(
+                res['_ActionId'], exclude_falsy=exclude_falsy)
         for s in ('_Skill1Id', '_Skill2Id'):
             if s in res and res[s]:
-                res[s] = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy)
+                res[s] = self.index['SkillData'].get(
+                    res[s], exclude_falsy=exclude_falsy)
         if '_UniqueComboId' in res and res['_UniqueComboId']:
-            res['_UniqueComboId'] = self.index['CharaUniqueCombo'].get(res['_UniqueComboId'], exclude_falsy=exclude_falsy)
+            res['_UniqueComboId'] = self.index['CharaUniqueCombo'].get(
+                res['_UniqueComboId'], exclude_falsy=exclude_falsy)
         if '_BurstAttackId' in res and res['_BurstAttackId']:
-            res['_BurstAttackId'] = self.index['PlayerAction'].get(res['_BurstAttackId'], exclude_falsy=exclude_falsy)
+            res['_BurstAttackId'] = self.index['PlayerAction'].get(
+                res['_BurstAttackId'], exclude_falsy=exclude_falsy)
         return res
+
 
 class CharaData(DBView):
     def __init__(self, index):
-        super().__init__(index, 'CharaData', labeled_fields=['_Name', '_SecondName', '_CvInfo', '_CvInfoEn', '_ProfileText'])
+        super().__init__(index, 'CharaData', labeled_fields=[
+            '_Name', '_SecondName', '_CvInfo', '_CvInfoEn', '_ProfileText'])
 
     @staticmethod
     def condense_stats(res):
@@ -71,7 +85,8 @@ class CharaData(DBView):
             else:
                 MAX = f'_Max{s}'
                 del res[f'_AddMax{s}1']
-            PLUS = [f'_Plus{s}{i}' for i in range(res['_MaxLimitBreakCount']+1)]
+            PLUS = [f'_Plus{s}{i}' for i in range(
+                res['_MaxLimitBreakCount']+1)]
             FULL = f'_McFullBonus{s}5'
             stat = 0
             OUT = f'_Max{s}'
@@ -91,14 +106,17 @@ class CharaData(DBView):
             for j in (1, 2, 3, 4):
                 ab = f'_Abilities{i}{j}'
                 if ab in res and (abd := self.index['AbilityData'].get(res[ab], full_query=True, exclude_falsy=exclude_falsy)):
-                    res[ab] = self.index['AbilityData'].get(res[ab], full_query=True, exclude_falsy=exclude_falsy)
+                    res[ab] = self.index['AbilityData'].get(
+                        res[ab], full_query=True, exclude_falsy=exclude_falsy)
         for i in (1, 2, 3, 4, 5):
             ex = f'_ExAbilityData{i}'
             if ex in res and res[ex]:
-                res[ex] = self.index['ExAbilityData'].get(res[ex], exclude_falsy=exclude_falsy)
+                res[ex] = self.index['ExAbilityData'].get(
+                    res[ex], exclude_falsy=exclude_falsy)
             ex2 = f'_ExAbility2Data{i}'
             if ex2 in res and res[ex2]:
-                res[ex2] = self.index['AbilityData'].get(res[ex2], exclude_falsy=exclude_falsy)
+                res[ex2] = self.index['AbilityData'].get(
+                    res[ex2], exclude_falsy=exclude_falsy)
         return res
 
     def last_abilities(self, res, exclude_falsy=True):
@@ -109,46 +127,57 @@ class CharaData(DBView):
                 j -= 1
                 ab = f'_Abilities{i}{j}'
             if j > 0:
-                res[ab] = self.index['AbilityData'].get(res[ab], full_query=True, exclude_falsy=exclude_falsy)
+                res[ab] = self.index['AbilityData'].get(
+                    res[ab], full_query=True, exclude_falsy=exclude_falsy)
         ex = f'_ExAbilityData5'
         if ex in res and res[ex]:
-            res[ex] = self.index['ExAbilityData'].get(res[ex], exclude_falsy=exclude_falsy)
+            res[ex] = self.index['ExAbilityData'].get(
+                res[ex], exclude_falsy=exclude_falsy)
         ex2 = f'_ExAbility2Data5'
         if ex2 in res and res[ex2]:
-            res[ex2] = self.index['AbilityData'].get(res[ex2], exclude_falsy=exclude_falsy)
+            res[ex2] = self.index['AbilityData'].get(
+                res[ex2], exclude_falsy=exclude_falsy)
         return res
 
     def process_result(self, res, exclude_falsy=True, condense=True):
-        self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
+        self.index['ActionParts'].animation_reference = (
+            'CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
         if '_WeaponType' in res:
-            res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
+            res['_WeaponType'] = WEAPON_TYPES.get(
+                res['_WeaponType'], res['_WeaponType'])
         if '_ElementalType' in res:
-            res['_ElementalType'] = ELEMENTS.get(res['_ElementalType'], res['_ElementalType'])
+            res['_ElementalType'] = ELEMENTS.get(
+                res['_ElementalType'], res['_ElementalType'])
         if '_CharaType' in res:
-            res['_CharaType'] = CLASS_TYPES.get(res['_CharaType'], res['_CharaType'])
+            res['_CharaType'] = CLASS_TYPES.get(
+                res['_CharaType'], res['_CharaType'])
         if condense:
             res = self.condense_stats(res)
-        
+
         if '_ModeChangeType' in res and res['_ModeChangeType']:
-            res['_ModeChangeType'] = MODE_CHANGE_TYPES.get(res['_ModeChangeType'], res['_ModeChangeType'])
+            res['_ModeChangeType'] = MODE_CHANGE_TYPES.get(
+                res['_ModeChangeType'], res['_ModeChangeType'])
         for m in ('_ModeId1', '_ModeId2', '_ModeId3', '_ModeId4'):
             if m in res:
-                res[m] = self.index['CharaModeData'].get(res[m], exclude_falsy=exclude_falsy, full_query=True)
+                res[m] = self.index['CharaModeData'].get(
+                    res[m], exclude_falsy=exclude_falsy, full_query=True)
 
         skill_ids = {0}
         for s in ('_Skill1', '_Skill2'):
             if s in res and res[s]:
                 skill_ids.add(res[s])
-                res[s] = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy, full_query=True)
+                res[s] = self.index['SkillData'].get(
+                    res[s], exclude_falsy=exclude_falsy, full_query=True)
 
         if '_EditSkillId' in res and res['_EditSkillId'] not in skill_ids:
-            res['_EditSkillId'] = self.index['SkillData'].get(res['_EditSkillId'], exclude_falsy=exclude_falsy, full_query=True)
+            res['_EditSkillId'] = self.index['SkillData'].get(
+                res['_EditSkillId'], exclude_falsy=exclude_falsy, full_query=True)
 
         if condense:
             res = self.last_abilities(res)
-        else:        
+        else:
             res = self.all_abilities(res)
-        
+
         if '_BurstAttack' in res and res['_BurstAttack'] and (ba := self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)):
             res['_BurstAttack'] = ba
 
@@ -156,22 +185,24 @@ class CharaData(DBView):
             res['_DashAttack'] = da
 
         if '_EditSkillRelationId' in res and res['_EditSkillRelationId']:
-            edit_skill_rel = self.index['EditSkillCharaOffset'].get(res['_EditSkillRelationId'], by='_EditSkillRelationId')
+            edit_skill_rel = self.index['EditSkillCharaOffset'].get(
+                res['_EditSkillRelationId'], by='_EditSkillRelationId')
             exclude = ('_Id', '_TargetWeaponType')
-            not_id = list(filter(lambda k: k not in exclude, edit_skill_rel[0].keys()))
+            not_id = list(filter(lambda k: k not in exclude,
+                                 edit_skill_rel[0].keys()))
             reduced_edit_skill_rel = {}
             for esr in edit_skill_rel:
                 vals = itemgetter(*not_id)(esr)
                 if vals in reduced_edit_skill_rel:
                     for exc in exclude:
-                        reduced_edit_skill_rel[vals][exc]+= 1 << esr[exc]
+                        reduced_edit_skill_rel[vals][exc] += 1 << esr[exc]
                 else:
                     for exc in exclude:
                         esr[exc] = 1 << esr[exc]
                     reduced_edit_skill_rel[vals] = esr
-            
-            res['_EditSkillRelationId'] = list(reduced_edit_skill_rel.values())
 
+            res['_EditSkillRelationId'] = list(reduced_edit_skill_rel.values())
+        self.index['ActionParts'].animation_reference = None
         return res
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condense=True):
@@ -182,12 +213,15 @@ class CharaData(DBView):
 
     @staticmethod
     def outfile_name(res, ext='.json'):
-        name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
+        name = 'UNKNOWN' if '_Name' not in res else res[
+            '_Name'] if '_SecondName' not in res else res['_SecondName']
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         out_dir = os.path.join(out_dir, 'adventurers')
-        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
+        super().export_all_to_folder(out_dir, ext,
+                                     exclude_falsy=exclude_falsy, condense=True)
+
 
 if __name__ == '__main__':
     index = DBViewIndex()

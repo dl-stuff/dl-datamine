@@ -5,6 +5,7 @@ from tabulate import tabulate
 from loader.Database import DBViewIndex, DBView, DBDict
 from exporter.Shared import AbilityData, SkillData, PlayerAction
 
+
 class DragonMotion(DBView):
     def __init__(self, index):
         super().__init__(index, 'DragonMotion')
@@ -14,14 +15,17 @@ class DragonMotion(DBView):
         query = f'SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref=?;'
         return self.database.query_many(
             query=query,
-            param=(state,ref),
+            param=(state, ref),
             d_type=DBDict
         )
 
+
 class DragonData(DBView):
     ACTIONS = ['_AvoidActionFront', '_AvoidActionBack', '_Transform']
+
     def __init__(self, index):
-        super().__init__(index, 'DragonData', labeled_fields=['_Name', '_SecondName', '_Profile', '_CvInfo', '_CvInfoEn'])
+        super().__init__(index, 'DragonData', labeled_fields=[
+            '_Name', '_SecondName', '_Profile', '_CvInfo', '_CvInfoEn'])
 
     def process_result(self, res, exclude_falsy, full_query=True, full_abilities=False):
         if not full_query:
@@ -30,10 +34,12 @@ class DragonData(DBView):
             anim_key = int(res['_AnimFileName'][1:].replace('_', ''))
         else:
             anim_key = int(f'{res["_BaseId"]}{res["_VariationId"]:02}')
-        self.index['ActionParts'].animation_reference = ('DragonMotion', anim_key)
+        self.index['ActionParts'].animation_reference = (
+            'DragonMotion', anim_key)
         for s in ('_Skill1', '_Skill2'):
             try:
-                res[s] = self.index['SkillData'].get(res[s], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
+                res[s] = self.index['SkillData'].get(
+                    res[s], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
             except:
                 pass
         inner = (1, 2) if full_abilities else (2,)
@@ -42,13 +48,17 @@ class DragonData(DBView):
             for j in inner:
                 k = f'_Abilities{i}{j}'
                 if k in res and res[k]:
-                    res[k] = self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy)
+                    res[k] = self.index['AbilityData'].get(
+                        res[k], full_query=True, exclude_falsy=exclude_falsy)
         for act in self.ACTIONS:
             if act in res:
-                res[act] = self.index['PlayerAction'].get(res[act], exclude_falsy=exclude_falsy)
+                res[act] = self.index['PlayerAction'].get(
+                    res[act], exclude_falsy=exclude_falsy)
         if '_DefaultSkill' in res and res['_DefaultSkill']:
             base_action_id = res['_DefaultSkill']
-            res['_DefaultSkill'] = [self.index['PlayerAction'].get(base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_ComboMax'])]
+            res['_DefaultSkill'] = [self.index['PlayerAction'].get(
+                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_ComboMax'])]
+        self.index['ActionParts'].animation_reference = None
         return res
 
     def get(self, pk, fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
@@ -57,12 +67,14 @@ class DragonData(DBView):
 
     @staticmethod
     def outfile_name(res, ext='.json'):
-        name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
+        name = 'UNKNOWN' if '_Name' not in res else res[
+            '_Name'] if '_SecondName' not in res else res['_SecondName']
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         out_dir = os.path.join(out_dir, 'dragons')
-        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True, full_abilities=False)
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy,
+                                     full_query=True, full_abilities=False)
 
     def simplified_combos(self):
         all_data = self.get_all(exclude_falsy=False)
@@ -71,10 +83,12 @@ class DragonData(DBView):
                 anim_key = int(res['_AnimFileName'][1:].replace('_', ''))
             else:
                 anim_key = int(f'{res["_BaseId"]}{res["_VariationId"]:02}')
-            self.index['ActionParts'].animation_reference = ('DragonMotion', anim_key)
+            self.index['ActionParts'].animation_reference = (
+                'DragonMotion', anim_key)
             print('\n'+res['_Name'], '-', res['_SecondName'] or '')
             base_action_id = res['_DefaultSkill']
-            default_skill = [self.index['PlayerAction'].get(base_action_id+i, exclude_falsy=False) for i in range(0, res['_ComboMax'])]
+            default_skill = [self.index['PlayerAction'].get(
+                base_action_id+i, exclude_falsy=False) for i in range(0, res['_ComboMax'])]
             for combo in default_skill:
                 if not combo:
                     continue
@@ -96,18 +110,20 @@ class DragonData(DBView):
                         duration = part['_delayTime']
 
                     combo_data = [
-                        command_type, 
-                        seconds, 
-                        round(seconds*60), 
-                        duration, 
-                        round(duration*60), 
+                        command_type,
+                        seconds,
+                        round(seconds*60),
+                        duration,
+                        round(duration*60),
                         speed
                     ]
                     combo_parts.append(combo_data)
 
                 print(combo['_Id'] % 100)
-                print(tabulate(combo_parts, headers=['Type', 'seconds', '(f)', 'duration', '(f)', 'speed'], floatfmt=".4f"))
-            
+                print(tabulate(combo_parts, headers=[
+                      'Type', 'seconds', '(f)', 'duration', '(f)', 'speed'], floatfmt=".4f"))
+            self.index['ActionParts'].animation_reference = None
+
 
 if __name__ == '__main__':
     index = DBViewIndex()
