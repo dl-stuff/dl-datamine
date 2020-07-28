@@ -7,9 +7,14 @@ from unidecode import unidecode
 def snakey(name):
     return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name)).replace(' ', '_').replace('_amp', '_and')
 
-def same(lst):
+KEEP_LOWER_SP = {
+    101502021
+}
+def same(lst, idx):
     if lst[1:] == lst[:-1]:
         return lst[0]
+    elif idx in KEEP_LOWER_SP:
+        return min(lst)
     else:
         return lst[-1]
 
@@ -62,7 +67,7 @@ def export_skill_share_json():
                 skill['_SpLv3Edit'],
                 skill['_SpLv4Edit'],
             ]
-            res_data['sp'] = same(sp_s_list)
+            res_data['sp'] = same(sp_s_list, res['_EditSkillId'])
         else:
             continue
 
