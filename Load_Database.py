@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     in_dir = '_extract'
     if args.do_prep:
-        ex = Extractor(MANIFESTS, ex_dir=in_dir, stdout_log=False)
+        ex = Extractor(MANIFESTS, ex_dir=in_dir, stdout_log=False, overwrite=True)
         for region, labels in LABEL_PATTERNS.items():
             ex.download_and_extract_by_pattern(labels, region=region)
     db = DBManager(args.o)

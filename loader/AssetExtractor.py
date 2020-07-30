@@ -624,7 +624,26 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^assets/_gluonresources/meshes/dragon': 'dragon_motion',
+        r'^dragon/motion/d210050_01': 'dragon/motion',
+        r'^dragon/motion/d210106_01': 'dragon/motion',
+        r'^dragon/motion/d210024_01': 'dragon/motion',
+        r'^dragon/motion/d210004_01': 'dragon/motion',
+        r'^dragon/motion/d210015_01': 'dragon/motion',
+        r'^dragon/motion/d210076_01': 'dragon/motion',
+        r'^dragon/motion/d210008_01': 'dragon/motion',
+        r'^dragon/motion/d210080_01': 'dragon/motion',
+        r'^dragon/motion/d210055_01': 'dragon/motion',
+        r'^dragon/motion/d210084_01': 'dragon/motion',
+        r'^dragon/motion/d210014_01': 'dragon/motion',
+        r'^dragon/motion/d210023_01': 'dragon/motion',
+        r'^dragon/motion/d210079_01': 'dragon/motion',
+        r'^dragon/motion/d210093_01': 'dragon/motion',
+        r'^dragon/motion/d210096_01': 'dragon/motion',
+        r'^dragon/motion/d210006_01': 'dragon/motion',
+        r'^dragon/motion/d200011_01': 'dragon/motion',
+        r'^dragon/motion/d210101_01': 'dragon/motion',
+        r'^dragon/motion/d210102_01': 'dragon/motion',
+        r'^dragon/motion/d210078_01': 'dragon/motion',
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
