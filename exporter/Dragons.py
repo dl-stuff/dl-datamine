@@ -42,7 +42,7 @@ class DragonData(DBView):
                     res[s], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
             except:
                 pass
-        inner = (1, 2) if full_abilities else (2,)
+        inner = (1, 2, 3, 4, 5) if full_abilities else (5,)
         outer = (1, 2)
         for i in outer:
             for j in inner:

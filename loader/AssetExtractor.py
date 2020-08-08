@@ -450,7 +450,7 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 mask = a_dict['alpha'].convert('L')
             else:
                 mask = None
-            if a_idx == 0:
+            if a_idx <= 0:
                 layer1[f'{c_idx:03}{a_idx:03}'] = merged, mask
             else:
                 layer2[f'{c_idx:03}{a_idx:03}'] = merged, mask
@@ -682,9 +682,8 @@ if __name__ == '__main__':
                     ex.download_and_extract_by_diff(
                         f'{manifest}.old', region=region)
         else:
-            ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
-            ex.download_and_extract_by_pattern(
-                {sys.argv[1]: None}, region='jp')
+            ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False, mf_mode=1)
+            ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
         ex = Extractor(MANIFESTS, stdout_log=False, mf_mode=1)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')

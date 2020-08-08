@@ -40,6 +40,10 @@ class CharaUniqueCombo(DBView):
             base_action_id = res['_ActionId']
             res['_ActionId'] = [self.index['PlayerAction'].get(
                 base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
+        if '_ExActionId' in res and res['_ExActionId']:
+            base_action_id = res['_ExActionId']
+            res['_ExActionId'] = [self.index['PlayerAction'].get(
+                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
         if '_BuffHitAttribute' in res and res['_BuffHitAttribute']:
             res['_BuffHitAttribute'] = self.index['PlayerActionHitAttribute'].get(
                 res['_BuffHitAttribute'], exclude_falsy=exclude_falsy)
