@@ -27,6 +27,9 @@ class ActionCondition(DBView):
         if '_EnhancedBurstAttack' in res and res['_EnhancedBurstAttack']:
             res['_EnhancedBurstAttack'] = self.index['PlayerAction'].get(
                 res['_EnhancedBurstAttack'], exclude_falsy=exclude_falsy)
+        if '_AdditionAttack' in res and res['_AdditionAttack']:
+            res['_AdditionAttack'] = self.index['PlayerActionHitAttribute'].get(
+                res['_AdditionAttack'], exclude_falsy=exclude_falsy)
         reset_seen_skills = len(self.seen_skills) == 0
         if res['_Id'] not in self.seen_skills:
             self.seen_skills.add(res['_Id'])
