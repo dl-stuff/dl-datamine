@@ -8,7 +8,7 @@ from exporter.Dragons import DragonData
 from exporter.Enemy import EnemyParam
 from exporter.Weapons import WeaponData, WeaponType
 from exporter.Wyrmprints import AmuletData
-from exporter.Shared import ActionCondition, PlayerActionHitAttribute, PlayerAction
+from exporter.Shared import ActionCondition, PlayerActionHitAttribute, PlayerAction, AbilityData
 
 CLASSES = [
     CharaData,
@@ -19,6 +19,7 @@ CLASSES = [
     WeaponType,
     PlayerActionHitAttribute,
     PlayerAction,
+    AbilityData,
 ]
 
 if __name__ == '__main__':

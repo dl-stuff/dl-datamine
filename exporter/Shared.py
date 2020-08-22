@@ -265,6 +265,11 @@ class AbilityData(DBView):
             return res
         return self.process_result(res, fields, full_query, exclude_falsy)
 
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        processed_res = [self.process_result(res, exclude_falsy=exclude_falsy) for res in self.get_all(exclude_falsy=exclude_falsy)]
+        with open(os.path.join(out_dir, f'_abilities{ext}'), 'w', newline='', encoding='utf-8') as fp:
+            json.dump(processed_res, fp, indent=2, ensure_ascii=False)
+
 
 ABILITY_TYPES = {
     1: AbilityData.stat_ability,
