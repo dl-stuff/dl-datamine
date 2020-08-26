@@ -181,7 +181,8 @@ def process_json(tree):
 
 
 def write_json(f, data):
-    tree = data.read_type_tree()
+    data.read_type_tree()
+    tree = data.type_tree
     json.dump(process_json(tree), f, indent=2)
 
 
@@ -290,12 +291,14 @@ def unpack_GameObject(data, destination_folder, stdout_log):
     mono_list = []
     for idx, obj in enumerate(data.components):
         obj_type_str = str(obj.type)
-        subdata = obj.read()
         if obj_type_str == 'MonoBehaviour':
-            json_data = subdata.read_type_tree()
+            subdata = obj.read()
+            subdata.read_type_tree()
+            json_data = subdata.type_tree
             if json_data:
                 mono_list.append(json_data)
         elif obj_type_str == 'GameObject':
+            subdata = obj.read()
             UNPACK[obj_type_str](
                 subdata, os.path.join(dest, '{:02}'.format(idx)))
         # elif stdout_log:
@@ -624,26 +627,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^dragon/motion/d210050_01': 'dragon/motion',
-        r'^dragon/motion/d210106_01': 'dragon/motion',
-        r'^dragon/motion/d210024_01': 'dragon/motion',
-        r'^dragon/motion/d210004_01': 'dragon/motion',
-        r'^dragon/motion/d210015_01': 'dragon/motion',
-        r'^dragon/motion/d210076_01': 'dragon/motion',
-        r'^dragon/motion/d210008_01': 'dragon/motion',
-        r'^dragon/motion/d210080_01': 'dragon/motion',
-        r'^dragon/motion/d210055_01': 'dragon/motion',
-        r'^dragon/motion/d210084_01': 'dragon/motion',
-        r'^dragon/motion/d210014_01': 'dragon/motion',
-        r'^dragon/motion/d210023_01': 'dragon/motion',
-        r'^dragon/motion/d210079_01': 'dragon/motion',
-        r'^dragon/motion/d210093_01': 'dragon/motion',
-        r'^dragon/motion/d210096_01': 'dragon/motion',
-        r'^dragon/motion/d210006_01': 'dragon/motion',
-        r'^dragon/motion/d200011_01': 'dragon/motion',
-        r'^dragon/motion/d210101_01': 'dragon/motion',
-        r'^dragon/motion/d210102_01': 'dragon/motion',
-        r'^dragon/motion/d210078_01': 'dragon/motion',
+        r'^dragon/model': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
