@@ -1,3 +1,5 @@
+from UnityPy.export.SpriteHelper import get_triangles
+from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
 import json
 import os
 import errno
@@ -11,6 +13,7 @@ from collections import defaultdict
 
 from PIL import Image, ImageDraw
 from UnityPy import AssetsManager
+
 
 class ParsedManifestFlat(dict):
     def __init__(self, manifest):
@@ -31,10 +34,12 @@ class ParsedManifestFlat(dict):
 
 class AssetEntry:
     URL_FORMAT = 'http://dragalialost.akamaized.net/dl/assetbundles/Android/{h}/{hash}'
+
     def __init__(self, asset):
         self.name = asset['name']
         self.hash = asset['hash']
-        self.url = AssetEntry.URL_FORMAT.format(h=self.hash[0:2], hash=self.hash)
+        self.url = AssetEntry.URL_FORMAT.format(
+            h=self.hash[0:2], hash=self.hash)
         if 'dependencies' in asset and asset['dependencies']:
             self.dependencies = asset['dependencies']
         else:
@@ -82,6 +87,7 @@ class ParsedManifest(dict):
             asset.map_dependencies(self)
 
     DO_NOT_EXPAND = {'shader'}
+
     @staticmethod
     def expand_dependencies(targets):
         q = SimpleQueue()
@@ -120,7 +126,7 @@ class ParsedManifest(dict):
             if not found:
                 results[v.name] = [v.url]
         return list(results.items())
-    
+
     @staticmethod
     def flatten(targets):
         return [(k, [v.url]) for k, v in targets]
@@ -137,7 +143,8 @@ class ParsedManifest(dict):
             return ParsedManifest.flatten(targets)
 
     def get_by_diff(self, other, mode=0):
-        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
+        targets = filter(lambda x: x[0] not in other.keys(
+        ) or x[1] != other[x[0]], self.items())
         if mode == 2:
             return ParsedManifest.expand_dependencies(targets)
         elif mode == 1:
@@ -150,13 +157,15 @@ def check_target_path(target):
     if not os.path.exists(os.path.dirname(target)):
         try:
             os.makedirs(os.path.dirname(target))
-        except OSError as exc: # Guard against race condition
+        except OSError as exc:  # Guard against race condition
             if exc.errno != errno.EEXIST:
                 raise
+
 
 def merge_path_dir(path):
     new_dir = os.path.dirname(path).replace('/', '_')
     return os.path.join(new_dir, os.path.basename(path))
+
 
 def process_json(tree):
     while isinstance(tree, dict):
@@ -170,9 +179,12 @@ def process_json(tree):
             return tree
     return tree
 
+
 def write_json(f, data):
-    tree = data.read_type_tree()
+    data.read_type_tree()
+    tree = data.type_tree
     json.dump(process_json(tree), f, indent=2)
+
 
 def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
     if stdout_log:
@@ -188,8 +200,6 @@ def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
         pass
 
 
-from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
-from UnityPy.export.SpriteHelper import get_triangles
 SPRITE_ROTATION = {
     SpritePackingRotation.kSPRFlipHorizontal: Image.FLIP_TOP_BOTTOM,
     SpritePackingRotation.kSPRFlipVertical: Image.FLIP_LEFT_RIGHT,
@@ -229,7 +239,7 @@ def unpack_Sprite(data, dest, texture_2d, stdout_log=False):
             rotation = SPRITE_ROTATION[settings_raw.packingRotation]
         except:
             pass
-        
+
     mask = None
     if settings_raw.packingMode == SpritePackingMode.kSPMTight:
         mask = Image.new('1', rect_size, color=0)
@@ -239,13 +249,15 @@ def unpack_Sprite(data, dest, texture_2d, stdout_log=False):
 
     s_tuple = (dest, rect, rotation, mask)
     try:
-        texture_2d[sprite_atlas_data.texture.path_id]['sprites'].append(s_tuple)
+        texture_2d[sprite_atlas_data.texture.path_id]['sprites'].append(
+            s_tuple)
     except KeyError:
         try:
             texture_2d[sprite_atlas_data.texture.path_id]['sprites'] = [s_tuple]
         except KeyError:
             texture_2d[sprite_atlas_data.texture.path_id] = {}
             texture_2d[sprite_atlas_data.texture.path_id]['sprites'] = [s_tuple]
+
 
 def unpack_MonoBehaviour(data, dest, stdout_log=False):
     if stdout_log:
@@ -256,6 +268,7 @@ def unpack_MonoBehaviour(data, dest, stdout_log=False):
 
     with open(dest, 'w', encoding='utf8', newline='') as f:
         write_json(f, data)
+
 
 def unpack_TextAsset(data, dest, stdout_log=False):
     if stdout_log:
@@ -269,6 +282,7 @@ def unpack_TextAsset(data, dest, stdout_log=False):
         with open(dest, 'wb') as f:
             f.write(data.script)
 
+
 def unpack_GameObject(data, destination_folder, stdout_log):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
     if stdout_log:
@@ -277,13 +291,16 @@ def unpack_GameObject(data, destination_folder, stdout_log):
     mono_list = []
     for idx, obj in enumerate(data.components):
         obj_type_str = str(obj.type)
-        subdata = obj.read()
         if obj_type_str == 'MonoBehaviour':
-            json_data = subdata.read_type_tree()
+            subdata = obj.read()
+            subdata.read_type_tree()
+            json_data = subdata.type_tree
             if json_data:
                 mono_list.append(json_data)
         elif obj_type_str == 'GameObject':
-            UNPACK[obj_type_str](subdata, os.path.join(dest, '{:02}'.format(idx)))
+            subdata = obj.read()
+            UNPACK[obj_type_str](
+                subdata, os.path.join(dest, '{:02}'.format(idx)))
         # elif stdout_log:
         #     print(f'Unsupported type {obj_type_str}')
     if len(mono_list) > 0:
@@ -291,7 +308,10 @@ def unpack_GameObject(data, destination_folder, stdout_log):
         with open(dest, 'w', encoding='utf8', newline='') as f:
             json.dump(mono_list, f, indent=2)
 
+
 IMAGE_TYPES = {'Texture2D', 'Sprite'}
+
+
 def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
     obj_type_str = str(obj.type)
     if (ex_dir is None and obj_type_str not in IMAGE_TYPES) or (ex_img_dir is None and obj_type_str in IMAGE_TYPES):
@@ -316,7 +336,7 @@ def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
                 method(data, dest, stdout_log)
     # elif stdout_log:
     #     print(f'Unsupported type {obj_type_str}')
-            
+
 
 UNPACK = {
     'Texture2D': unpack_Texture2D,
@@ -329,14 +349,17 @@ UNPACK = {
 }
 
 wyrmprint_alpha = Image.new('RGBA', (1024, 1024), color=(0, 0, 0, 255))
-ImageDraw.Draw(wyrmprint_alpha).rectangle([212, 26, 811, 997], fill=(255, 255, 255, 255), outline=None)
+ImageDraw.Draw(wyrmprint_alpha).rectangle(
+    [212, 26, 811, 997], fill=(255, 255, 255, 255), outline=None)
 wyrmprint_alpha = wyrmprint_alpha.convert('L')
+
 
 def merge_YCbCr(Y_img, Cb_img, Cr_img):
     _, _, _, Y = Y_img.convert('RGBA').split()
     Cb = Cb_img.convert('L').resize(Y_img.size, Image.ANTIALIAS)
     Cr = Cr_img.convert('L').resize(Y_img.size, Image.ANTIALIAS)
     return Image.merge('YCbCr', (Y, Cb, Cr)).convert('RGBA')
+
 
 def merge_categorized(all_categorized_images, stdout_log=False):
     for dest, sorted_images in all_categorized_images.items():
@@ -363,7 +386,8 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                     print(f'Merged RGBA {dest}')
 
             if 'Y' in sorted_images:
-                image = merge_YCbCr(sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
+                image = merge_YCbCr(
+                    sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
                 if 'alpha' in sorted_images:
                     a = sorted_images['alpha'].convert('L')
                 elif sorted_images['Y'].size == (1024, 1024):
@@ -381,12 +405,14 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                 try:
                     flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
                     for s_dest, s_box, flip, mask in sorted_images['sprites']:
-                        s_img = flipped.crop((s_box.left, s_box.top, s_box.right, s_box.bottom))
+                        s_img = flipped.crop(
+                            (s_box.left, s_box.top, s_box.right, s_box.bottom))
                         if flip is not None:
                             s_img = s_img.transpose(flip)
                         s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
                         if mask is not None:
-                            s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
+                            s_img = Image.composite(s_img, Image.new(
+                                s_img.mode, s_img.size, color=0), mask)
                         s_dest = os.path.splitext(s_dest)[0] + '.png'
                         check_target_path(s_dest)
                         s_img.save(s_dest)
@@ -397,6 +423,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
         except Exception as e:
             print(dest, sorted_images.keys())
             print(str(e))
+
 
 def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
     for dest, images in all_indexed_images.items():
@@ -411,7 +438,8 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
         mapping = data['partsTextureIndexTable']
         position = data['partsDataTable'][0]['position']
         size = data['partsDataTable'][0]['size']
-        box = [int(position['x']-size['x']/2), int(position['y']-size['y']/2), int(position['x']+size['x']/2), int(position['y']+size['y']/2)]
+        box = [int(position['x']-size['x']/2), int(position['y']-size['y']/2),
+               int(position['x']+size['x']/2), int(position['y']+size['y']/2)]
         layer1 = {}
         layer2 = {}
         for entry in mapping:
@@ -425,7 +453,7 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 mask = a_dict['alpha'].convert('L')
             else:
                 mask = None
-            if a_idx == 0:
+            if a_idx <= 0:
                 layer1[f'{c_idx:03}{a_idx:03}'] = merged, mask
             else:
                 layer2[f'{c_idx:03}{a_idx:03}'] = merged, mask
@@ -442,7 +470,8 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 l2_key, l2_img = l2
                 base.paste(l1_img[0], box=box, mask=l1_img[1])
                 base.paste(l2_img[0], box=box, mask=l2_img[1])
-                merged_dest = os.path.join(os.path.dirname(dest), 'merged', f'{os.path.basename(dest)}_{l1_key}_{l2_key}.png')
+                merged_dest = os.path.join(os.path.dirname(
+                    dest), 'merged', f'{os.path.basename(dest)}_{l1_key}_{l2_key}.png')
                 check_target_path(merged_dest)
                 base.save(merged_dest)
             if stdout_log:
@@ -455,11 +484,16 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 if stdout_log:
                     print(f'Saved {dest}_{key}')
 
+
 IMAGE_CATEGORY = re.compile(r'(.+?)_(sprite|C|alpha|alphaA8|A|Y|Cb|Cr)$')
-IMAGE_ALPHA_INDEX = re.compile(r'(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
+IMAGE_ALPHA_INDEX = re.compile(
+    r'(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$')
+
+
 def merge_images(image_list, stdout_log=False, do_indexed=True):
     all_categorized_images = defaultdict(lambda: {})
-    all_indexed_images = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {})))
+    all_indexed_images = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(lambda: {})))
     for images in image_list:
         if images is None:
             continue
@@ -468,7 +502,8 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
             res = IMAGE_ALPHA_INDEX.match(dest)
             if res:
                 dest, designation, index, category = res.groups()
-                all_indexed_images[dest][designation][int(index)][category] = img
+                all_indexed_images[dest][designation][int(
+                    index)][category] = img
                 continue
             res = IMAGE_CATEGORY.match(dest)
             if res:
@@ -484,6 +519,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
     merge_categorized(all_categorized_images, stdout_log=stdout_log)
     if do_indexed:
         merge_indexed(all_indexed_images, stdout_log=stdout_log)
+
 
 class Extractor:
     def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, overwrite=False, stdout_log=True):
@@ -507,7 +543,7 @@ class Extractor:
             if len(source_list) > 1:
                 dl_target = base_dl_target + str(idx)
             else:
-                dl_target = base_dl_target            
+                dl_target = base_dl_target
             if self.stdout_log:
                 print(f'Download {dl_target} from {source}', flush=True)
 
@@ -516,7 +552,8 @@ class Extractor:
                     async with session.get(source, timeout=60) as resp:
                         assert resp.status == 200
                         if os.path.exists(dl_target) and os.path.isdir(dl_target):
-                            dl_target = os.path.join(dl_target, os.path.basename(dl_target))
+                            dl_target = os.path.join(
+                                dl_target, os.path.basename(dl_target))
                         with open(dl_target, 'wb') as f:
                             f.write(await resp.read())
                 except asyncio.TimeoutError:
@@ -542,7 +579,8 @@ class Extractor:
         am = AssetsManager(dl_target)
         for asset in am.assets.values():
             for obj in asset.objects.values():
-                unpack(obj, ex_target, self.ex_dir, self.ex_img_dir, texture_2d, stdout_log=self.stdout_log)
+                unpack(obj, ex_target, self.ex_dir, self.ex_img_dir,
+                       texture_2d, stdout_log=self.stdout_log)
 
     async def download_and_extract(self, download_list, extract, region='jp'):
         async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
@@ -555,15 +593,19 @@ class Extractor:
     def download_and_extract_by_pattern(self, label_patterns, region='jp'):
         download_list = []
         for pat, extract in label_patterns.items():
-            download_list = self.pm[region].get_by_pattern(pat, mode=self.mf_mode)
+            download_list = self.pm[region].get_by_pattern(
+                pat, mode=self.mf_mode)
             loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.download_and_extract(download_list, extract, region))
+            loop.run_until_complete(self.download_and_extract(
+                download_list, extract, region))
 
     def download_and_extract_by_diff(self, old_manifest, region='jp'):
         old_manifest = ParsedManifest(old_manifest)
-        download_list = self.pm[region].get_by_diff(old_manifest, mode=self.mf_mode)
+        download_list = self.pm[region].get_by_diff(
+            old_manifest, mode=self.mf_mode)
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(self.download_and_extract(download_list, None, region))
+        loop.run_until_complete(
+            self.download_and_extract(download_list, None, region))
 
     def local_extract(self, input_dir):
         result = []
@@ -575,15 +617,17 @@ class Extractor:
                         print('Skipped', file_name)
                     continue
                 texture_2d = {}
-                self.extract_target(os.path.join(root, file_name), 'local', texture_2d)
+                self.extract_target(os.path.join(
+                    root, file_name), 'local', texture_2d)
                 if texture_2d:
                     result.append(texture_2d)
         merge_images(result, self.stdout_log)
 
+
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^images/outgame/eventlocalized': None,
+        r'^dragon/model': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
@@ -615,12 +659,14 @@ if __name__ == '__main__':
             if len(sys.argv) > 2:
                 region = sys.argv[2]
                 print(f'{region}: ', flush=True, end='')
-                ex.download_and_extract_by_diff(f'{MANIFESTS[region]}.old', region=region)
+                ex.download_and_extract_by_diff(
+                    f'{MANIFESTS[region]}.old', region=region)
             else:
                 for region, manifest in MANIFESTS.items():
-                    ex.download_and_extract_by_diff(f'{manifest}.old', region=region)
+                    ex.download_and_extract_by_diff(
+                        f'{manifest}.old', region=region)
         else:
-            ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False)
+            ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False, mf_mode=1)
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
         ex = Extractor(MANIFESTS, stdout_log=False, mf_mode=1)
