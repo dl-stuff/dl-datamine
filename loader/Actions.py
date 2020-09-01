@@ -30,6 +30,7 @@ class CommandType(Enum):
     PIVOT_BULLET = 53
     MOVEMENT_IN_SKILL = 54 # only eze s1 uses this
     ROTATION_IN_SKILL = 55
+    SATALITE_HIT = 58
     FIRE_STOCK_BULLET = 59
     CONDITION_TEXT = 63 # unsure where text is sourced, not in TextLabel
     SETTING_HIT = 66
@@ -39,6 +40,7 @@ class CommandType(Enum):
     SHADER = 101
     ADD_HIT = 105
     ACTION_CONDITON = 111
+    BUFF_FIELD_ATTACH = 125
 
     @classmethod
     def _missing_(cls, value):
@@ -199,6 +201,10 @@ ACTION_PART = DBTableMetadata(
 
         # ACTION_CONDITON
         '_actionConditionId': DBTableMetadata.INT,
+
+        # BUFF_FIELD_ATTACH
+        '_isAttachToBuffField': DBTableMetadata.INT,
+        '_isAttachToSelfBuffField': DBTableMetadata.INT,
     }
 )
 
@@ -218,6 +224,7 @@ PROCESSORS[CommandType.FORMATION_BULLET] = build_formation_bullet
 PROCESSORS[CommandType.SETTING_HIT] = build_db_data
 PROCESSORS[CommandType.ADD_HIT] = build_db_data
 PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
+PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
 
 def load_actions(db, path):
     file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')

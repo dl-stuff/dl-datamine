@@ -17,7 +17,8 @@ SPECIAL_EDIT_SKILL = {
     101502035: 2,
     101502011: 1,
     103503029: 1,
-    107503023: 1
+    107503023: 1,
+    103505044: 2
 }
 def export_skill_share_json():
     index = DBViewIndex()

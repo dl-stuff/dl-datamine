@@ -91,6 +91,7 @@ class AbilityData(DBView):
         2: 'strength',
         3: 'defense',
         4: 'skill haste',
+        5: 'dragon haste',
         8: 'shapeshift time',
         10: 'attack speed',
         12: 'fs charge rate'
@@ -203,26 +204,23 @@ class AbilityData(DBView):
 
     @staticmethod
     def ability_reference(ad, res, i):
-        a_ids = []
-        for a in ('a', 'b', 'c', ''):
-            key = f'_VariousId{i}{a}'
-            if key in res and res[key]:
-                a_ids.append(res[key])
-                res[key] = ad.index['AbilityData'].get(
-                    res[key], exclude_falsy=True)
+        res, a_ids = AbilityData.link_various_ids(
+            ad, res, i, view='AbilityData')
         res[f'_Description{i}'] = f'ability reference {a_ids}'
         return res
 
     @staticmethod
     def skill_reference(ad, res, i):
-        a_ids = []
-        for a in ('a', 'b', 'c', ''):
-            key = f'_VariousId{i}{a}'
-            if key in res and res[key]:
-                a_ids.append(res[key])
-                res[key] = ad.index['SkillData'].get(
-                    res[key], exclude_falsy=True)
+        res, a_ids = AbilityData.link_various_ids(
+            ad, res, i, view='SkillData')
         res[f'_Description{i}'] = f'skill reference {a_ids}'
+        return res
+
+    @staticmethod
+    def action_reference(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(
+            ad, res, i, view='PlayerAction')
+        res[f'_Description{i}'] = f'action reference {a_ids}'
         return res
 
     @staticmethod
@@ -236,6 +234,12 @@ class AbilityData(DBView):
     def elemental_damage(ad, res, i):
         a_id = AbilityData.a_ids(res, i)[0]
         res[f'_Description{i}'] = f'elemental damage {ELEMENTS.get(a_id, a_id)}'
+        return res
+
+    @staticmethod
+    def action_condition_timer(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(ad, res, i)
+        res[f'_Description{i}'] = 'action condition timer'
         return res
 
     def __init__(self, index):
@@ -314,6 +318,7 @@ ABILITY_TYPES = {
     # 42: something dragonform related
     43: AbilityData.ability_reference,
     44: AbilityData.skill_reference,
+    45: AbilityData.action_reference,
     46: AbilityData.generic_description('dragon gauge flat increaase'),
     # 47
     48: AbilityData.generic_description('dragon gauge decrease rate'),
@@ -327,6 +332,13 @@ ABILITY_TYPES = {
     57: AbilityData.elemental_damage,
     58: AbilityData.generic_description('dragondrive defense'),
     59: AbilityData.generic_description('debuff time'),
+    # 60 61 - galaxi
+    # 62 - ssinoa
+    #   "_AbilityType1": 62,
+    #   "_VariousId1a": 435,
+    #   "_VariousId1b": 304030301,
+    #   "_VariousId1c": 1084,
+    63: AbilityData.action_condition_timer
 }
 
 

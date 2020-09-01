@@ -287,12 +287,16 @@ def unpack_GameObject(data, destination_folder, stdout_log):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
     if stdout_log:
         print('GameObject', dest, flush=True)
+    print(data.dump())
+    exit()
     dest += '.json'
     mono_list = []
     for idx, obj in enumerate(data.components):
         obj_type_str = str(obj.type)
         if obj_type_str == 'MonoBehaviour':
             subdata = obj.read()
+            if stdout_log:
+                print('- MonoBehaviour', subdata.name, flush=True)
             subdata.read_type_tree()
             json_data = subdata.type_tree
             if json_data:
@@ -522,7 +526,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
 
 
 class Extractor:
-    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, overwrite=False, stdout_log=True):
+    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, overwrite=False, stdout_log=False):
         self.pm = {}
         for region, manifest in manifests.items():
             self.pm[region] = ParsedManifest(manifest)
@@ -627,7 +631,7 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^dragon/model': None,
+        r'^action': None,
         # r'^images/outgame': None
         # r'_gluonresources/meshes/weapon': None
         # r'^prefabs/outgame/fort/facility': None
@@ -655,7 +659,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
-            ex = Extractor(MANIFESTS, ex_dir=None, stdout_log=False)
+            ex = Extractor(MANIFESTS, ex_dir=None)
             if len(sys.argv) > 2:
                 region = sys.argv[2]
                 print(f'{region}: ', flush=True, end='')
@@ -666,9 +670,9 @@ if __name__ == '__main__':
                     ex.download_and_extract_by_diff(
                         f'{manifest}.old', region=region)
         else:
-            ex = Extractor(MANIFESTS, ex_dir='./_images', stdout_log=False, mf_mode=1)
+            ex = Extractor(MANIFESTS, ex_dir='./_images', mf_mode=1)
             ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
     else:
-        ex = Extractor(MANIFESTS, stdout_log=False, mf_mode=1)
+        ex = Extractor(MANIFESTS, stdout_log=True, mf_mode=0)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
         # ex.local_extract('_apk')

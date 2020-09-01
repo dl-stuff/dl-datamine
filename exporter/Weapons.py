@@ -89,21 +89,28 @@ def export_py_def():
     view = WeaponData(index)
     all_res = view.get_all(exclude_falsy=False)
     with open('weapons.py', 'w') as f:
-        for r in filter(lambda r: r['_FormId'] >= 60000, all_res):
+        for r in filter(lambda r: r['_FormId'] >= 60000 and r['_ElementalType'] == 4, all_res):
             r = view.process_result(r)
             f.write('class Agito')
             f.write(str(r['_GradeId']))
             f.write('_')
             f.write(re.sub(r'[^0-9a-zA-Z ]', '', unidecode(r['_Name'].strip())).replace(' ', '_'))
-            f.write('(WeaponBase):\n    ele = [\'')
-            f.write(r['_ElementalType'].lower())
-            f.write('\']\n    wt = \'')
+            # f.write('(WeaponBase):\n    ele = [\'')
+            f.write('(LightAgitoWeaponBase):\n    wt = \'')
+            # f.write(r['_ElementalType'].lower())
+            # f.write('\']\n    wt = \'')
             f.write(r['_Type'].lower())
             f.write('\'\n    att = ')
             f.write(str(r['_MaxAtk']))
-            f.write('\n    s3 = agito_buffs[\'')
-            f.write(r['_ElementalType'].lower())
-            f.write('\'][1]\n\n')
+            f.write('''\n    s3a = {
+        'dmg': 
+        'startup': 0.1,
+        'recovery': 
+    }''')
+            # f.write('\n    s3 = agito_buffs[\'')
+            # f.write(r['_ElementalType'].lower())
+            # f.write('\'][1]\n\n')
+            f.write('\n\n')
 
 
 if __name__ == '__main__':
