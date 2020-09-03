@@ -4,5 +4,8 @@
 *.lnk
 *.txt
 *.sqlite
-/manifest/
+/manifest/parse.py
+/manifest/DL_DecryptManifest.exe
+/manifest/*.json
+/manifest/*.json.old
 *.sh
