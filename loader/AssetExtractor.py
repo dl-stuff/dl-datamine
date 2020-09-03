@@ -287,8 +287,6 @@ def unpack_GameObject(data, destination_folder, stdout_log):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
     if stdout_log:
         print('GameObject', dest, flush=True)
-    print(data.dump())
-    exit()
     dest += '.json'
     mono_list = []
     for idx, obj in enumerate(data.components):
