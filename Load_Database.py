@@ -14,13 +14,6 @@ JP = 'jp'
 EN = 'en'
 CN = 'cn'
 
-MANIFESTS = {
-    JP: 'manifest/assetbundle.manifest.json',
-    EN: 'manifest/assetbundle.en_us.manifest.json',
-    CN: 'manifest/assetbundle.zh_cn.manifest.json',
-    # TW: 'manifest/assetbundle.zh_tw.manifest.json'
-}
-
 MASTER = 'master'
 ACTIONS = 'actions'
 CHARACTERS_MOTION = 'characters_motion'
@@ -65,11 +58,14 @@ if __name__ == '__main__':
     #     ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
     start = monotonic()
 
-    in_dir = '_extract'
+    in_dir = '_ex_sim'
     if args.do_prep:
-        ex = Extractor(MANIFESTS, ex_dir=in_dir, stdout_log=False, overwrite=True)
-        for region, labels in LABEL_PATTERNS.items():
-            ex.download_and_extract_by_pattern(labels, region=region)
+        ex = Extractor(ex_dir=in_dir, stdout_log=False, overwrite=True)
+        if not os.path.isdir(in_dir):
+            ex.download_and_extract_by_pattern(LABEL_PATTERNS)
+        else:
+            ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
+        load_aiscript('./_ex_sim/jp/aiscript')
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')

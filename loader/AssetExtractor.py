@@ -3,16 +3,28 @@ from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
 import json
 import os
 import errno
+
 import aiohttp
 import asyncio
+
+import urllib.request
+import multiprocessing
+
 import re
-import concurrent
 from tqdm import tqdm
 from queue import SimpleQueue
 from collections import defaultdict
 
 from PIL import Image, ImageDraw
 from UnityPy import AssetsManager
+
+
+MANIFESTS = {
+    'jp': 'manifest/assetbundle.manifest.json',
+    'en': 'manifest/assetbundle.en_us.manifest.json',
+    'cn': 'manifest/assetbundle.zh_cn.manifest.json',
+    'tw': 'manifest/assetbundle.zh_tw.manifest.json'
+}
 
 
 class ParsedManifestFlat(dict):
@@ -131,10 +143,8 @@ class ParsedManifest(dict):
     def flatten(targets):
         return [(k, [v.url]) for k, v in targets]
 
-    def get_by_pattern(self, pattern, mode=0):
-        if not isinstance(pattern, re.Pattern):
-            pattern = re.compile(pattern, flags=re.IGNORECASE)
-        targets = filter(lambda x: pattern.search(x[0]), self.items())
+    @staticmethod
+    def _get_by(targets, mode):
         if mode == 2:
             return ParsedManifest.expand_dependencies(targets)
         elif mode == 1:
@@ -142,15 +152,21 @@ class ParsedManifest(dict):
         else:
             return ParsedManifest.flatten(targets)
 
+    def get_by_pattern(self, pattern, mode=0):
+        if not isinstance(pattern, re.Pattern):
+            pattern = re.compile(pattern, flags=re.IGNORECASE)
+        targets = filter(lambda x: pattern.search(x[0]), self.items())
+        return ParsedManifest._get_by(targets, mode)
+
     def get_by_diff(self, other, mode=0):
-        targets = filter(lambda x: x[0] not in other.keys(
-        ) or x[1] != other[x[0]], self.items())
-        if mode == 2:
-            return ParsedManifest.expand_dependencies(targets)
-        elif mode == 1:
-            return ParsedManifest.link_dependencies(targets)
-        else:
-            return ParsedManifest.flatten(targets)
+        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
+        return ParsedManifest._get_by(targets, mode)
+
+    def get_by_pattern_diff(self, pattern, other, mode=0):
+        if not isinstance(pattern, re.Pattern):
+            pattern = re.compile(pattern, flags=re.IGNORECASE)
+        targets = filter(lambda x: pattern.search(x[0]) and (x[0] not in other.keys() or x[1] != other[x[0]]), self.items())
+        return ParsedManifest._get_by(targets, mode)
 
 
 def check_target_path(target):
@@ -364,7 +380,7 @@ def merge_YCbCr(Y_img, Cb_img, Cr_img):
 
 
 def merge_categorized(all_categorized_images, stdout_log=False):
-    for dest, sorted_images in all_categorized_images.items():
+    for dest, sorted_images in tqdm(all_categorized_images.items(), desc='merge_categorized'):
         try:
             image = None
             if 'color' in sorted_images:
@@ -428,7 +444,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
 
 
 def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
-    for dest, images in all_indexed_images.items():
+    for dest, images in tqdm(all_indexed_images.items(), desc='merge_categorized'):
         alpha = images['a']
         color = images['c']
         dest = os.path.splitext(dest)[0]
@@ -496,7 +512,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
     all_categorized_images = defaultdict(lambda: {})
     all_indexed_images = defaultdict(
         lambda: defaultdict(lambda: defaultdict(lambda: {})))
-    for images in image_list:
+    for images in tqdm(image_list, desc='images'):
         if images is None:
             continue
         for _, data in images.items():
@@ -518,16 +534,57 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
             if 'sprites' in data:
                 all_categorized_images[dest]['sprites'] = data['sprites']
 
-    merge_categorized(all_categorized_images, stdout_log=stdout_log)
-    if do_indexed:
+    if all_categorized_images:
+        merge_categorized(all_categorized_images, stdout_log=stdout_log)
+    if do_indexed and all_indexed_images:
         merge_indexed(all_indexed_images, stdout_log=stdout_log)
 
+### multiprocessing ###
+def mp_download_extract(target, source_list, extract, region, dl_dir, overwrite, ex_dir, ex_img_dir, stdout_log):
+    base_dl_target = os.path.join(dl_dir, region, target)
+    check_target_path(base_dl_target)
+
+    downloaded = []
+    for idx, source in enumerate(source_list):
+        if len(source_list) > 1:
+            dl_target = base_dl_target + str(idx)
+        else:
+            dl_target = base_dl_target
+        if not overwrite and os.path.exists(dl_target):
+            continue
+        if stdout_log:
+            print(f'Download {dl_target} from {source}', flush=True)
+        try:
+            urllib.request.urlretrieve(source, dl_target)
+        except Exception as e:
+            print(str(e))
+            continue
+        downloaded.append(dl_target)
+        print('.', end='', flush=True)
+
+#     return target, extract, region, downloaded
+# def mp_extract(target, extract, downloaded, region, ex_dir, ex_img_dir, stdout_log):
+
+    if extract is None:
+        extract = os.path.dirname(target).replace('/', '_')
+    ex_target = os.path.join(region, extract)
+    texture_2d = {}
+    for dl_target in downloaded:
+        am = AssetsManager(dl_target)
+        for asset in am.assets.values():
+            for obj in asset.objects.values():
+                unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=stdout_log)
+        print('-', end='', flush=True)
+    return texture_2d
+### multiprocessing ###
 
 class Extractor:
-    def __init__(self, manifests, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, overwrite=False, stdout_log=False):
+    def __init__(self, dl_dir='./_download', ex_dir='./_extract', ex_img_dir='./_images', mf_mode=0, overwrite=False, stdout_log=False):
         self.pm = {}
-        for region, manifest in manifests.items():
+        self.pm_old = {}
+        for region, manifest in MANIFESTS.items():
             self.pm[region] = ParsedManifest(manifest)
+            self.pm_old[region] = ParsedManifest(f'{manifest}.old')
         self.dl_dir = dl_dir
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
@@ -536,46 +593,50 @@ class Extractor:
         self.mf_mode = mf_mode
         self.overwrite = overwrite
 
-    async def down_ex(self, session, source_list, region, target, extract):
-        base_dl_target = os.path.join(self.dl_dir, region, target)
-        check_target_path(base_dl_target)
+    ### multiprocessing ###
+    def pool_download_and_extract(self, download_list, extract=None, region=None):
+        NUM_WORKERS = multiprocessing.cpu_count()
+        EX_RE = len(download_list[0]) == 2
 
-        texture_2d = {}
-        for idx, source in enumerate(source_list):
-            if len(source_list) > 1:
-                dl_target = base_dl_target + str(idx)
-            else:
-                dl_target = base_dl_target
-            if self.stdout_log:
-                print(f'Download {dl_target} from {source}', flush=True)
+        print(f'Processing {len(download_list)}', flush=True)
+        pool = multiprocessing.Pool(processes=NUM_WORKERS)
+        if EX_RE:
+            dl_args = [
+                (target, source, extract, region, self.dl_dir, self.overwrite, self.ex_dir, self.ex_img_dir, self.stdout_log) 
+                for target, source in download_list
+            ]
+        else:
+            dl_args = [
+                (target, source, extract, region, self.dl_dir, self.overwrite, self.ex_dir, self.ex_img_dir, self.stdout_log)
+                for target, source, extract, region in download_list
+            ]
+        results = list(filter(None, pool.starmap(mp_download_extract, dl_args)))
+        pool.close()
+        pool.join()
+        print('\n', flush=True)
 
-            if self.overwrite or not os.path.exists(dl_target):
-                try:
-                    async with session.get(source, timeout=60) as resp:
-                        assert resp.status == 200
-                        if os.path.exists(dl_target) and os.path.isdir(dl_target):
-                            dl_target = os.path.join(
-                                dl_target, os.path.basename(dl_target))
-                        with open(dl_target, 'wb') as f:
-                            f.write(await resp.read())
-                except asyncio.TimeoutError:
-                    print('Timeout', dl_target)
-                    continue
-                except Exception as e:
-                    print(str(e))
-                    continue
+        if results:
+            merge_images(results, self.stdout_log)
+    ### multiprocessing ###
 
-            _, ext = os.path.splitext(dl_target)
-            if len(ext) > 0:
-                if self.stdout_log:
-                    print('Skipped', dl_target)
-                return None
-            if extract is None:
-                extract = os.path.dirname(target).replace('/', '_')
-            ex_target = os.path.join(region, extract)
-            self.extract_target(dl_target, ex_target, texture_2d)
-        if len(texture_2d) > 0:
-            return texture_2d
+    def download_and_extract_by_pattern_diff(self, label_patterns):
+        download_list = []
+        for region, label_pat in label_patterns.items():
+            for pat, extract in label_pat.items():
+                download_list.extend([(*ts, extract, region) 
+                for ts in self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)])
+        self.pool_download_and_extract(download_list)
+
+    def download_and_extract_by_pattern(self, label_patterns):
+        download_list = []
+        for region, label_pat in label_patterns.items():
+            for pat, extract in label_pat.items():
+                download_list.extend([(*ts, extract, region) for ts in self.pm[region].get_by_pattern(pat, mode=self.mf_mode)])
+        self.pool_download_and_extract(download_list)
+
+    def download_and_extract_by_diff(self, region='jp'):
+        download_list = self.pm[region].get_by_diff(self.pm_old[region], mode=self.mf_mode)
+        self.pool_download_and_extract(download_list, region=region)
 
     def extract_target(self, dl_target, ex_target, texture_2d):
         am = AssetsManager(dl_target)
@@ -583,31 +644,6 @@ class Extractor:
             for obj in asset.objects.values():
                 unpack(obj, ex_target, self.ex_dir, self.ex_img_dir,
                        texture_2d, stdout_log=self.stdout_log)
-
-    async def download_and_extract(self, download_list, extract, region='jp'):
-        async with aiohttp.ClientSession(headers={'Connection': 'close'}) as session:
-            result = [await f for f in tqdm(asyncio.as_completed([
-                self.down_ex(session, source, region, target, extract)
-                for target, source in download_list
-            ]), desc=region, total=len(download_list))]
-            merge_images(result, self.stdout_log)
-
-    def download_and_extract_by_pattern(self, label_patterns, region='jp'):
-        download_list = []
-        for pat, extract in label_patterns.items():
-            download_list = self.pm[region].get_by_pattern(
-                pat, mode=self.mf_mode)
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(self.download_and_extract(
-                download_list, extract, region))
-
-    def download_and_extract_by_diff(self, old_manifest, region='jp'):
-        old_manifest = ParsedManifest(old_manifest)
-        download_list = self.pm[region].get_by_diff(
-            old_manifest, mode=self.mf_mode)
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(
-            self.download_and_extract(download_list, None, region))
 
     def local_extract(self, input_dir):
         result = []
@@ -619,8 +655,7 @@ class Extractor:
                         print('Skipped', file_name)
                     continue
                 texture_2d = {}
-                self.extract_target(os.path.join(
-                    root, file_name), 'local', texture_2d)
+                self.extract_target(os.path.join(root, file_name), 'local', texture_2d)
                 if texture_2d:
                     result.append(texture_2d)
         merge_images(result, self.stdout_log)
@@ -629,48 +664,41 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        r'^action': None,
-        # r'^images/outgame': None
-        # r'_gluonresources/meshes/weapon': None
-        # r'^prefabs/outgame/fort/facility': None
+        'jp': {
+            r'^action': None,
+            # r'^images/outgame': None
+            # r'_gluonresources/meshes/weapon': None
+            # r'^prefabs/outgame/fort/facility': None
 
-        # r'^characters/motion/axe': 'characters_motion',
-        # r'^characters/motion/bow': 'characters_motion',
-        # r'^characters/motion/can': 'characters_motion',
-        # r'^characters/motion/dag': 'characters_motion',
-        # r'^characters/motion/kat': 'characters_motion',
-        # r'^characters/motion/lan': 'characters_motion',
-        # r'^characters/motion/rod': 'characters_motion',
-        # r'^characters/motion/swd': 'characters_motion',
-        # r'characters/motion/animationclips$': 'characters_motion',
+            # r'^characters/motion/axe': 'characters_motion',
+            # r'^characters/motion/bow': 'characters_motion',
+            # r'^characters/motion/can': 'characters_motion',
+            # r'^characters/motion/dag': 'characters_motion',
+            # r'^characters/motion/kat': 'characters_motion',
+            # r'^characters/motion/lan': 'characters_motion',
+            # r'^characters/motion/rod': 'characters_motion',
+            # r'^characters/motion/swd': 'characters_motion',
+            # r'characters/motion/animationclips$': 'characters_motion',
 
-        # r'^dragon/motion': 'dragon_motion',
-        # r'^images/uilocalized2/atlascompress/uilocalized2': None,
-    }
-
-    MANIFESTS = {
-        'jp': 'manifest/assetbundle.manifest.json',
-        'en': 'manifest/assetbundle.en_us.manifest.json',
-        'cn': 'manifest/assetbundle.zh_cn.manifest.json',
-        'tw': 'manifest/assetbundle.zh_tw.manifest.json'
+            # r'^dragon/motion': 'dragon_motion',
+            # r'^images/uilocalized2/atlascompress/uilocalized2': None,
+        }
     }
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
-            ex = Extractor(MANIFESTS, ex_dir=None)
+            ex = Extractor(ex_dir=None)
             if len(sys.argv) > 2:
                 region = sys.argv[2]
                 print(f'{region}: ', flush=True, end='')
-                ex.download_and_extract_by_diff(
-                    f'{MANIFESTS[region]}.old', region=region)
+                ex.download_and_extract_by_diff(region=region)
             else:
                 for region, manifest in MANIFESTS.items():
-                    ex.download_and_extract_by_diff(
-                        f'{manifest}.old', region=region)
+                    ex.download_and_extract_by_diff(region=region)
         else:
             ex = Extractor(MANIFESTS, ex_dir='./_images', mf_mode=1)
-            ex.download_and_extract_by_pattern({sys.argv[1]: None}, region='jp')
+            ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
         ex = Extractor(MANIFESTS, stdout_log=True, mf_mode=0)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
         # ex.local_extract('_apk')
