@@ -550,15 +550,14 @@ def mp_download_extract(target, source_list, extract, region, dl_dir, overwrite,
             dl_target = base_dl_target + str(idx)
         else:
             dl_target = base_dl_target
-        if not overwrite and os.path.exists(dl_target):
-            continue
-        if stdout_log:
-            print(f'Download {dl_target} from {source}', flush=True)
-        try:
-            urllib.request.urlretrieve(source, dl_target)
-        except Exception as e:
-            print(str(e))
-            continue
+        if overwrite or not os.path.exists(dl_target):
+            if stdout_log:
+                print(f'Download {dl_target} from {source}', flush=True)
+            try:
+                urllib.request.urlretrieve(source, dl_target)
+            except Exception as e:
+                print(str(e))
+                continue
         downloaded.append(dl_target)
         print('.', end='', flush=True)
 
@@ -696,9 +695,9 @@ if __name__ == '__main__':
                 for region, manifest in MANIFESTS.items():
                     ex.download_and_extract_by_diff(region=region)
         else:
-            ex = Extractor(MANIFESTS, ex_dir='./_images', mf_mode=1)
+            ex = Extractor(ex_dir='./_images', mf_mode=1)
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
-        ex = Extractor(MANIFESTS, stdout_log=True, mf_mode=0)
+        ex = Extractor(stdout_log=True, mf_mode=0)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
         # ex.local_extract('_apk')

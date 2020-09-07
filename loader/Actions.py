@@ -167,6 +167,7 @@ ACTION_PART = DBTableMetadata(
         '_lifetime': DBTableMetadata.REAL,
         '_conditionType': DBTableMetadata.INT,
         '_conditionValue': DBTableMetadata.BLOB,
+        '_attenuationRate': DBTableMetadata.REAL,
 
         # COLLISION
         '_collision': DBTableMetadata.INT,
