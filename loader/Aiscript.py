@@ -2,7 +2,7 @@ import json
 import os
 from enum import Enum
 from tqdm import tqdm
-from Database import check_target_path
+from loader.Database import check_target_path
 
 OUTPUT = 'out/_aiscript'
 

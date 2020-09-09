@@ -9,6 +9,7 @@ from loader.Database import DBManager
 from loader.Master import load_master, load_json
 from loader.Actions import load_actions
 from loader.Motion import load_character_motion, load_dragon_motion
+from loader.Aiscript import load_aiscript
 
 JP = 'jp'
 EN = 'en'

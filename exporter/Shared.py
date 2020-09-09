@@ -499,6 +499,8 @@ class PlayerAction(DBView):
                         player_action['_BurstMarkerId'] = marker
             except:
                 pass
+        if '_NextAction' in player_action and player_action['_NextAction']:
+            player_action['_NextAction'] = self.get(player_action['_NextAction'], exclude_falsy=exclude_falsy)
         return player_action
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
