@@ -2,7 +2,7 @@ import json
 import os
 from operator import itemgetter
 
-from loader.Database import DBViewIndex, DBView
+from loader.Database import DBViewIndex, DBView, DBManager
 from loader.Actions import CommandType
 from exporter.Shared import AbilityData, SkillData, PlayerAction, ActionCondition
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
@@ -38,8 +38,8 @@ class CharaUniqueCombo(DBView):
             return res
         if '_ActionId' in res and res['_ActionId']:
             base_action_id = res['_ActionId']
-            res['_ActionId'] = [self.index['PlayerAction'].get(
-                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
+            res['_ActionId'] = list(filter(None, (self.index['PlayerAction'].get(
+                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum']))))
         if '_ExActionId' in res and res['_ExActionId']:
             base_action_id = res['_ExActionId']
             res['_ExActionId'] = [self.index['PlayerAction'].get(
@@ -123,7 +123,8 @@ class CharaData(DBView):
                     res[ex2], exclude_falsy=exclude_falsy)
         return res
 
-    def last_abilities(self, res, exclude_falsy=True):
+    def last_abilities(self, res, exclude_falsy=True, as_mapping=False):
+        ab_map = {}
         for i in (1, 2, 3):
             j = 4
             ab = f'_Abilities{i}{j}'
@@ -133,19 +134,23 @@ class CharaData(DBView):
             if j > 0:
                 res[ab] = self.index['AbilityData'].get(
                     res[ab], full_query=True, exclude_falsy=exclude_falsy)
+                ab_map[ab] = res[ab]
         ex = f'_ExAbilityData5'
         if ex in res and res[ex]:
             res[ex] = self.index['ExAbilityData'].get(
                 res[ex], exclude_falsy=exclude_falsy)
+            ab_map[ex] = res[ex]
         ex2 = f'_ExAbility2Data5'
         if ex2 in res and res[ex2]:
             res[ex2] = self.index['AbilityData'].get(
                 res[ex2], exclude_falsy=exclude_falsy)
+            ab_map[ex2] = res[ex2]
+        if as_mapping:
+            return ab_map
         return res
 
     def process_result(self, res, exclude_falsy=True, condense=True):
-        self.index['ActionParts'].animation_reference = (
-            'CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
+        self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
         if '_WeaponType' in res:
             res['_WeaponType'] = WEAPON_TYPES.get(
                 res['_WeaponType'], res['_WeaponType'])
@@ -210,7 +215,9 @@ class CharaData(DBView):
         return res
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condense=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+        res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        if not res:
+            res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
         return self.process_result(res, exclude_falsy=exclude_falsy, condense=True)

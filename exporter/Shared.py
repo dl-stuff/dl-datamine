@@ -39,6 +39,8 @@ class ActionCondition(DBView):
                         res[s], exclude_falsy=exclude_falsy)
                     if skill:
                         res[s] = skill
+        if (dlk := res.get('_DamageLink')) and (dmglink := self.index['PlayerActionHitAttribute'].get(dlk, exclude_falsy=exclude_falsy)):
+            res['_DamageLink'] = dmglink
         if reset_seen_skills:
             self.seen_skills = set()
         return res
@@ -461,7 +463,10 @@ class ActionParts(DBView):
                     animation = self.index['CharacterMotion'].get(
                         ms, exclude_falsy=exclude_falsy)
                 if animation:
-                    r['_animation'] = animation
+                    if len(animation) == 1:
+                        r['_animation'] = animation[0]
+                    else:
+                        r['_animation'] = animation
 
         return action_parts
 
