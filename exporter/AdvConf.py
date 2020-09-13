@@ -236,7 +236,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
 def hit_sr(parts, seq=None, xlen=None):
     s, r = None, None
     for part in parts:
-        if part['commandType'] in ('HIT', 'BULLET', 'FORMATION_BULLET') and s is None:
+        if part['commandType'] in ('HIT', 'BULLET', 'FORMATION_BULLET', 'SETTING_HIT') and s is None:
             s = fr(part['_seconds'])
         if part['commandType'] == 'ACTIVE_CANCEL':
             recovery = part['_seconds']
@@ -299,7 +299,7 @@ def convert_fs(burst, marker=None, cancel=None):
                     fsconf[f'fs{idx+1}']['charge'] = fr(totalc)
             if 'fs2' in fsconf and 'attr' not in fsconf['fs']:
                 del fsconf['fs']
-            else:
+            elif 'fs1' in fsconf:
                 fsconf['fs'] = fsconf['fs1']
                 del fsconf['fs1']
         else:
