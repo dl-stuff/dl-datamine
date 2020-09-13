@@ -41,11 +41,11 @@ AFFLICTION_TYPES = {
 
 KILLER_STATE = {
     **AFFLICTION_TYPES,
-    99: 'Afflicted',
-    103: 'Def Down',
-    198: 'Buff', # or maybe only burning ambition?
-    199: 'Debuff',
-    201: 'Break'
+    99: 'afflicted',
+    103: 'debuff_def',
+    198: 'buff', # or maybe only burning ambition?
+    199: 'debuff',
+    201: 'break'
 }
 
 ABILITY_CONDITION_TYPES = {

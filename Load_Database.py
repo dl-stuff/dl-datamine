@@ -2,6 +2,7 @@ import os
 import argparse
 from time import monotonic
 from tqdm import tqdm
+import json
 
 from loader.AssetExtractor import Extractor
 from loader.Database import DBManager
@@ -71,7 +72,9 @@ if __name__ == '__main__':
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')
     load_json(db, os.path.join(in_dir, CN, MASTER, TEXT_LABEL), 'TextLabelCN')
-    load_actions(db, os.path.join(in_dir, JP, ACTIONS))
+    schema_map = load_actions(db, os.path.join(in_dir, JP, ACTIONS))
+    with open('./out/_action_schema.json', 'w') as f:
+        json.dump(schema_map, f, indent=4, sort_keys=True)
     load_character_motion(db, os.path.join(in_dir, JP, CHARACTERS_MOTION))
     load_dragon_motion(db, os.path.join(in_dir, JP, DRAGON_MOTION))
 

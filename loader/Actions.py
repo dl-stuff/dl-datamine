@@ -5,6 +5,8 @@ from loader.Database import DBManager, DBTableMetadata
 from enum import Enum
 import re
 
+
+
 class CommandType(Enum):
     UNKNOWN = -1
     PARTS_MOTION = 2
@@ -65,9 +67,12 @@ def build_db_data(meta, ref, seq, data):
 
 def build_bullet(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
-    ab_label = data['_arrangeBullet']['_abHitAttrLabel']
-    if ab_label:
+    if (ab_label := data['_arrangeBullet']['_abHitAttrLabel']):
         db_data['_abHitAttrLabel'] = ab_label
+    if (ab_duration := data['_arrangeBullet']['_abDuration']):
+        db_data['_abDuration'] = ab_duration
+    if (ab_interval := data['_arrangeBullet']['_abHitInterval']):
+        db_data['_abHitInterval'] = ab_interval
     cond_data = data['_conditionData']
     if cond_data['_conditionType']:
         db_data['_conditionType'] = cond_data['_conditionType']
@@ -161,6 +166,8 @@ ACTION_PART = DBTableMetadata(
         '_hitLabel': DBTableMetadata.TEXT,
         '_hitAttrLabel': DBTableMetadata.TEXT,
         '_abHitAttrLabel': DBTableMetadata.TEXT,
+        '_abHitInterval': DBTableMetadata.REAL,
+        '_abDuration': DBTableMetadata.REAL,
         '_bulletNum': DBTableMetadata.INT,
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
@@ -227,7 +234,17 @@ PROCESSORS[CommandType.ADD_HIT] = build_db_data
 PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
 PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
 
+def log_schema_keys(schema_map, data, command_type):
+    schema_map[f'{data["commandType"]:03}-{command_type}'] = list(data.keys())
+    for subdata in data.values():
+        try:
+            if (command_type := subdata.get('commandType')):
+                log_schema_keys(schema_map, subdata, CommandType(command_type))
+        except:
+            pass
+
 def load_actions(db, path):
+    schema_map = {}
     file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')
     db.drop_table(ACTION_PART.name)
     db.create_table(ACTION_PART)
@@ -261,14 +278,16 @@ def load_actions(db, path):
                         action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
                         for seq, data in enumerate(action):
                             command_type = CommandType(data['commandType'])
+                            log_schema_keys(schema_map, data, command_type)
                             if command_type in PROCESSORS.keys():
                                 builder = PROCESSORS[command_type]
                                 db_data = builder(ACTION_PART, ref, seq, data)
                                 if db_data is not None:
                                     sorted_data.append(db_data)
     db.insert_many(ACTION_PART.name, sorted_data)
+    return schema_map
 
 if __name__ == '__main__':
     from loader.Database import DBManager
     db = DBManager()
-    load_actions(db, './_extract/jp/actions')
+    schema_map = load_actions(db, './_ex_sim/jp/actions')

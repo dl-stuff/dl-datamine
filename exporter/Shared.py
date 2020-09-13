@@ -493,7 +493,7 @@ class PlayerAction(DBView):
             pa_id, by='_ref', order='_seconds ASC', exclude_falsy=exclude_falsy)
         if action_parts:
             player_action['_Parts'] = action_parts
-        if '_BurstMarkerId' in player_action and player_action['_BurstMarkerId'] and (marker := self.get(player_action['_BurstMarkerId'], exclude_falsy=exclude_falsy)):
+        if (mid := player_action.get('_BurstMarkerId')) and (marker := self.get(mid, exclude_falsy=exclude_falsy)):
             player_action['_BurstMarkerId'] = marker
         else:
             try:
@@ -504,8 +504,10 @@ class PlayerAction(DBView):
                         player_action['_BurstMarkerId'] = marker
             except:
                 pass
-        if '_NextAction' in player_action and player_action['_NextAction']:
-            player_action['_NextAction'] = self.get(player_action['_NextAction'], exclude_falsy=exclude_falsy)
+        if (nextact := player_action.get('_NextAction')):
+            player_action['_NextAction'] = self.get(nextact, exclude_falsy=exclude_falsy)
+        if (casting := player_action.get('_CastingAction')):
+            player_action['_CastingAction'] = self.get(casting, exclude_falsy=exclude_falsy)
         return player_action
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True):

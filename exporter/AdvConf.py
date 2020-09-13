@@ -16,6 +16,13 @@ from exporter.Weapons import WeaponType
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
 
 
+def ele_bitmap(n):
+    seq = 1
+    while not n & 1 and n > 0:
+        n = n >> 1
+        seq += 1
+    return ELEMENTS[seq]
+
 def confsort(a):
     if '_' in a:
         return a.split('_')[1]
@@ -62,28 +69,50 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout):
 def fr(num):
     return round(num, 5)
 
-def convert_all_hitattr(actparts, pattern=None, adv=None, skill=None):
+def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
+    actparts = action['_Parts']
     hitattrs = []
     once_per_action = set()
     for part in actparts:
+        part_hitattrs = []
         for label in ActionParts.HIT_LABELS:
             if (hitattr_lst := part.get(label)):
                 if len(hitattr_lst) == 1:
                     hitattr_lst = hitattr_lst[0]
                 if isinstance(hitattr_lst, dict):
-                    if (attr := convert_hitattr(hitattr_lst, part, once_per_action, adv=adv, skill=skill)):
-                        hitattrs.append(attr)
+                    if (attr := convert_hitattr(hitattr_lst, part, action, once_per_action, adv=adv, skill=skill)):
+                        part_hitattrs.append(attr)
                 elif isinstance(hitattr_lst, list):
                     for hitattr in hitattr_lst:
                         if (not pattern or pattern.match(hitattr['_Id'])) and \
-                            (attr := convert_hitattr(hitattr, part, once_per_action, adv=adv, skill=skill)):
-                            hitattrs.append(attr)
+                            (attr := convert_hitattr(hitattr, part, action, once_per_action, adv=adv, skill=skill)):
+                            part_hitattrs.append(attr)
                             if not pattern:
                                 break
+            if (blt := part.get('_bulletNum')):
+                part_hitattrs.append(blt)
+        gen, delay = None, None
+        if (gen := part.get('_generateNum')):
+            delay = part.get('_generateDelay')
+            ref_attrs = part_hitattrs
+        elif (abd := part.get('_abDuration', 0)) > (abi := part.get('_abHitInterval', 0)):
+            gen = int(abd/abi)
+            delay = abi
+            ref_attrs = [part_hitattrs[-1]]
+        if gen and delay:
+            gen_attrs = []
+            for gseq in range(1, gen):
+                for attr in ref_attrs:
+                    gattr = attr.copy()
+                    gattr['iv'] = fr(attr.get('iv', 0)+delay*gseq)
+                    gen_attrs.append(gattr)
+            part_hitattrs.extend(gen_attrs)
+        hitattrs.extend(part_hitattrs)
+
     once_per_action = set()
     return hitattrs
 
-def convert_hitattr(hitattr, part, once_per_action, adv=None, skill=None):
+def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None):
     attr = {}
     target = hitattr.get('_TargetGroup')
     if target != 5 and hitattr.get('_DamageAdjustment'):
@@ -113,11 +142,17 @@ def convert_hitattr(hitattr, part, once_per_action, adv=None, skill=None):
         once_per_action.add('utp')
     # if hitattr.get('_RecoveryValue'):
     #     attr['heal'] = fr(hitattr.get('_RecoveryValue'))
+    if part.get('commandType') == 'FIRE_STOCK_BULLET' and (stock := action.get('_MaxStockBullet', 0)) > 1:
+        attr['extra'] = stock
+    if (bc := attr.get('_DamageUpRateByBuffCount')):
+        attr['bufc'] = bc
+    if 0 < (attenuation := part.get('_attenuationRate', 0)) < 1:
+        attr['fade'] = attenuation
 
     if (actcond := hitattr.get('_ActionCondition1')) and actcond['_Id'] not in once_per_action:
         once_per_action.add(actcond['_Id'])
         if actcond.get('_DamageLink'):
-            return convert_hitattr(actcond['_DamageLink'], part, once_per_action, adv=adv, skill=skill)
+            return convert_hitattr(actcond['_DamageLink'], part, action, once_per_action, adv=adv, skill=skill)
         alt_buffs = []
         if adv and skill:
             for ehs in AdvConf.ENHANCED_SKILL:
@@ -175,7 +210,9 @@ def convert_hitattr(hitattr, part, once_per_action, adv=None, skill=None):
                     # BUFFARG_KEY SABARG_KEY
                     for k, mod in AdvConf.BUFFARG_KEY.items():
                         if (value := actcond.get(k)):
-                            if k == '_SlipDamageRatio':
+                            if (bele := actcond.get('_TargetElemental')) and btype != 'self':
+                                buffs.append(['ele', fr(value), duration, *mod, ele_bitmap(bele).lower()])
+                            elif k == '_SlipDamageRatio':
                                 buffs.append([btype, -fr(value), duration, *mod])
                             else:
                                 buffs.append([btype, fr(value), duration, *mod])
@@ -216,11 +253,11 @@ def hit_sr(parts, seq=None, xlen=None):
     return s, r
 
 
-def hit_attr_adj(parts, s, conf, pattern=None):
-    if (hitattrs := convert_all_hitattr(parts, pattern=pattern)):
+def hit_attr_adj(action, s, conf, pattern=None):
+    if (hitattrs := convert_all_hitattr(action, pattern=pattern)):
         conf['recovery'] = fr(conf['recovery'] - s)
         for attr in hitattrs:
-            if 'iv' in attr:
+            if not isinstance(attr, int) and 'iv' in attr:
                 attr['iv'] = fr(attr['iv'] - s)
                 if attr['iv'] == 0:
                     del attr['iv']
@@ -235,7 +272,7 @@ def convert_x(aid, xn, xlen=5):
         'startup': s,
         'recovery': r
     }
-    xconf = hit_attr_adj(xn['_Parts'], s, xconf)
+    xconf = hit_attr_adj(xn, s, xconf)
     return xconf
 
 
@@ -243,7 +280,7 @@ def convert_fs(burst, marker=None, cancel=None):
     startup, recovery = hit_sr(burst['_Parts'])
     fsconf = {}
     if not isinstance(marker, dict):
-        fsconf['fs'] = hit_attr_adj(burst['_Parts'], startup, {'startup': startup, 'recovery': recovery}, re.compile(r'.*_LV02$'))
+        fsconf['fs'] = hit_attr_adj(burst, startup, {'startup': startup, 'recovery': recovery}, re.compile(r'.*_LV02$'))
     else:
         mpart = marker['_Parts'][0]
         charge = mpart.get('_chargeSec', 0.5)
@@ -253,9 +290,9 @@ def convert_fs(burst, marker=None, cancel=None):
             totalc = 0
             for idx, c in enumerate(clv):
                 if idx == 0:
-                    clv_attr = hit_attr_adj(burst['_Parts'], startup, fsconf[f'fs'].copy(), re.compile(f'.*_LV02$'))
+                    clv_attr = hit_attr_adj(burst, startup, fsconf[f'fs'].copy(), re.compile(f'.*_LV02$'))
                 else:
-                    clv_attr = hit_attr_adj(burst['_Parts'], startup, fsconf[f'fs'].copy(), re.compile(f'.*_LV02_CHLV0{idx+1}$'))
+                    clv_attr = hit_attr_adj(burst, startup, fsconf[f'fs'].copy(), re.compile(f'.*_LV02_CHLV0{idx+1}$'))
                 totalc += c
                 if clv_attr:
                     fsconf[f'fs{idx+1}'] = clv_attr
@@ -266,7 +303,7 @@ def convert_fs(burst, marker=None, cancel=None):
                 fsconf['fs'] = fsconf['fs1']
                 del fsconf['fs1']
         else:
-            fsconf['fs'] = hit_attr_adj(burst['_Parts'], startup, fsconf['fs'], re.compile(r'.*H0\d_LV02$'))
+            fsconf['fs'] = hit_attr_adj(burst, startup, fsconf['fs'], re.compile(r'.*H0\d_LV02$'))
     if cancel is not None:
         fsconf['fsf'] = {
             'charge': fr(0.1+cancel['_Parts'][0]['_duration']),
@@ -293,7 +330,7 @@ class WepConf(WeaponType):
         for n in range(1, 6):
             xn = res[f'_DefaultSkill0{n}']
             xnconf[f'x{n}'] = convert_x(xn['_Id'], xn)
-            if (hitattrs := convert_all_hitattr(xn['_Parts'], re.compile(r'.*H0\d_LV02$'))):
+            if (hitattrs := convert_all_hitattr(xn, re.compile(r'.*H0\d_LV02$'))):
                 for attr in hitattrs:
                     attr['iv'] = fr(attr['iv'] - xnconf[f'x{n}']['startup'])
                     if attr['iv'] == 0:
@@ -383,7 +420,7 @@ class AdvConf(CharaData):
             'recovery': None if not timing[1] else fr(timing[1]),
         }
 
-        if (hitattrs := convert_all_hitattr(action['_Parts'], re.compile(f'.*LV0{lv}$'), adv=self, skill=skill)):
+        if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), adv=self, skill=skill)):
             adj = None
             sconf['attr'] = hitattrs
 
@@ -436,7 +473,7 @@ class AdvConf(CharaData):
             skill = self.index['SkillData'].get(res[f'_Skill{s}'], 
                 exclude_falsy=exclude_falsy, full_query=True)
             self.chara_skills[res[f'_Skill{s}']] = (f's{s}', s, skill, None)
-        for m in range(1, 4):
+        for m in range(1, 5):
             if (mode := res.get(f'_ModeId{m}')):
                 mode = self.index['CharaModeData'].get(mode, exclude_falsy=exclude_falsy, full_query=True)
                 try:
@@ -575,7 +612,7 @@ if __name__ == '__main__':
         view = PlayerAction(index)
         burst = view.get(int(args.f), exclude_falsy=True)
         if (mid := burst.get('_BurstMarkerId')):
-            marker = view.get(mid, exclude_falsy=True)
+            marker = mid
         elif args.fm:
             marker = view.get(int(args.fm), exclude_falsy=True)
         else:
