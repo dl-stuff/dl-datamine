@@ -89,8 +89,8 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                             part_hitattrs.append(attr)
                             if not pattern:
                                 break
-            if (blt := part.get('_bulletNum')):
-                part_hitattrs.append(blt)
+        if (blt := part.get('_bulletNum')):
+            part_hitattrs.append(blt)
         gen, delay = None, None
         if (gen := part.get('_generateNum')):
             delay = part.get('_generateDelay')
@@ -326,17 +326,26 @@ class WepConf(WeaponType):
     }
     def process_result(self, res, exclude_falsy=True, full_query=True):
         xnconf = {'lv2':{}}
+        fs_id = res['_BurstPhase1']
         res = super().process_result(res, exclude_falsy=True, full_query=True)
+        fs_delay = {}
         for n in range(1, 6):
             xn = res[f'_DefaultSkill0{n}']
             xnconf[f'x{n}'] = convert_x(xn['_Id'], xn)
+            for part in xn['_Parts']:
+                if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
+                    fs_delay[f'x{n}'] = part.get('_seconds')
             if (hitattrs := convert_all_hitattr(xn, re.compile(r'.*H0\d_LV02$'))):
                 for attr in hitattrs:
                     attr['iv'] = fr(attr['iv'] - xnconf[f'x{n}']['startup'])
                     if attr['iv'] == 0:
                         del attr['iv']
                 xnconf['lv2'][f'x{n}'] = {'attr': hitattrs}
-        xnconf.update(convert_fs(res['_BurstPhase1'], res['_ChargeMarker'], res['_ChargeCancel']))
+        fsconf = convert_fs(res['_BurstPhase1'], res['_ChargeMarker'], res['_ChargeCancel'])
+        startup = fsconf['fs']['startup']
+        for x, delay in fs_delay.items():
+            fsconf['fs'][x] = {'startup': fr(startup+delay)}
+        xnconf.update(fsconf)
         return xnconf
 
     @staticmethod
