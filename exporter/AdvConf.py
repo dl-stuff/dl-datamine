@@ -179,8 +179,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
             attr['afflic'] = [afflic.lower(), actcond['_Rate']]
             if (dot := actcond.get('_SlipDamagePower')):
                 attr['afflic'].append(fr(dot))
-        # elif 'Bleeding' == actcond.get('_Text'):
-        #     attr['bleed'] = [actcond['_Rate'], fr(actcond['_SlipDamagePower'])]
+        elif 'Bleeding' == actcond.get('_Text'):
+            attr['bleed'] = [actcond['_Rate'], fr(actcond['_SlipDamagePower'])]
         else:
             buffs = []
             for tsn, btype in AdvConf.TENSION_KEY.items():
