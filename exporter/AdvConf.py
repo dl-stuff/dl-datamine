@@ -89,7 +89,9 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                             part_hitattrs.append(attr)
                             if not pattern:
                                 break
-        if (blt := part.get('_bulletNum')):
+        if not part_hitattrs:
+            continue
+        if (blt := part.get('_bulletNum', 0)) > 1:
             part_hitattrs.append(blt)
         gen, delay = None, None
         if (gen := part.get('_generateNum')):
@@ -125,6 +127,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
             attr['killer'] = [fr(hitattr['_KillerStateDamageRate']-1), killers]
         if (crisis := hitattr.get('_CrisisLimitRate')):
             attr['crisis'] = fr(crisis-1)
+        if (bufc := hitattr.get('_DamageUpRateByBuffCount')):
+            attr['bufc'] = fr(bufc)
     if 'sp' not in once_per_action:
         if (sp := hitattr.get('_AdditionRecoverySp')):
             attr['sp'] = fr(sp)
@@ -147,7 +151,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
     if (bc := attr.get('_DamageUpRateByBuffCount')):
         attr['bufc'] = bc
     if 0 < (attenuation := part.get('_attenuationRate', 0)) < 1:
-        attr['fade'] = attenuation
+        attr['fade'] = fr(attenuation)
 
     if (actcond := hitattr.get('_ActionCondition1')) and actcond['_Id'] not in once_per_action:
         once_per_action.add(actcond['_Id'])
@@ -502,10 +506,12 @@ class AdvConf(CharaData):
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f'{fs}_{mode_name}'] = fsc
                 if (xalt := mode.get('_UniqueComboId')):
-                    for n, xn in enumerate(xalt['_ActionId']):
-                        n += 1
-                        if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
-                            conf[f'x{n}_{mode_name}'] = convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum'])
+                    for prefix in ('', 'Ex'):
+                        if xalt.get(f'_{prefix}ActionId'):
+                            for n, xn in enumerate(xalt[f'_{prefix}ActionId']):
+                                n += 1
+                                if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
+                                    conf[f'x{n}_{mode_name}{prefix.lower()}'] = convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum'])
 
         # self.abilities = self.last_abilities(res, as_mapping=True)
         # pprint(self.abilities)
