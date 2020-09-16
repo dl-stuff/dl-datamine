@@ -9,11 +9,8 @@ from exporter.Mappings import CLASS_TYPES
 class AmuletData(DBView):
     def __init__(self, index):
         super().__init__(index, 'AmuletData', labeled_fields=['_Name', '_Text1', '_Text2', '_Text3', '_Text4', '_Text5'])
-        self.abilities = AbilityData(index)
 
     def process_result(self, res, exclude_falsy, full_query=True, full_abilities=False):
-        if not full_query:
-            return res
         if '_AmuletType' in res:
             res['_AmuletType'] = CLASS_TYPES.get(res['_AmuletType'], res['_AmuletType'])
         inner = (1, 2, 3) if full_abilities else (3,)
@@ -25,8 +22,10 @@ class AmuletData(DBView):
                     res[k] = self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy)
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, by='_Name', fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
+        res = super().get(pk, by=by, fields=fields, exclude_falsy=exclude_falsy)
+        if not full_query:
+            return res
         return self.process_result(res, exclude_falsy, full_query, full_abilities)
 
     @staticmethod

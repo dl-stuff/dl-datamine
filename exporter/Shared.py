@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from loader.Actions import CommandType
-from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES, KILLER_STATE, TRIBE_TYPES, TARGET_ACTION_TYPES, ELEMENTS
+from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES, KILLER_STATE, TRIBE_TYPES, TARGET_ACTION_TYPES, ELEMENTS, WEAPON_TYPES
 
 
 def get_valid_filename(s):
@@ -248,10 +248,14 @@ class AbilityData(DBView):
         super().__init__(index, 'AbilityData', labeled_fields=[
             '_Name', '_Details', '_HeadText'])
 
-    def process_result(self, res, fields=None, full_query=True, exclude_falsy=True):
+    def process_result(self, res, full_query=True, exclude_falsy=True):
         try:
             res['_ConditionType'] = ABILITY_CONDITION_TYPES.get(
                 res['_ConditionType'], res['_ConditionType'])
+        except:
+            pass
+        try:
+            res[f'_TargetAction'] = TARGET_ACTION_TYPES[res[f'_TargetAction']]
         except:
             pass
         for i in (1, 2, 3):
@@ -263,13 +267,18 @@ class AbilityData(DBView):
                 res = ABILITY_TYPES[res[f'_AbilityType{i}']](self, res, i)
             except KeyError:
                 pass
+        if (ele := res.get('_ElementalType')):
+            res['_ElementalType'] = ELEMENTS.get(ele, ele)
+        if (wep := res.get('_WeaponType')):
+            res['_WeaponType'] = WEAPON_TYPES.get(wep, wep)
+
         return res
 
     def get(self, key, fields=None, full_query=True, exclude_falsy=True):
         res = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
-        return self.process_result(res, fields, full_query, exclude_falsy)
+        return self.process_result(res, full_query, exclude_falsy)
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         processed_res = [self.process_result(res, exclude_falsy=exclude_falsy) for res in self.get_all(exclude_falsy=exclude_falsy)]

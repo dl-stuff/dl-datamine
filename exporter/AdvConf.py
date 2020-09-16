@@ -10,11 +10,16 @@ from pprint import pprint
 import argparse
 
 from loader.Database import DBViewIndex, DBView, check_target_path
-from exporter.Shared import ActionParts, PlayerAction
+from exporter.Shared import ActionParts, PlayerAction, AbilityData
 from exporter.Adventurers import CharaData
-from exporter.Weapons import WeaponType
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
+from exporter.Dragons import DragonData
+from exporter.Weapons import WeaponType, WeaponData
+from exporter.Wyrmprints import AmuletData
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES
 
+
+def snakey(name):
+    return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name).strip()).replace(' ', '_')
 
 def ele_bitmap(n):
     seq = 1
@@ -260,7 +265,7 @@ def hit_sr(parts, seq=None, xlen=None):
     return s, r
 
 
-def hit_attr_adj(action, s, conf, pattern=None):
+def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
     if (hitattrs := convert_all_hitattr(action, pattern=pattern)):
         conf['recovery'] = fr(conf['recovery'] - s)
         for attr in hitattrs:
@@ -269,6 +274,8 @@ def hit_attr_adj(action, s, conf, pattern=None):
                 if attr['iv'] == 0:
                     del attr['iv']
         conf['attr'] = hitattrs
+    if not hitattrs and skip_nohitattr:
+        return None
     return conf
 
 
@@ -279,7 +286,7 @@ def convert_x(aid, xn, xlen=5):
         'startup': s,
         'recovery': r
     }
-    xconf = hit_attr_adj(xn, s, xconf)
+    xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False)
     return xconf
 
 
@@ -562,12 +569,12 @@ class AdvConf(CharaData):
 
     @staticmethod
     def outfile_name(conf, ext):
-        return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(conf['c']['name'])).replace(' ', '_') + ext
+        return snakey(conf['c']['name']) + ext
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
         all_res = self.get_all(exclude_falsy=True)
-        ref_dir = os.path.join(out_dir, 'adv')
-        out_dir = os.path.join(out_dir, 'gen')
+        ref_dir = os.path.join(out_dir, '..', 'adv')
+        out_dir = os.path.join(out_dir, 'adv')
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             if not res.get('_IsPlayable'):
@@ -594,19 +601,312 @@ class AdvConf(CharaData):
         print('Missing endlag for:', AdvConf.MISSING_ENDLAG)
 
 
+def ab_cond(ab):
+    cond = ab.get('_ConditionType')
+    condval = ab.get('_ConditionValue')
+    ele = ab.get('_ElementalType')
+    wep = ab.get('_WeaponType')
+    cparts = []
+    if ele:
+        cparts.append(ele.lower())
+    if wep:
+        cparts.append(wep.lower())
+    if condval:
+        condval = int(condval)
+    if cond == 'hp geq':
+        cparts.append(f'hp{condval}')
+    elif cond == 'hp leq':
+        cparts.append(f'hp≤{condval}')
+    elif cond == 'combo':
+        cparts.append(f'hit{condval}')
+    if cparts:
+        return '_'.join(cparts)
+
+
+AB_STATS = {
+    2: 'a',
+    4: 'sp',
+    5: 'dh',
+    8: 'dt',
+    10: 'spd',
+    12: 'cspd'
+}
+def ab_stats(**kwargs):
+    if (stat := AB_STATS.get(kwargs.get('var_a'))) and (upval := kwargs.get('upval')):
+        res = [stat, upval/100]
+        if (condstr := ab_cond(kwargs.get('ab'))):
+            res.append(condstr)
+        return res
+
+def ab_aff_edge(**kwargs):
+    if (a_id := kwargs.get('var_a')):
+        return [f'edge_{AFFLICTION_TYPES.get(a_id, a_id).lower()}', kwargs.get('upval')]
+
+def ab_damage(**kwargs):
+    if upval := kwargs.get('upval'):
+        res = None
+        target = kwargs.get('target')
+        astr = None
+        if target == 'skill':
+            astr = 's'
+        elif target == 'force strike':
+            astr = 'fs'
+        if astr:
+            res = [astr, upval/100]
+        else:
+            cond = kwargs.get('ab').get('_ConditionType')
+            if cond == 'overdrive':
+                res = ['od', upval/100]
+            elif cond == 'break':
+                res = ['bk', upval/100]
+        condstr = ab_cond(kwargs.get('ab'))
+        if res:
+            if condstr:
+                res.append(condstr)
+            return res
+
+def ab_actcond(**kwargs):
+    ab = kwargs['ab']
+    # special case FS prep
+    actcond = kwargs.get('var_a')
+    if not actcond:
+        actcond = kwargs.get('var_str').get('_ActionCondition1')
+    cond = ab.get('_ConditionType')
+    astr = None
+    if cond == 'doublebuff':
+        if (cd := kwargs.get('_CoolTime')):
+            astr = 'bcc'
+        else:
+            astr = 'bc'
+    if cond == 'hp drop under':
+        if ab.get('_OccurenceNum'):
+            astr = 'lo'
+        else:
+            astr = 'ro'
+    if cond == 'every combo':
+        if ab.get('_TargetAction') == 'force strike':
+            return ['fsprep', ab.get('_OccurenceNum'), kwargs.get('var_str').get('_RecoverySpRatio')]
+        if (val := actcond.get('_Tension')):
+            return ['ecombo', int(ab.get('_ConditionValue'))]
+    if cond == 'prep' and (val := actcond.get('_Tension')):
+        return ['eprep', int(val)]
+    if cond == 'claws':
+        if val := actcond.get('_RateSkill'):
+            return ['dcs', 3]
+        else:
+            return ['dc', 3]
+    if astr:
+        if (val := actcond.get('_Tension')):
+            return [f'{astr}_energy', int(val)]
+        if (att := actcond.get('_RateAttack')):
+            return [f'{astr}_att', fr(att)]
+        if (cchance := actcond.get('_RateCritical')):
+            return [f'{astr}_crit_chance', fr(cchance)]
+        if (cdmg := actcond.get('_EnhancedCritical')):
+            return [f'{astr}_crit_damage', fr(cdmg)]
+
+        if (att := actcond.get('_RateDefense')):
+            return [f'{astr}_defense', fr(att)]
+        if (regen := actcond.get('_SlipDamageRatio')):
+            return [f'{astr}_regen', fr(regen*-100)]
+
+
+def ab_generic(name, div=None):
+    def ab_whatever(**kwargs):
+        if (upval := kwargs.get('upval')):
+            res = [name, upval if not div else upval/div]
+            if (condstr := ab_cond(kwargs.get('ab'))):
+                res.append(condstr)
+            return res
+    return ab_whatever
+
+def ab_aff_k(**kwargs):
+    if (a_id := kwargs.get('var_a')):
+        res = [f'k_{AFFLICTION_TYPES.get(a_id, a_id).lower()}', kwargs.get('upval')/100]
+        if (condstr := ab_cond(kwargs.get('ab'))):
+            res.append(condstr)
+        return res
+
+
+ABILITY_CONVERT = {
+    1: ab_stats,
+    3: ab_aff_edge,
+    6: ab_damage,
+    7: ab_generic('cc', 100),
+    11: ab_generic('spf', 100),
+    14: ab_actcond,
+    17: ab_generic('prep'),
+    18: ab_generic('bt'),
+    20: ab_aff_k,
+    26: ab_generic('cd', 100),
+    27: ab_generic('dp'),
+    36: ab_generic('da'),
+}
+SPECIAL = {
+    448: ['sp', 0.08]
+}
+def convert_ability(ab):
+    if special_ab := SPECIAL.get(ab.get('_Id')):
+        return [special_ab], []
+    converted = []
+    skipped = []
+    for i in (1, 2, 3):
+        if not f'_AbilityType{i}' in ab:
+            continue
+        atype = ab[f'_AbilityType{i}']
+        if (convert_a := ABILITY_CONVERT.get(atype)):
+            res = convert_a(
+                # atype=atype,
+                # cond=ab.get('_ConditionType'),
+                # condval=ab.get('_ConditionValue'),
+                # ele=ab.get('_ElementalType'),
+                # wep=ab.get('_WeaponType'),
+                # cd=ab.get('_CoolTime'),
+                ab=ab,
+                target=ab.get(f'_TargetAction{i}'),
+                upval=ab.get(f'_AbilityType{i}UpValue'),
+                var_a=ab.get(f'_VariousId{i}a'),
+                var_b=ab.get(f'_VariousId{i}b'),
+                var_c=ab.get(f'_VariousId{i}c'),
+                var_str=ab.get(f'_VariousId{i}str'),
+            )
+            if res:
+                converted.append(res)
+        elif atype == 43:
+            for a in ('a', 'b', 'c'):
+                if (subab := ab.get(f'_VariousId{i}{a}')):
+                    sub_c, sub_s = convert_ability(subab)
+                    converted.extend(sub_c)
+                    skipped.extend(sub_s)
+    if not converted:
+        skipped.append((ab.get('_Id'), ab.get('_Name')))
+    # skipped.append((ab.get('_Id'), ab.get('_Name')))
+    return converted, skipped
+
+
+def convert_all_ability(ab_lst):
+    all_c, all_s = [], []
+    for ab in ab_lst:
+        converted, skipped = convert_ability(ab)
+        all_c.extend(converted)
+        all_s.extend(skipped)
+    return all_c, all_s
+
+ALWAYS_KEEP = {400127, 400406, 400077, 400128, 400092}
+class WpConf(AmuletData):
+    HDT_PRINT = {
+        "name": "High Dragon Print",
+        "hp": 176,
+        "att": 39,
+        "icon": "HDT",
+        "a": []
+    }
+    def process_result(self, res, exclude_falsy=True):
+        ab_lst = []
+        for i in (1, 2):
+            k = f'_Abilities{i}3'
+            if res.get(k):
+                ab_lst.append(self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy))
+        converted, skipped = convert_all_ability(ab_lst)
+
+        if (len(converted) == 1 or len(skipped) > 0) and res['_BaseId'] not in ALWAYS_KEEP:
+            return None
+
+        conf = {
+            'name': res['_Name'].strip(),
+            'att': res['_MaxAtk'],
+            'hp': res['_MaxHp'],
+            'icon': f'{res["_BaseId"]}_02',
+            'a': converted,
+            # 'skipped': skipped
+        }
+        return conf
+
+    def export_all_to_folder(self, out_dir='./out', ext='.json'):
+        all_res = self.get_all(exclude_falsy=True, where='_Rarity > 3')
+        check_target_path(out_dir)
+        outdata = {}
+        skipped = []
+        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+            conf = self.process_result(res, exclude_falsy=True)
+            if conf:
+                outdata[snakey(res['_Name'])] = conf
+            elif res['_Rarity'] > 3:
+                # skipped.append(f'{res["_BaseId"]}-{res["_Name"]}')
+                skipped.append(res["_Name"])
+        outdata['High_Dragon_Print'] = WpConf.HDT_PRINT
+        output = os.path.join(out_dir, 'wyrmprints.json')
+        with open(output, 'w', newline='', encoding='utf-8') as fp:
+            # json.dump(res, fp, indent=2, ensure_ascii=False)
+            fmt_conf(outdata, f=fp)
+        print('Skipped:', ','.join(skipped))
+
+    def get(self, name):
+        res = super().get(name, full_query=False)
+        return self.process_result(res)
+
+# class DrgConf(DragonData):
+#     def process_result(self, res, exclude_falsy=True):
+#         ab_lst = []
+#         for i in (1, 2):
+#             k = f'_Abilities{i}3'
+#             if res.get(k):
+#                 ab_lst.append(self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy))
+#         converted, skipped = convert_all_ability(ab_lst)
+
+#         if (len(converted) == 1 or len(skipped) > 0) and res['_BaseId'] not in ALWAYS_KEEP:
+#             return None
+
+#         conf = {
+#             'name': res['_Name'].strip(),
+#             'att': res['_MaxAtk'],
+#             'hp': res['_MaxHp'],
+#             'ele': res['']
+#             'icon': f'{res["_BaseId"]}_02',
+#             'a': converted,
+#             # 'skipped': skipped
+#         }
+#         return conf
+
+#     def export_all_to_folder(self, out_dir='./out', ext='.json'):
+#         all_res = self.get_all(exclude_falsy=True, where='_Rarity = 5')
+#         check_target_path(out_dir)
+#         outdata = {}
+#         skipped = []
+#         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+#             conf = self.process_result(res, exclude_falsy=True)
+#             if conf:
+#                 outdata[snakey(res['_Name'])] = conf
+#             elif res['_Rarity'] > 3:
+#                 # skipped.append(f'{res["_BaseId"]}-{res["_Name"]}')
+#                 skipped.append(res["_Name"])
+#         outdata['High_Dragon_Print'] = WpConf.HDT_PRINT
+#         output = os.path.join(out_dir, 'wyrmprints.json')
+#         with open(output, 'w', newline='', encoding='utf-8') as fp:
+#             # json.dump(res, fp, indent=2, ensure_ascii=False)
+#             fmt_conf(outdata, f=fp)
+#         print('Skipped:', ','.join(skipped))
+
+#     def get(self, name):
+#         res = super().get(name, full_query=False)
+#         return self.process_result(res)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', help='_Name/_SecondName')
+    parser.add_argument('-d', help='_Name')
+    parser.add_argument('-wp', help='_Name')
     parser.add_argument('-s', help='_SkillId')
     parser.add_argument('-slv', help='Skill level')
     parser.add_argument('-f', help='_BurstAttackId')
     parser.add_argument('-fm', help='_BurstAttackMarker')
     # parser.add_argument('-x', '_UniqueComboId')
-    parser.add_argument('-w', action='store_true')
+    parser.add_argument('-w', help='_Name')
     args = parser.parse_args()
 
     index = DBViewIndex()
-    out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl', 'conf')
+    out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl', 'conf', 'gen')
 
     if args.s and args.slv:
         view = AdvConf(index)
@@ -625,7 +925,24 @@ if __name__ == '__main__':
         pprint(view.enhanced_fs)
     elif args.a:
         view = AdvConf(index)
-        fmt_conf(view.get(args.a), f=sys.stdout)
+        if args.a == 'all':
+            view.export_all_to_folder(out_dir=out_dir)
+        else:
+            fmt_conf(view.get(args.a), f=sys.stdout)
+    # elif args.d:
+    #     view = DrgConf(index)
+    #     if args.d == 'all':
+    #         view.export_all_to_folder(out_dir=out_dir)
+    #     else:
+    #         wp = view.get(args.d)
+    #         fmt_conf({snakey(wp['name']): wp}, f=sys.stdout)
+    elif args.wp:
+        view = WpConf(index)
+        if args.wp == 'all':
+            view.export_all_to_folder(out_dir=out_dir)
+        else:
+            wp = view.get(args.wp)
+            fmt_conf({snakey(wp['name']): wp}, f=sys.stdout)
     elif args.f:
         view = PlayerAction(index)
         burst = view.get(int(args.f), exclude_falsy=True)
@@ -637,10 +954,6 @@ if __name__ == '__main__':
             marker = view.get(int(args.f)+4, exclude_falsy=True)
         fmt_conf(convert_fs(burst, marker), f=sys.stdout)
     elif args.w:
-        out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl', 'conf', 'gen')
-        view = WepConf(index)
-        view.export_all_to_folder(out_dir=out_dir)
-    else:
-        out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl', 'conf')
-        view = AdvConf(index)
-        view.export_all_to_folder(out_dir=out_dir)
+        if args.w == 'base':
+            view = WepConf(index)
+            view.export_all_to_folder(out_dir=out_dir)
