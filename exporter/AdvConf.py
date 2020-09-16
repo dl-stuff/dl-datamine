@@ -38,8 +38,8 @@ def confsort(a):
     return k
 
 INDENT = '    '
-def fmt_conf(data, k=None, depth=0, f=sys.stdout):
-    if depth >= 2:
+def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
+    if depth >= lim:
         if k == 'attr':
             r_str_lst = []
             end = len(data) - 1
@@ -65,7 +65,7 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout):
         f.write('"')
         f.write(k)
         f.write('": ')
-        res = fmt_conf(v, k, depth+1, f)
+        res = fmt_conf(v, k, depth+1, f, lim)
         if res is not None:
             f.write(res)
         if idx < end:
@@ -247,8 +247,10 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
 
 def hit_sr(parts, seq=None, xlen=None):
     s, r = None, None
+    motion = None
+    use_motion = False
     for part in parts:
-        if part['commandType'] in ('HIT', 'BULLET', 'FORMATION_BULLET', 'SETTING_HIT') and s is None:
+        if ('HIT' in part['commandType'] or 'BULLET' in part['commandType']) and s is None:
             s = fr(part['_seconds'])
         if part['commandType'] == 'ACTIVE_CANCEL':
             recovery = part['_seconds']
@@ -257,11 +259,21 @@ def hit_sr(parts, seq=None, xlen=None):
                     r = recovery
             elif s is not None:
                 r = recovery
+        if part['commandType'] == 'PARTS_MOTION' and part.get('_animation'):
+            motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
+            if part['_animation']['name'][0] == 'D':
+                use_motion = True
+    if use_motion:
+        # maybe ???
+        r = motion
+        return s, r
     if r is None:
         for part in reversed(parts):
             if part['commandType'] == 'ACTIVE_CANCEL':
                 r = part['_seconds']
                 break
+    if r is None:
+        r = motion
     return s, r
 
 
@@ -282,6 +294,8 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
 def convert_x(aid, xn, xlen=5):
     # convert_hitattr(self, hitattr, part, once_per_action, skill=None)
     s, r = hit_sr(xn['_Parts'], seq=aid, xlen=xlen)
+    if s is None:
+        pprint(xn)
     xconf = {
         'startup': s,
         'recovery': r
@@ -327,7 +341,7 @@ def convert_fs(burst, marker=None, cancel=None):
     return fsconf
 
 
-class WepConf(WeaponType):
+class BaseConf(WeaponType):
     LABEL_MAP = {
         'AXE': 'axe',
         'BOW': 'bow',
@@ -364,7 +378,7 @@ class WepConf(WeaponType):
 
     @staticmethod
     def outfile_name(res, ext):
-        return WepConf.LABEL_MAP[res['_Label']]+ext
+        return BaseConf.LABEL_MAP[res['_Label']]+ext
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
         out_dir = os.path.join(out_dir, 'wep')
@@ -377,6 +391,40 @@ class WepConf(WeaponType):
             with open(output, 'w', newline='', encoding='utf-8') as fp:
                 # json.dump(res, fp, indent=2, ensure_ascii=False)
                 fmt_conf(res, f=fp)
+
+def convert_skill_common(skill, lv):
+    action = skill.get('_AdvancedActionId1', skill.get('_ActionId1'))
+    if isinstance(action, int):
+        action = skill.get('_ActionId1')
+
+    timing = (0.1, None)
+    actcancel = None
+    mstate = None
+    for part in action['_Parts']:
+        if part['commandType'] == 'ACTIVE_CANCEL' and '_actionId' not in part and actcancel is None:
+            actcancel = (0.1, part['_seconds'])
+        if part['commandType'] == 'PARTS_MOTION' and mstate is None:
+            if (animation := part.get('_animation')):
+                if isinstance(animation, list):
+                    mstate = (0.1, sum(a['duration'] for a in animation))
+                else:
+                    mstate = (0.1, animation['duration'])
+            if part.get('_motionState') in AdvConf.GENERIC_BUFF:
+                mstate = (0.1, 1.05)
+        if actcancel and mstate:
+            break
+    timing = actcancel or mstate or timing
+
+    if timing[1] is None:
+        AdvConf.MISSING_ENDLAG.append(skill.get('_Name'))
+
+    sconf = {
+        'sp': skill.get(f'_SpLv{lv}', skill.get('_Sp', 0)),
+        'startup': fr(timing[0]),
+        'recovery': None if not timing[1] else fr(timing[1]),
+    }
+    
+    return sconf, action
 
 class AdvConf(CharaData):
     GENERIC_BUFF = ('skill_A', 'skill_B', 'skill_C', 'skill_D')
@@ -415,36 +463,9 @@ class AdvConf(CharaData):
     )
 
     def convert_skill(self, k, seq, skill, lv):
-        action = skill.get('_AdvancedActionId1', skill.get('_ActionId1'))
-        if isinstance(action, int):
-            action = skill.get('_ActionId1')
-
-        timing = (0.1, None)
-        actcancel = None
-        mstate = None
-        for part in action['_Parts']:
-            if part['commandType'] == 'ACTIVE_CANCEL' and '_actionId' not in part and actcancel is None:
-                actcancel = (0.1, part['_seconds'])
-            if part['commandType'] == 'PARTS_MOTION' and mstate is None:
-                if (animation := part.get('_animation')):
-                    mstate = (0.1, animation['duration'])
-                if part.get('_motionState') in AdvConf.GENERIC_BUFF:
-                    mstate = (0.1, 1.05)
-            if actcancel and mstate:
-                break
-        timing = actcancel or mstate or timing
-
-        if timing[1] is None:
-            AdvConf.MISSING_ENDLAG.append(skill.get('_Name'))
-
-        sconf = {
-            'sp': skill.get(f'_SpLv{lv}', skill.get('_Sp', 0)),
-            'startup': fr(timing[0]),
-            'recovery': None if not timing[1] else fr(timing[1]),
-        }
+        sconf, action = convert_skill_common(skill, lv)
 
         if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), adv=self, skill=skill)):
-            adj = None
             sconf['attr'] = hitattrs
 
         if (transkills := skill.get('_TransSkill')) and isinstance(transkills, dict):
@@ -521,7 +542,7 @@ class AdvConf(CharaData):
                             for n, xn in enumerate(xalt[f'_{prefix}ActionId']):
                                 n += 1
                                 if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
-                                    conf[f'x{n}_{mode_name}{prefix.lower()}'] = convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum'])
+                                    conf[f'x{n}_{mode_name}{prefix.lower()}'] = xaltconf
 
         # self.abilities = self.last_abilities(res, as_mapping=True)
         # pprint(self.abilities)
@@ -670,7 +691,8 @@ def ab_actcond(**kwargs):
     # special case FS prep
     actcond = kwargs.get('var_a')
     if not actcond:
-        actcond = kwargs.get('var_str').get('_ActionCondition1')
+        if (var_str := kwargs.get('var_str')):
+            actcond = var_str.get('_ActionCondition1')
     cond = ab.get('_ConditionType')
     astr = None
     if cond == 'doublebuff':
@@ -745,7 +767,7 @@ ABILITY_CONVERT = {
 SPECIAL = {
     448: ['sp', 0.08]
 }
-def convert_ability(ab):
+def convert_ability(ab, debug=False):
     if special_ab := SPECIAL.get(ab.get('_Id')):
         return [special_ab], []
     converted = []
@@ -778,16 +800,15 @@ def convert_ability(ab):
                     sub_c, sub_s = convert_ability(subab)
                     converted.extend(sub_c)
                     skipped.extend(sub_s)
-    if not converted:
+    if debug or not converted:
         skipped.append((ab.get('_Id'), ab.get('_Name')))
-    # skipped.append((ab.get('_Id'), ab.get('_Name')))
     return converted, skipped
 
 
-def convert_all_ability(ab_lst):
+def convert_all_ability(ab_lst, debug=False):
     all_c, all_s = [], []
     for ab in ab_lst:
-        converted, skipped = convert_ability(ab)
+        converted, skipped = convert_ability(ab, debug=debug)
         all_c.extend(converted)
         all_s.extend(skipped)
     return all_c, all_s
@@ -831,9 +852,9 @@ class WpConf(AmuletData):
             conf = self.process_result(res, exclude_falsy=True)
             if conf:
                 outdata[snakey(res['_Name'])] = conf
-            elif res['_Rarity'] > 3:
-                # skipped.append(f'{res["_BaseId"]}-{res["_Name"]}')
-                skipped.append(res["_Name"])
+            else:
+                skipped.append((res['_BaseId'], res['_Name']))
+                # skipped.append(res["_Name"])
         outdata['High_Dragon_Print'] = WpConf.HDT_PRINT
         output = os.path.join(out_dir, 'wyrmprints.json')
         with open(output, 'w', newline='', encoding='utf-8') as fp:
@@ -845,51 +866,125 @@ class WpConf(AmuletData):
         res = super().get(name, full_query=False)
         return self.process_result(res)
 
-# class DrgConf(DragonData):
-#     def process_result(self, res, exclude_falsy=True):
-#         ab_lst = []
-#         for i in (1, 2):
-#             k = f'_Abilities{i}3'
-#             if res.get(k):
-#                 ab_lst.append(self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy))
-#         converted, skipped = convert_all_ability(ab_lst)
+class DrgConf(DragonData):
+    def process_result(self, res, exclude_falsy=True):
+        super().process_result(res, exclude_falsy)
 
-#         if (len(converted) == 1 or len(skipped) > 0) and res['_BaseId'] not in ALWAYS_KEEP:
-#             return None
+        ab_lst = []
+        for i in (1, 2):
+            if (ab := res.get(f'_Abilities{i}5')):
+                ab_lst.append(ab)
+        converted, skipped = convert_all_ability(ab_lst)
 
-#         conf = {
-#             'name': res['_Name'].strip(),
-#             'att': res['_MaxAtk'],
-#             'hp': res['_MaxHp'],
-#             'ele': res['']
-#             'icon': f'{res["_BaseId"]}_02',
-#             'a': converted,
-#             # 'skipped': skipped
-#         }
-#         return conf
+        conf = {
+            'd': {
+                'name': res.get('_SecondName', res['_Name']),
+                'icon': f'{res["_BaseId"]}_{res["_VariationId"]:02}',
+                'att': res['_MaxAtk'],
+                'hp': res['_MaxHp'],
+                'ele': ELEMENTS.get(res['_ElementalType']).lower(),
+                'a': converted
+            }
+        }
+        if skipped:
+            conf['d']['skipped'] = skipped
 
-#     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-#         all_res = self.get_all(exclude_falsy=True, where='_Rarity = 5')
-#         check_target_path(out_dir)
-#         outdata = {}
-#         skipped = []
-#         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-#             conf = self.process_result(res, exclude_falsy=True)
-#             if conf:
-#                 outdata[snakey(res['_Name'])] = conf
-#             elif res['_Rarity'] > 3:
-#                 # skipped.append(f'{res["_BaseId"]}-{res["_Name"]}')
-#                 skipped.append(res["_Name"])
-#         outdata['High_Dragon_Print'] = WpConf.HDT_PRINT
-#         output = os.path.join(out_dir, 'wyrmprints.json')
-#         with open(output, 'w', newline='', encoding='utf-8') as fp:
-#             # json.dump(res, fp, indent=2, ensure_ascii=False)
-#             fmt_conf(outdata, f=fp)
-#         print('Skipped:', ','.join(skipped))
+        for act, key in [('dodge', '_AvoidActionFront'), ('dshift', '_Transform')]:
+            s, r = hit_sr(res[key]['_Parts'])
+            actconf = {
+                'startup': fr(s),
+                'recovery': fr(r)
+            }
+            actconf = hit_attr_adj(res[key], s, actconf, skip_nohitattr=False)
+            conf[act] = actconf
 
-#     def get(self, name):
-#         res = super().get(name, full_query=False)
-#         return self.process_result(res)
+        dcombo = res['_DefaultSkill']
+        dcmax = res['_ComboMax']
+        for n, xn in enumerate(dcombo):
+            n += 1
+            if dxconf := convert_x(xn['_Id'], xn, xlen=dcmax):
+                conf[f'dx{n}'] = dxconf
+
+        dskill = res['_Skill1']
+        sconf, action = convert_skill_common(dskill, 2)
+        sconf['uses'] = dskill.get('_MaxUseNum', 1)
+        
+        if (hitattrs := convert_all_hitattr(action, re.compile(r'.*LV02$'))):
+            sconf['attr'] = hitattrs
+
+        conf['ds'] = sconf
+
+        return conf
+
+    def export_all_to_folder(self, out_dir='./out', ext='.json'):
+        all_res = self.get_all(exclude_falsy=True, where='_Rarity = 5 AND _SellDewPoint = 8500')
+        out_dir = os.path.join(out_dir, 'drg')
+        check_target_path(out_dir)
+        outdata = {
+            'flame': {},
+            'water': {},
+            'wind': {},
+            'light': {},
+            'shadow': {}
+        }
+        # skipped = []
+        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+            conf = self.process_result(res, exclude_falsy=True)
+            # outfile = snakey(conf['d']['ele']) + '.json'
+            if conf:
+                outdata[conf['d']['ele']][snakey(conf['d']['name'])] = conf
+        for ele, data in outdata.items():
+            output = os.path.join(out_dir, f'{ele}.json')
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                fmt_conf(data, f=fp, lim=3)
+        #     else:
+        #         skipped.append(res["_Name"])
+        # print('Skipped:', ','.join(skipped))
+
+    def get(self, name):
+        res = super().get(name, full_query=False)
+        return self.process_result(res)
+
+
+class WepConf(WeaponData):
+    T2_ELE = ('shadow', 'flame')
+    def process_result(self, res, exclude_falsy=True):
+        super().process_result(res, exclude_falsy)
+        if res['_FormId'] % 10 == 1 and res['_ElementalType'] in WepConf.T2_ELE:
+            return None
+        conf = {
+            'name': res['_Name'],
+            'icon': f'{res["_BaseId"]}_{res["_VariationId"]:02}_{res["_FormId"]}',
+            'att': res['_MaxAtk'],
+            'hp': res['_MaxHp'],
+            'ele': res['_ElementalType'].lower(),
+            'wt': res['_Type'].lower(),
+            'tier': res['_FormId'] % 10
+        }
+        return conf
+
+    def export_all_to_folder(self, out_dir='./out', ext='.json'):
+        all_res = self.get_all(exclude_falsy=True, where='_Rarity = 6')
+        check_target_path(out_dir)
+        outdata = {
+            'flame': {},
+            'water': {},
+            'wind': {},
+            'light': {},
+            'shadow': {}
+        }
+        # skipped = []
+        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+            conf = self.process_result(res, exclude_falsy=True)
+            # outfile = snakey(conf['d']['ele']) + '.json'
+            if conf:
+                outdata[conf['ele']][conf['wt']] = conf
+        output = os.path.join(out_dir, f'weapons.json')
+        with open(output, 'w', newline='', encoding='utf-8') as fp:
+            fmt_conf(outdata, f=fp)
+        #     else:
+        #         skipped.append(res["_Name"])
+        # print('Skipped:', ','.join(skipped))
 
 
 if __name__ == '__main__':
@@ -929,13 +1024,13 @@ if __name__ == '__main__':
             view.export_all_to_folder(out_dir=out_dir)
         else:
             fmt_conf(view.get(args.a), f=sys.stdout)
-    # elif args.d:
-    #     view = DrgConf(index)
-    #     if args.d == 'all':
-    #         view.export_all_to_folder(out_dir=out_dir)
-    #     else:
-    #         wp = view.get(args.d)
-    #         fmt_conf({snakey(wp['name']): wp}, f=sys.stdout)
+    elif args.d:
+        view = DrgConf(index)
+        if args.d == 'all':
+            view.export_all_to_folder(out_dir=out_dir)
+        else:
+            d = view.get(args.d)
+            fmt_conf(d, f=sys.stdout)
     elif args.wp:
         view = WpConf(index)
         if args.wp == 'all':
@@ -955,5 +1050,8 @@ if __name__ == '__main__':
         fmt_conf(convert_fs(burst, marker), f=sys.stdout)
     elif args.w:
         if args.w == 'base':
+            view = BaseConf(index)
+            view.export_all_to_folder(out_dir=out_dir)
+        elif args.w == 'all':
             view = WepConf(index)
             view.export_all_to_folder(out_dir=out_dir)

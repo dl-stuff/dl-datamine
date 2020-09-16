@@ -32,10 +32,7 @@ class WeaponData(DBView):
     @staticmethod
     def outfile_name(res, ext='.json'):
         name = 'UNKNOWN' if '_Name' not in res else res['_Name']
-        if '_BaseId' in res:
-            return get_valid_filename(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
-        else:
-            return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
+        return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         out_dir = os.path.join(out_dir, 'weapons')

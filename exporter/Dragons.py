@@ -2,7 +2,7 @@ import json
 import os
 from tabulate import tabulate
 
-from loader.Database import DBViewIndex, DBView, DBDict
+from loader.Database import DBViewIndex, DBView, DBDict, DBManager
 from exporter.Shared import AbilityData, SkillData, PlayerAction
 
 
@@ -28,8 +28,6 @@ class DragonData(DBView):
             '_Name', '_SecondName', '_Profile', '_CvInfo', '_CvInfoEn'])
 
     def process_result(self, res, exclude_falsy, full_query=True, full_abilities=False):
-        if not full_query:
-            return res
         if '_AnimFileName' in res and res['_AnimFileName']:
             anim_key = int(res['_AnimFileName'][1:].replace('_', ''))
         else:
@@ -62,7 +60,11 @@ class DragonData(DBView):
         return res
 
     def get(self, pk, fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+        res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        if not res:
+            res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        if not full_query:
+            return res
         return self.process_result(res, exclude_falsy, full_query, full_abilities)
 
     @staticmethod
