@@ -12,22 +12,17 @@ from exporter.Weapons import WeaponData
 
 
 IMAGE_PATTERNS = {
-    r'^images/icon/chara/l': '../chara',
-    r'^images/icon/dragon/l': '../dragon',
-    r'^images/icon/amulet/l': '../amulet',
-    r'^images/icon/weapon/l': '../weapon'
-}
-
-MANIFESTS = {
-    'jp': 'manifest/assetbundle.manifest.json',
-    'en': 'manifest/assetbundle.en_us.manifest.json',
-    'cn': 'manifest/assetbundle.zh_cn.manifest.json',
-    'tw': 'manifest/assetbundle.zh_tw.manifest.json'
+    'jp': {
+        r'^images/icon/chara/l': '../chara',
+        r'^images/icon/dragon/l': '../dragon',
+        r'^images/icon/amulet/l': '../amulet',
+        r'^images/icon/weapon/l': '../weapon'
+    }
 }
 
 def download_all_icons(out):
-    ex = Extractor(MANIFESTS, ex_dir=None, ex_img_dir=out, stdout_log=False)
-    ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
+    ex = Extractor(ex_dir=None, ex_img_dir=out, stdout_log=False)
+    ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
 
 def make_bv_id(res):
     return f'{res["_BaseId"]}_{res["_VariationId"]:02}'

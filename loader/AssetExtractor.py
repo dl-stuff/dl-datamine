@@ -683,6 +683,14 @@ if __name__ == '__main__':
             # r'^images/uilocalized2/atlascompress/uilocalized2': None,
         }
     }
+    IMAGE_PATTERNS = {
+        'jp': {
+            r'^images/icon/chara/l': '../chara',
+            r'^images/icon/dragon/l': '../dragon',
+            r'^images/icon/amulet/l': '../amulet',
+            r'^images/icon/weapon/l': '../weapon'
+        }
+    }
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':

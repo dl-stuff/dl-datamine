@@ -24,9 +24,13 @@ def ele_bitmap(n):
     return ELEMENTS[seq]
 
 def confsort(a):
-    if '_' in a:
-        return a.split('_')[1]
-    return a
+    k, v = a
+    if k[0] == 'x':
+        try:
+            return 'x'+k.split('_')[1]
+        except IndexError:
+            return k
+    return k
 
 INDENT = '    '
 def fmt_conf(data, k=None, depth=0, f=sys.stdout):
@@ -110,7 +114,6 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                     gen_attrs.append(gattr)
             part_hitattrs.extend(gen_attrs)
         hitattrs.extend(part_hitattrs)
-
     once_per_action = set()
     return hitattrs
 
@@ -245,12 +248,12 @@ def hit_sr(parts, seq=None, xlen=None):
         if part['commandType'] == 'ACTIVE_CANCEL':
             recovery = part['_seconds']
             if seq:
-                if (seq + 1 == part.get('_actionId', 0)) or (seq + 1 - xlen == part.get('_actionId', 0)):
+                if (seq + 1 == part.get('_actionId', 0)) or ((seq + 1 - xlen - part.get('_actionId', 0)) % 100 == 0):
                     r = recovery
             elif s is not None:
                 r = recovery
     if r is None:
-        for part in parts:
+        for part in reversed(parts):
             if part['commandType'] == 'ACTIVE_CANCEL':
                 r = part['_seconds']
                 break
@@ -266,7 +269,7 @@ def hit_attr_adj(action, s, conf, pattern=None):
                 if attr['iv'] == 0:
                     del attr['iv']
         conf['attr'] = hitattrs
-        return conf
+    return conf
 
 
 def convert_x(aid, xn, xlen=5):
