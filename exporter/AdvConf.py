@@ -172,7 +172,10 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                     if isinstance(esk, int) or esk.get('_Id') in adv.all_chara_skills:
                         adv.chara_skill_loop.add(skill['_Id'])
                     else:
-                        s = int(ehs[-1])
+                        try:
+                            s = int(ehs[-1])
+                        except:
+                            s = 1
                         eid = next(adv.eskill_counter)
                         group = 'enhanced' if eid == 1 else f'enhanced{eid}'
                         adv.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, skill['_Id'])
@@ -582,10 +585,16 @@ class AdvConf(CharaData):
                         conf[f's{seq}_phase{p+1}'] = conf[k]
                         del conf[k]
 
+        if (udrg := res.get('_UniqueDragonId')):
+            conf['dragonform'] = self.index['DrgConf'].get(udrg, by='_Id')
+            del conf['dragonform']['d']
+
         return conf
 
     def get(self, name):
         res = super().get(name, full_query=False)
+        if isinstance(res, list):
+            res = res[0]
         return self.process_result(res)
 
     @staticmethod
@@ -717,6 +726,8 @@ def ab_actcond(**kwargs):
             return ['dcs', 3]
         else:
             return ['dc', 3]
+    if cond == 'primed':
+        astr = 'primed'
     if astr:
         if (val := actcond.get('_Tension')):
             return [f'{astr}_energy', int(val)]
@@ -817,9 +828,9 @@ ALWAYS_KEEP = {400127, 400406, 400077, 400128, 400092}
 class WpConf(AmuletData):
     HDT_PRINT = {
         "name": "High Dragon Print",
+        "icon": "HDT",
         "hp": 176,
         "att": 39,
-        "icon": "HDT",
         "a": []
     }
     def process_result(self, res, exclude_falsy=True):
@@ -835,9 +846,9 @@ class WpConf(AmuletData):
 
         conf = {
             'name': res['_Name'].strip(),
+            'icon': f'{res["_BaseId"]}_02',
             'att': res['_MaxAtk'],
             'hp': res['_MaxHp'],
-            'icon': f'{res["_BaseId"]}_02',
             'a': converted,
             # 'skipped': skipped
         }
@@ -860,10 +871,12 @@ class WpConf(AmuletData):
         with open(output, 'w', newline='', encoding='utf-8') as fp:
             # json.dump(res, fp, indent=2, ensure_ascii=False)
             fmt_conf(outdata, f=fp)
-        print('Skipped:', ','.join(skipped))
+        print('Skipped:', skipped)
 
     def get(self, name):
         res = super().get(name, full_query=False)
+        if isinstance(res, list):
+            res = res[0]
         return self.process_result(res)
 
 class DrgConf(DragonData):
@@ -889,14 +902,14 @@ class DrgConf(DragonData):
         if skipped:
             conf['d']['skipped'] = skipped
 
-        for act, key in [('dodge', '_AvoidActionFront'), ('dshift', '_Transform')]:
-            s, r = hit_sr(res[key]['_Parts'])
-            actconf = {
-                'startup': fr(s),
-                'recovery': fr(r)
-            }
-            actconf = hit_attr_adj(res[key], s, actconf, skip_nohitattr=False)
-            conf[act] = actconf
+        # for act, key in [('dodge', '_AvoidActionFront'), ('dshift', '_Transform')]:
+        #     s, r = hit_sr(res[key]['_Parts'])
+        #     actconf = {
+        #         'startup': fr(s),
+        #         'recovery': fr(r)
+        #     }
+        #     actconf = hit_attr_adj(res[key], s, actconf, skip_nohitattr=False)
+        #     conf[act] = actconf
 
         dcombo = res['_DefaultSkill']
         dcmax = res['_ComboMax']
@@ -941,8 +954,10 @@ class DrgConf(DragonData):
         #         skipped.append(res["_Name"])
         # print('Skipped:', ','.join(skipped))
 
-    def get(self, name):
-        res = super().get(name, full_query=False)
+    def get(self, name, by=None):
+        res = super().get(name, by=by, full_query=False)
+        if isinstance(res, list):
+            res = res[0]
         return self.process_result(res)
 
 
@@ -1007,8 +1022,8 @@ if __name__ == '__main__':
         view = AdvConf(index)
         if args.a:
             view.get(args.a)
-        view.eskill_counter = itertools.count()
-        view.efs_counter = itertools.count()
+        view.eskill_counter = itertools.count(start=1)
+        view.efs_counter = itertools.count(start=1)
         view.chara_skills = {}
         view.enhanced_fs = []
         view.chara_skill_loop = set()

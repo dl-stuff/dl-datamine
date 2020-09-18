@@ -59,10 +59,13 @@ class DragonData(DBView):
         self.index['ActionParts'].animation_reference = None
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
-        res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
-        if not res:
-            res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+    def get(self, pk, by=None, fields=None, exclude_falsy=False, full_query=True, full_abilities=False):
+        if by is None:
+            res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+            if not res:
+                res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        else:
+            res = super().get(pk, by=by, fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
         return self.process_result(res, exclude_falsy, full_query, full_abilities)

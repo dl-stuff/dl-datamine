@@ -48,7 +48,7 @@ class CommandType(Enum):
     def _missing_(cls, value):
         return cls.UNKNOWN
 
-
+# seen_id = set()
 def build_db_data(meta, ref, seq, data):
     db_data = {}
     for k in meta.field_type.keys():
@@ -59,11 +59,18 @@ def build_db_data(meta, ref, seq, data):
                 db_data[k] = data[k]
         else:
             db_data[k] = None
-    db_data['_Id'] = f'{ref}{seq:03}'
+    db_data['_Id'] = f'{ref}{seq:05}'
+    # if db_data['_Id'] in seen_id:
+    #     print(db_data['_Id'])
+    # seen_id.add(db_data['_Id'])
     db_data['_ref'] = int(ref)
     db_data['_seq'] = seq
     return db_data
 
+# def build_collision_data(meta, ref, seq, data):
+#     if not data.get('_abHitAttrLabel'):
+#         return None
+#     return build_db_data(meta, ref, seq, data)
 
 def build_bullet(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
@@ -221,6 +228,7 @@ PROCESSORS[CommandType.PARTS_MOTION] = build_db_data
 PROCESSORS[CommandType.MARKER] = build_marker
 PROCESSORS[CommandType.BULLET] = build_bullet
 PROCESSORS[CommandType.HIT] = build_db_data
+# PROCESSORS[CommandType.COLLISION] = build_collision_data
 PROCESSORS[CommandType.SEND_SIGNAL] = build_db_data
 PROCESSORS[CommandType.ACTIVE_CANCEL] = build_db_data
 PROCESSORS[CommandType.MULTI_BULLET] = build_bullet
@@ -275,8 +283,16 @@ def load_actions(db, path):
                     ref = res.group(1)
                     with open(os.path.join(root, file_name)) as f:
                         raw = json.load(f)
-                        action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
-                        for seq, data in enumerate(action):
+                        # action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
+                        action = []
+                        for seq, gameObject in enumerate(raw):
+                            actdata = gameObject.get('_data')
+                            if not actdata:
+                                continue
+                            action.append((seq, actdata))
+                            # if additional := actdata.get('_additionalCollision'):
+                            #     action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
+                        for seq, data in action:
                             command_type = CommandType(data['commandType'])
                             log_schema_keys(schema_map, data, command_type)
                             if command_type in PROCESSORS.keys():
