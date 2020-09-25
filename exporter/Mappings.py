@@ -7,7 +7,7 @@ WEAPON_TYPES = {
     6: 'Bow',
     7: 'Wand',
     8: 'Staff',
-    9: 'Manacaster'
+    9: 'Gun'
 }
 
 ELEMENTS = {

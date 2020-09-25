@@ -80,7 +80,7 @@ class AbilityCrest(DBView):
         res = super().get(pk, by=by, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
-        return self.process_result(res, exclude_falsy, full_query, full_abilities)
+        return self.process_result(res, exclude_falsy, full_abilities)
 
     @staticmethod
     def outfile_name(res, ext='.json'):
@@ -89,7 +89,7 @@ class AbilityCrest(DBView):
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         out_dir = os.path.join(out_dir, 'wyrmprints')
-        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True, full_abilities=False)
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_abilities=False)
 
 
 if __name__ == '__main__':

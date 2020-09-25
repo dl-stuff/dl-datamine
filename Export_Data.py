@@ -7,7 +7,7 @@ from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Enemy import EnemyParam
 from exporter.Weapons import WeaponData, WeaponType
-from exporter.Wyrmprints import AmuletData
+from exporter.Wyrmprints import AbilityCrest, UnionAbility
 from exporter.Shared import ActionCondition, PlayerActionHitAttribute, PlayerAction, AbilityData
 
 CLASSES = [

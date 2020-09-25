@@ -360,6 +360,7 @@ class BaseConf(WeaponType):
         'LAN': 'lance',
         'ROD': 'wand',
         'SWD': 'sword',
+        'GUN': 'gun'
     }
     def process_result(self, res, exclude_falsy=True, full_query=True):
         xnconf = {'lv2':{}}
@@ -367,7 +368,10 @@ class BaseConf(WeaponType):
         res = super().process_result(res, exclude_falsy=True, full_query=True)
         fs_delay = {}
         for n in range(1, 6):
-            xn = res[f'_DefaultSkill0{n}']
+            try:
+                xn = res[f'_DefaultSkill0{n}']
+            except KeyError:
+                break
             xnconf[f'x{n}'] = convert_x(xn['_Id'], xn)
             for part in xn['_Parts']:
                 if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
@@ -609,7 +613,7 @@ class AdvConf(CharaData):
         return snakey(conf['c']['name']) + ext
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        all_res = self.get_all(exclude_falsy=True)
+        all_res = self.get_all(exclude_falsy=True, where='_ElementalType != 99')
         ref_dir = os.path.join(out_dir, '..', 'adv')
         out_dir = os.path.join(out_dir, 'adv')
         check_target_path(out_dir)
