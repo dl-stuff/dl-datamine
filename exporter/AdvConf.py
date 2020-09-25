@@ -692,7 +692,9 @@ def ab_damage(**kwargs):
             res = [astr, upval/100]
         else:
             cond = kwargs.get('ab').get('_ConditionType')
-            if cond == 'overdrive':
+            if cond == 'bleed':
+                res = ['bleed', upval/100]
+            elif cond == 'overdrive':
                 res = ['od', upval/100]
             elif cond == 'break':
                 res = ['bk', upval/100]
@@ -735,6 +737,11 @@ def ab_actcond(**kwargs):
             return ['dc', 3]
     if cond == 'primed':
         astr = 'primed'
+    if cond == 'slayer/striker':
+        if ab.get('_TargetAction') == 'force strike':
+            astr = 'sts'
+        else:
+            astr = 'sls'
     if astr:
         if (val := actcond.get('_Tension')):
             return [f'{astr}_energy', int(val)]
@@ -840,6 +847,7 @@ class WpConf(AbilityCrest):
         "att": 39,
         "a": []
     }
+    SKIP_BOON = (0, 7, 8, 9, 10)
     def process_result(self, res, exclude_falsy=True):
         ab_lst = []
         for i in (1, 2, 3):
@@ -848,8 +856,12 @@ class WpConf(AbilityCrest):
                 ab_lst.append(self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy))
         converted, skipped = convert_all_ability(ab_lst)
 
-        # if (len(converted) == 1 or len(skipped) > 0) and res['_BaseId'] not in ALWAYS_KEEP:
-        #     return None
+        boon = res.get('_UnionAbilityGroupId', 0)
+        if boon in WpConf.SKIP_BOON:
+            if not converted:
+                return
+            if converted[0][0].startswith('sts') or converted[0][0].startswith('sls'):
+                return
 
         conf = {
             'name': res['_Name'].strip(),
@@ -857,7 +869,7 @@ class WpConf(AbilityCrest):
             'att': res['_MaxAtk'],
             'hp': res['_MaxHp'],
             'rarity': res['_Rarity'],
-            'union': res.get('_UnionAbilityGroupId', 0),
+            'union': boon,
             'a': converted,
             # 'skipped': skipped
         }
