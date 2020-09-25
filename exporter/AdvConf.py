@@ -14,12 +14,12 @@ from exporter.Shared import ActionParts, PlayerAction, AbilityData
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponData
-from exporter.Wyrmprints import AmuletData
+from exporter.Wyrmprints import AbilityCrest, UnionAbility
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES
 
 
 def snakey(name):
-    return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name).strip()).replace(' ', '_')
+    return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name.replace('&', 'and')).strip()).replace(' ', '_')
 
 def ele_bitmap(n):
     seq = 1
@@ -110,6 +110,12 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
             gen = int(abd/abi)
             delay = abi
             ref_attrs = [part_hitattrs[-1]]
+        elif (bld := part.get('_bulletDuration', 0)) > (bci := part.get('_collisionHitInterval', 0)):
+            gen = int(bld/bci)
+            delay = bci
+            ref_attrs = [part_hitattrs[0]]
+            # if adv is not None:
+            #     print(adv.name)
         if gen and delay:
             gen_attrs = []
             for gseq in range(1, gen):
@@ -210,7 +216,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                 else:
                     duration = actcond.get('_DurationSec', -1)
                     duration = fr(duration)
-                    btype = 'team' if target == 6 else 'self'
+                    btype = 'team' if target in (2, 6) else 'self'
                 for b in alt_buffs:
                     if btype == 'next' and b[0] == 'fsAlt':
                         b.extend((-1, duration))
@@ -504,6 +510,7 @@ class AdvConf(CharaData):
                 'spiral': res['_MaxLimitBreakCount'] == 5
             }
         }
+        self.name = conf['c']['name']
 
         if (burst := res.get('_BurstAttack')):
             burst = self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)
@@ -769,11 +776,11 @@ ABILITY_CONVERT = {
     11: ab_generic('spf', 100),
     14: ab_actcond,
     17: ab_generic('prep'),
-    18: ab_generic('bt'),
+    18: ab_generic('bt', 100),
     20: ab_aff_k,
     26: ab_generic('cd', 100),
     27: ab_generic('dp'),
-    36: ab_generic('da'),
+    36: ab_generic('da', 100),
 }
 SPECIAL = {
     448: ['sp', 0.08]
@@ -824,8 +831,8 @@ def convert_all_ability(ab_lst, debug=False):
         all_s.extend(skipped)
     return all_c, all_s
 
-ALWAYS_KEEP = {400127, 400406, 400077, 400128, 400092}
-class WpConf(AmuletData):
+# ALWAYS_KEEP = {400127, 400406, 400077, 400128, 400092, 400410}
+class WpConf(AbilityCrest):
     HDT_PRINT = {
         "name": "High Dragon Print",
         "icon": "HDT",
@@ -835,27 +842,29 @@ class WpConf(AmuletData):
     }
     def process_result(self, res, exclude_falsy=True):
         ab_lst = []
-        for i in (1, 2):
+        for i in (1, 2, 3):
             k = f'_Abilities{i}3'
             if res.get(k):
                 ab_lst.append(self.index['AbilityData'].get(res[k], full_query=True, exclude_falsy=exclude_falsy))
         converted, skipped = convert_all_ability(ab_lst)
 
-        if (len(converted) == 1 or len(skipped) > 0) and res['_BaseId'] not in ALWAYS_KEEP:
-            return None
+        # if (len(converted) == 1 or len(skipped) > 0) and res['_BaseId'] not in ALWAYS_KEEP:
+        #     return None
 
         conf = {
             'name': res['_Name'].strip(),
             'icon': f'{res["_BaseId"]}_02',
             'att': res['_MaxAtk'],
             'hp': res['_MaxHp'],
+            'rarity': res['_Rarity'],
+            'union': res.get('_UnionAbilityGroupId', 0),
             'a': converted,
             # 'skipped': skipped
         }
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        all_res = self.get_all(exclude_falsy=True, where='_Rarity > 3')
+        all_res = self.get_all(exclude_falsy=True)
         check_target_path(out_dir)
         outdata = {}
         skipped = []
@@ -878,6 +887,7 @@ class WpConf(AmuletData):
         if isinstance(res, list):
             res = res[0]
         return self.process_result(res)
+    
 
 class DrgConf(DragonData):
     def process_result(self, res, exclude_falsy=True):

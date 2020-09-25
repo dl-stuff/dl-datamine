@@ -664,7 +664,7 @@ if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
         'jp': {
-            r'^action': None,
+            # r'^action': None,
             # r'^images/outgame': None
             # r'_gluonresources/meshes/weapon': None
             # r'^prefabs/outgame/fort/facility': None
@@ -680,17 +680,19 @@ if __name__ == '__main__':
             # r'characters/motion/animationclips$': 'characters_motion',
 
             # r'^dragon/motion': 'dragon_motion',
-            # r'^images/uilocalized2/atlascompress/uilocalized2': None,
+            # r'images/ingame/ui': None,
+            # r'uicommon': None,
+            # r'^images/icon/chara/m': None
         }
     }
-    IMAGE_PATTERNS = {
-        'jp': {
-            r'^images/icon/chara/l': '../chara',
-            r'^images/icon/dragon/l': '../dragon',
-            r'^images/icon/amulet/l': '../amulet',
-            r'^images/icon/weapon/l': '../weapon'
-        }
-    }
+    # IMAGE_PATTERNS = {
+    #     'jp': {
+    #         r'^images/icon/chara/l': '../chara',
+    #         r'^images/icon/dragon/l': '../dragon',
+    #         r'^images/icon/amulet/l': '../amulet',
+    #         r'^images/icon/weapon/l': '../weapon'
+    #     }
+    # }
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
@@ -706,6 +708,6 @@ if __name__ == '__main__':
             ex = Extractor(ex_dir='./_images', mf_mode=1)
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
-        ex = Extractor(stdout_log=True, mf_mode=0)
+        ex = Extractor(stdout_log=False, mf_mode=1)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
         # ex.local_extract('_apk')

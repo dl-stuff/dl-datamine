@@ -168,6 +168,7 @@ ACTION_PART = DBTableMetadata(
 
         # HIT/BULLET
         '_bulletSpeed': DBTableMetadata.REAL,
+        '_bulletDuration': DBTableMetadata.REAL,
         '_delayTime': DBTableMetadata.REAL,
         '_isHitDelete': DBTableMetadata.INT,
         '_hitLabel': DBTableMetadata.TEXT,
