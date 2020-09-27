@@ -531,7 +531,7 @@ class AdvConf(CharaData):
                     s = int(ab['_TargetAction1'][-1])
                     eid = next(self.eskill_counter)
                     group = 'enhanced' if eid == 1 else f'enhanced{eid}'
-                    self.chara_skills[ab[f'_VariousId{s}a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId{s}a'], skill['_Id'])
+                    self.chara_skills[ab[f'_VariousId1a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId1a'], skill['_Id'])
         return sconf, k
 
 

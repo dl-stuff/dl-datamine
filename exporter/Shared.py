@@ -616,10 +616,12 @@ class SkillData(DBView):
                 skill_data['_Id']: None,
                 next_trans_skill['_Id']: next_trans_skill
             }
-            while next_trans_skill['_TransSkill'] != skill_data['_Id']:
+            seen_id = {skill_data['_Id'], next_trans_skill['_Id']}
+            while next_trans_skill['_TransSkill'] not in seen_id:
                 next_trans_skill = self.get(next_trans_skill['_TransSkill'], exclude_falsy=exclude_falsy,
                                             full_query=full_query, full_abilities=full_abilities, full_transSkill=False)
                 trans_skill_group[next_trans_skill['_Id']] = next_trans_skill
+                seen_id.add(next_trans_skill['_Id'])
             skill_data['_TransSkill'] = trans_skill_group
 
         if '_TransBuff' in skill_data and skill_data['_TransBuff'] and (tb := self.index['PlayerAction'].get(skill_data['_TransBuff'], exclude_falsy=exclude_falsy)):

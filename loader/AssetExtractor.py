@@ -408,8 +408,8 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                     sorted_images['Y'], sorted_images['Cb'], sorted_images['Cr'])
                 if 'alpha' in sorted_images:
                     a = sorted_images['alpha'].convert('L')
-                elif sorted_images['Y'].size == (1024, 1024):
-                    a = wyrmprint_alpha
+                # elif sorted_images['Y'].size == (1024, 1024):
+                #     a = wyrmprint_alpha
                 else:
                     a = None
                 if a:
@@ -683,6 +683,7 @@ if __name__ == '__main__':
             # r'images/ingame/ui': None,
             # r'uicommon': None,
             # r'^images/icon/chara/m': None
+            r'^characters/model/.+_h$': None
         }
     }
     # IMAGE_PATTERNS = {
@@ -709,5 +710,6 @@ if __name__ == '__main__':
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
         ex = Extractor(stdout_log=False, mf_mode=1)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
+        # ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
+        ex.download_and_extract_by_pattern_diff(IMAGE_PATTERNS)
         # ex.local_extract('_apk')

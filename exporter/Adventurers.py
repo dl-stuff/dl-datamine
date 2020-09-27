@@ -218,6 +218,8 @@ class CharaData(DBView):
         res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         if not res:
             res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        if not res:
+            res = super().get(pk, by='_Id', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
         return self.process_result(res, exclude_falsy=exclude_falsy, condense=True)
@@ -233,8 +235,11 @@ class CharaData(DBView):
         out_dir = os.path.join(out_dir, 'adventurers')
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
+    def export_one_to_folder(self, pk=10250101, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, 'adventurers')
+        super().export_one_to_folder(pk, out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
 if __name__ == '__main__':
     index = DBViewIndex()
     view = CharaData(index)
-    view.export_all_to_folder()
+    view.export_one_to_folder()
