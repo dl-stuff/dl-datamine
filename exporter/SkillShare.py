@@ -14,10 +14,6 @@ def same(lst):
         return lst[-1]
 
 SPECIAL_EDIT_SKILL = {
-    101502035: 2,
-    101502011: 1,
-    103503029: 1,
-    107503023: 1,
     103505044: 2
 }
 def export_skill_share_json():
@@ -55,8 +51,7 @@ def export_skill_share_json():
                 try:
                     res_data['s'] = SPECIAL_EDIT_SKILL[res['_EditSkillId']]
                 except:
-                    res_data['s'] = -1
-                    print(f'Unhandled special skill share {name} - {res["_EditSkillId"]}')
+                    res_data['s'] = 99
             # res_data['name'] = snakey(skill['_Name'])
             res_data['cost'] = res['_EditSkillCost']
             res_data['type'] = skill['_SkillType']

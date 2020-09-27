@@ -94,5 +94,5 @@ class AbilityCrest(DBView):
 
 if __name__ == '__main__':
     index = DBViewIndex()
-    view = UnionAbility(index)
+    view = AbilityCrest(index)
     view.export_all_to_folder()

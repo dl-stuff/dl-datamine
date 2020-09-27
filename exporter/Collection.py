@@ -7,8 +7,8 @@ from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.AssetExtractor import Extractor
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
-from exporter.Wyrmprints import AmuletData
-from exporter.Weapons import WeaponData
+from exporter.Wyrmprints import AbilityCrest
+from exporter.Weapons import WeaponBody
 
 
 IMAGE_PATTERNS = {
@@ -24,7 +24,7 @@ def download_all_icons(out):
     ex = Extractor(ex_dir=None, ex_img_dir=out, stdout_log=False)
     ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
 
-def make_bv_id(res):
+def make_bv_id(res, view):
     return f'{res["_BaseId"]}_{res["_VariationId"]:02}'
 
 def make_chara_json(res):
@@ -47,7 +47,7 @@ def make_dragon_json(res):
         'Rarity': res['_Rarity']
     }
 
-def make_id(res):
+def make_id(res, view):
     return str(res["_BaseId"])
 
 def make_amulet_json(res):
@@ -58,8 +58,9 @@ def make_amulet_json(res):
         'Rarity': res['_Rarity']
     }
 
-def make_wpn_id(res):
-    return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{res["_FormId"]}'
+def make_wpn_id(res, view):
+    skin = view.index['WeaponSkin'].get(res['_WeaponSkinId'], exclude_falsy=False)
+    return f'{skin["_BaseId"]}_{skin["_VariationId"]:02}_{skin["_FormId"]}'
 
 def make_weapon_json(res):
     return {
@@ -67,9 +68,8 @@ def make_weapon_json(res):
         'NameJP': res['_NameJP'],
         'NameCN': res['_NameCN'],
         'Element': res['_ElementalType'],
-        'Weapon': res['_Type'],
-        'Rarity': res['_Rarity'],
-        'Craft': res['_CraftSeriesId']
+        'Weapon': res['_WeaponType'],
+        'Rarity': res['_Rarity']
     }
 
 from urllib.parse import quote
@@ -153,15 +153,18 @@ def weapon_availability_data(data):
             fields='BaseId,VariationId,FormId,Availability', 
             where='IsPlayable',
             order_by='Id ASC, VariationId ASC'):
-        data[f'{d["title"]["BaseId"]}_{int(d["title"]["VariationId"]):02}_{d["title"]["FormId"]}']['Availability'] = list(map(process_avail('Weapon'), d['title']['Availability'].split(',')))
+        try:
+            data[f'{d["title"]["BaseId"]}_{int(d["title"]["VariationId"]):02}_{d["title"]["FormId"]}']['Availability'] = list(map(process_avail('Weapon'), d['title']['Availability'].split(',')))
+        except KeyError:
+            pass
 
-def make_json(out, outfile, view, id_fn, data_fn, avail_fn, where=None, order='_BaseId ASC, _VariationId ASC'):
+def make_json(out, outfile, view, id_fn, data_fn, avail_fn, where=None, order='_Id ASC'):
     all_res = view.get_all(exclude_falsy=False, where=where, order=order)
     data = {}
     for res in all_res:
         if not res['_Name']:
             continue
-        data[id_fn(res)] = data_fn(res)
+        data[id_fn(res, view)] = data_fn(res)
     avail_fn(data)
     for d in data.copy():
         if 'Availability' not in data[d]:
@@ -183,7 +186,7 @@ if __name__ == '__main__':
     index = DBViewIndex()
     make_json(datadir, 'chara.json', CharaData(index), make_bv_id, make_chara_json, chara_availability_data)
     make_json(datadir, 'dragon.json', DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data)
-    make_json(datadir, 'amulet.json', AmuletData(index), make_id, make_amulet_json, amulet_availability_data)
-    make_json(datadir, 'weapon.json', WeaponData(index), make_wpn_id, make_weapon_json, weapon_availability_data)
+    make_json(datadir, 'amulet.json', AbilityCrest(index), make_id, make_amulet_json, amulet_availability_data)
+    make_json(datadir, 'weapon.json', WeaponBody(index), make_wpn_id, make_weapon_json, weapon_availability_data)
     with open(os.path.join(datadir, 'availabilities.json'), 'w') as f:
         json.dump({k: sorted(list(v)) for k, v in all_avail.items()}, f)

@@ -11,9 +11,9 @@ import argparse
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from exporter.Shared import ActionParts, PlayerAction, AbilityData
-from exporter.Adventurers import CharaData
+from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
-from exporter.Weapons import WeaponType, WeaponData
+from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES
 
@@ -116,6 +116,10 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
             ref_attrs = [part_hitattrs[0]]
             # if adv is not None:
             #     print(adv.name)
+        elif (loopnum := part.get('_loopNum', 0)) > 0:
+            gen = loopnum
+            delay = part.get('_loopFrame', 0) * part.get('_loopSec', 0) # bullshit maffs
+            ref_attrs = [part_hitattrs[0]] if len(part_hitattrs) == 1 else [part_hitattrs[1]]
         if gen and delay:
             gen_attrs = []
             for gseq in range(1, gen):
@@ -288,7 +292,10 @@ def hit_sr(parts, seq=None, xlen=None):
 
 def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
     if (hitattrs := convert_all_hitattr(action, pattern=pattern)):
-        conf['recovery'] = fr(conf['recovery'] - s)
+        try:
+            conf['recovery'] = fr(conf['recovery'] - s)
+        except TypeError:
+            conf['recovery'] = None
         for attr in hitattrs:
             if not isinstance(attr, int) and 'iv' in attr:
                 attr['iv'] = fr(attr['iv'] - s)
@@ -362,32 +369,60 @@ class BaseConf(WeaponType):
         'SWD': 'sword',
         'GUN': 'gun'
     }
+    GUN_MODES = (40, 41, 42)
     def process_result(self, res, exclude_falsy=True, full_query=True):
-        xnconf = {'lv2':{}}
-        fs_id = res['_BurstPhase1']
-        res = super().process_result(res, exclude_falsy=True, full_query=True)
-        fs_delay = {}
-        for n in range(1, 6):
-            try:
-                xn = res[f'_DefaultSkill0{n}']
-            except KeyError:
-                break
-            xnconf[f'x{n}'] = convert_x(xn['_Id'], xn)
-            for part in xn['_Parts']:
-                if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
-                    fs_delay[f'x{n}'] = part.get('_seconds')
-            if (hitattrs := convert_all_hitattr(xn, re.compile(r'.*H0\d_LV02$'))):
-                for attr in hitattrs:
-                    attr['iv'] = fr(attr['iv'] - xnconf[f'x{n}']['startup'])
-                    if attr['iv'] == 0:
-                        del attr['iv']
-                xnconf['lv2'][f'x{n}'] = {'attr': hitattrs}
-        fsconf = convert_fs(res['_BurstPhase1'], res['_ChargeMarker'], res['_ChargeCancel'])
-        startup = fsconf['fs']['startup']
-        for x, delay in fs_delay.items():
-            fsconf['fs'][x] = {'startup': fr(startup+delay)}
-        xnconf.update(fsconf)
-        return xnconf
+        conf = {'lv2':{}}
+        if res['_Label'] != 'GUN':
+            fs_id = res['_BurstPhase1']
+            res = super().process_result(res, exclude_falsy=True, full_query=True)
+            fs_delay = {}
+            fsconf = convert_fs(res['_BurstPhase1'], res['_ChargeMarker'], res['_ChargeCancel'])
+            startup = fsconf['fs']['startup']
+            for x, delay in fs_delay.items():
+                fsconf['fs'][x] = {'startup': fr(startup+delay)}
+            conf.update(fsconf)
+            for n in range(1, 6):
+                try:
+                    xn = res[f'_DefaultSkill0{n}']
+                except KeyError:
+                    break
+                conf[f'x{n}'] = convert_x(xn['_Id'], xn)
+                for part in xn['_Parts']:
+                    if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
+                        fs_delay[f'x{n}'] = part.get('_seconds')
+                if (hitattrs := convert_all_hitattr(xn, re.compile(r'.*H0\d_LV02$'))):
+                    for attr in hitattrs:
+                        attr['iv'] = fr(attr['iv'] - conf[f'x{n}']['startup'])
+                        if attr['iv'] == 0:
+                            del attr['iv']
+                    conf['lv2'][f'x{n}'] = {'attr': hitattrs}
+        else:
+            # gun stuff
+            for mode in BaseConf.GUN_MODES:
+                mode = self.index['CharaModeData'].get(mode, exclude_falsy=exclude_falsy, full_query=True)
+                mode_name = f'gun{mode["_GunMode"]}'
+                if (burst := mode.get('_BurstAttackId')):
+                    marker = burst.get('_BurstMarkerId')
+                    if not marker:
+                        marker = self.index['PlayerAction'].get(burst['_Id']+4, exclude_falsy=True)
+                    for fs, fsc in convert_fs(burst, marker).items():
+                        conf[f'{fs}_{mode_name}'] = fsc
+                if (xalt := mode.get('_UniqueComboId')):
+                    for prefix in ('', 'Ex'):
+                        if xalt.get(f'_{prefix}ActionId'):
+                            for n, xn in enumerate(xalt[f'_{prefix}ActionId']):
+                                n += 1
+                                xn_key = f'x{n}_{mode_name}{prefix.lower()}'
+                                if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
+                                    conf[xn_key] = xaltconf
+                                if (hitattrs := convert_all_hitattr(xn, re.compile(r'.*H0\d_LV02$'))):
+                                    for attr in hitattrs:
+                                        attr['iv'] = fr(attr['iv'] - conf[xn_key]['startup'])
+                                        if attr['iv'] == 0:
+                                            del attr['iv']
+                                    conf['lv2'][xn_key] = {'attr': hitattrs}
+
+        return conf
 
     @staticmethod
     def outfile_name(res, ext):
@@ -398,7 +433,7 @@ class BaseConf(WeaponType):
         all_res = self.get_all(exclude_falsy=True)
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-            out_name = self.outfile_name(res, ext).lower()
+            out_name = self.outfile_name(res, ext)
             res = self.process_result(res, exclude_falsy=True)
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
@@ -423,7 +458,7 @@ def convert_skill_common(skill, lv):
                 else:
                     mstate = (0.1, animation['duration'])
             if part.get('_motionState') in AdvConf.GENERIC_BUFF:
-                mstate = (0.1, 1.05)
+                mstate = (0.1, 1.0)
         if actcancel and mstate:
             break
     timing = actcancel or mstate or timing
@@ -440,7 +475,7 @@ def convert_skill_common(skill, lv):
     return sconf, action
 
 class AdvConf(CharaData):
-    GENERIC_BUFF = ('skill_A', 'skill_B', 'skill_C', 'skill_D')
+    GENERIC_BUFF = ('skill_A', 'skill_B', 'skill_C', 'skill_D', 'skill_006_01')
     BUFFARG_KEY = {
         '_RateAttack': ('att', 'buff'),
         '_RateDefense': ('defense', 'buff'),
@@ -514,6 +549,8 @@ class AdvConf(CharaData):
                 'spiral': res['_MaxLimitBreakCount'] == 5
             }
         }
+        if conf['c']['wt'] == 'gun':
+            conf['c']['gun'] = []
         self.name = conf['c']['name']
 
         if (burst := res.get('_BurstAttack')):
@@ -531,9 +568,17 @@ class AdvConf(CharaData):
             skill = self.index['SkillData'].get(res[f'_Skill{s}'], 
                 exclude_falsy=exclude_falsy, full_query=True)
             self.chara_skills[res[f'_Skill{s}']] = (f's{s}', s, skill, None)
+        if (edit := res.get('_EditSkillId')) and edit not in self.chara_skills:
+            skill = self.index['SkillData'].get(res[f'_EditSkillId'], 
+                exclude_falsy=exclude_falsy, full_query=True)
+            self.chara_skills[res['_EditSkillId']] = (f's99', 99, skill, None)
         for m in range(1, 5):
             if (mode := res.get(f'_ModeId{m}')):
                 mode = self.index['CharaModeData'].get(mode, exclude_falsy=exclude_falsy, full_query=True)
+                if (gunkind := mode.get('_GunMode')):
+                    conf['c']['gun'].append(gunkind)
+                    if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
+                        continue
                 try:
                     mode_name = unidecode(mode['_ActionId']['_Parts'][0]['_actionConditionId']['_Text'].split(' ')[0].lower())
                 except:
@@ -570,10 +615,11 @@ class AdvConf(CharaData):
         while self.chara_skills:
             k, seq, skill, prev_id = next(iter(self.chara_skills.values()))
             self.all_chara_skills[skill.get('_Id')] = (k, seq, skill, prev_id)
-            lv = mlvl[seq]
+            if seq == 99:
+                lv = mlvl[res['_EditSkillLevelNum']]
+            else:
+                lv = mlvl[seq]
             cskill, k = self.convert_skill(k, seq, skill, lv)
-            # cskill['curr_id'] = skill.get('_Id')
-            # cskill['prev_id'] = prev_id
             conf[k] = cskill
             del self.chara_skills[skill.get('_Id')]
 
@@ -849,6 +895,8 @@ class WpConf(AbilityCrest):
         "icon": "HDT",
         "hp": 176,
         "att": 39,
+        "rarity": 5,
+        "union": 0,
         "a": []
     }
     SKIP_BOON = (0, 7, 8, 9, 10)
@@ -987,25 +1035,27 @@ class DrgConf(DragonData):
         return self.process_result(res)
 
 
-class WepConf(WeaponData):
+class WepConf(WeaponBody):
     T2_ELE = ('shadow', 'flame')
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
-        if res['_FormId'] % 10 == 1 and res['_ElementalType'] in WepConf.T2_ELE:
-            return None
+        skin = res['_WeaponSkinId']
+        # if skin['_FormId'] % 10 == 1 and res['_ElementalType'] in WepConf.T2_ELE:
+        #     return None
+        tier = res.get('_MaxLimitOverCount', 0) + 1
         conf = {
             'name': res['_Name'],
-            'icon': f'{res["_BaseId"]}_{res["_VariationId"]:02}_{res["_FormId"]}',
-            'att': res['_MaxAtk'],
-            'hp': res['_MaxHp'],
+            'icon': f'{skin["_BaseId"]}_{skin["_VariationId"]:02}_{skin["_FormId"]}',
+            'att': res[f'_MaxAtk{tier}'],
+            'hp': res[f'_MaxHp{tier}'],
             'ele': res['_ElementalType'].lower(),
-            'wt': res['_Type'].lower(),
-            'tier': res['_FormId'] % 10
+            'wt': res['_WeaponType'].lower(),
+            'tier': tier
         }
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        all_res = self.get_all(exclude_falsy=True, where='_Rarity = 6')
+        all_res = self.get_all(exclude_falsy=True, where='_WeaponSeriesId = 4')
         check_target_path(out_dir)
         outdata = {
             'flame': {},
@@ -1036,6 +1086,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', help='_SkillId')
     parser.add_argument('-slv', help='Skill level')
     parser.add_argument('-f', help='_BurstAttackId')
+    parser.add_argument('-x', help='_UniqueComboId')
     parser.add_argument('-fm', help='_BurstAttackMarker')
     # parser.add_argument('-x', '_UniqueComboId')
     parser.add_argument('-w', help='_Name')
@@ -1089,6 +1140,17 @@ if __name__ == '__main__':
         else:
             marker = view.get(int(args.f)+4, exclude_falsy=True)
         fmt_conf(convert_fs(burst, marker), f=sys.stdout)
+    elif args.x:
+        view = CharaUniqueCombo(index)
+        xalt = view.get(int(args.x), exclude_falsy=True)
+        conf = {}
+        for prefix in ('', 'Ex'):
+            if xalt.get(f'_{prefix}ActionId'):
+                for n, xn in enumerate(xalt[f'_{prefix}ActionId']):
+                    n += 1
+                    if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
+                        conf[f'x{n}_{prefix.lower()}'] = xaltconf
+        fmt_conf(conf, f=sys.stdout)
     elif args.w:
         if args.w == 'base':
             view = BaseConf(index)

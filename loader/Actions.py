@@ -59,6 +59,12 @@ def build_db_data(meta, ref, seq, data):
                 db_data[k] = data[k]
         else:
             db_data[k] = None
+    if (loop := data.get('_loopData')):
+        db_data['_loopFlag'] = loop['flag']
+        db_data['_loopNum'] = loop['loopNum']
+        db_data['_loopFrame'] = loop['restartFrame']
+        db_data['_loopSec'] = loop['restartSec']
+
     db_data['_Id'] = f'{ref}{seq:05}'
     # if db_data['_Id'] in seen_id:
     #     print(db_data['_Id'])
@@ -221,6 +227,12 @@ ACTION_PART = DBTableMetadata(
         # BUFF_FIELD_ATTACH
         '_isAttachToBuffField': DBTableMetadata.INT,
         '_isAttachToSelfBuffField': DBTableMetadata.INT,
+
+        # LOOP DATA
+        '_loopFlag': DBTableMetadata.INT,
+        '_loopNum': DBTableMetadata.INT,
+        '_loopFrame': DBTableMetadata.INT,
+        '_loopSec': DBTableMetadata.REAL,
     }
 )
 
