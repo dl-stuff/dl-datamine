@@ -474,7 +474,7 @@ def load_aiscript_file(file_path):
         bolb.write(root.py_str())
 
 def load_aiscript(path):
-    check_target_path(path)
+    check_target_path(OUTPUT)
     for root, _, files in os.walk(path):
         for file_name in tqdm(files, desc='aiscript'):
             load_aiscript_file(os.path.join(root, file_name))
