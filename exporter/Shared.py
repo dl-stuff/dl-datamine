@@ -90,6 +90,7 @@ class ActionGrant(DBView):
 
 class AbilityData(DBView):
     STAT_ABILITIES = {
+        1: 'hp',
         2: 'strength',
         3: 'defense',
         4: 'skill haste',

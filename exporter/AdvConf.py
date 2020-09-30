@@ -17,6 +17,7 @@ from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES
 
+ONCE_PER_ACT = ('sp', 'dp', 'utp', 'buff', 'afflic', 'bleed', 'extra')
 
 def snakey(name):
     return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name.replace('&', 'and')).strip()).replace(' ', '_')
@@ -78,6 +79,16 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
 def fr(num):
     return round(num, 5)
 
+def clean_hitattr(attr):
+    need_copy = False
+    for act in ONCE_PER_ACT:
+        try:
+            del attr[act]
+            need_copy = True
+        except KeyError:
+            continue
+    return attr, need_copy
+
 def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
     actparts = action['_Parts']
     hitattrs = []
@@ -101,7 +112,12 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
         if not part_hitattrs:
             continue
         if (blt := part.get('_bulletNum', 0)) > 1:
-            part_hitattrs.append(blt)
+            last_copy, need_copy = clean_hitattr(part_hitattrs[-1].copy())
+            if need_copy:
+                part_hitattrs.append(last_copy)
+                part_hitattrs.append(blt-1)
+            else:
+                part_hitattrs.append(blt)
         gen, delay = None, None
         if (gen := part.get('_generateNum')):
             delay = part.get('_generateDelay')
@@ -109,22 +125,27 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
         elif (abd := part.get('_abDuration', 0)) > (abi := part.get('_abHitInterval', 0)):
             gen = int(abd/abi)
             delay = abi
-            ref_attrs = [part_hitattrs[-1]]
+            idx = -1
+            while isinstance(part_hitattrs[idx], int):
+                idx -= 1
+            ref_attrs = [part_hitattrs[idx]]
         elif (bld := part.get('_bulletDuration', 0)) > (bci := part.get('_collisionHitInterval', 0)):
             gen = int(bld/bci)
             delay = bci
             ref_attrs = [part_hitattrs[0]]
             # if adv is not None:
             #     print(adv.name)
-        elif (loopnum := part.get('_loopNum', 0)) > 0:
-            gen = loopnum
-            delay = part.get('_loopFrame', 0) * part.get('_loopSec', 0) # bullshit maffs
+        elif part.get('_loopFlag') and (loopnum := part.get('_loopNum', 0)) > 0:
+            gen = loopnum + 1
+            # delay = part.get('_loopSec', 0)
+            delay = (part.get('_loopFrame', 0) / 60)
             ref_attrs = [part_hitattrs[0]] if len(part_hitattrs) == 1 else [part_hitattrs[1]]
+        
         if gen and delay:
             gen_attrs = []
             for gseq in range(1, gen):
                 for attr in ref_attrs:
-                    gattr = attr.copy()
+                    gattr, _ = clean_hitattr(attr.copy())
                     gattr['iv'] = fr(attr.get('iv', 0)+delay*gseq)
                     gen_attrs.append(gattr)
             part_hitattrs.extend(gen_attrs)
@@ -244,7 +265,11 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
             if buffs:
                 if len(buffs) == 1:
                     buffs = buffs[0]
-                if any(actcond.get(k) for k in AdvConf.OVERWRITE):
+                # if any(actcond.get(k) for k in AdvConf.OVERWRITE):
+                #     buffs.append('-refresh')
+                if actcond.get('_OverwriteGroupId'):
+                    buffs.append(f'-overwrite_{actcond.get("_OverwriteGroupId")}')
+                elif actcond.get('_Overwrite'):
                     buffs.append('-refresh')
                 attr['buff'] = buffs
     if attr:
@@ -287,6 +312,7 @@ def hit_sr(parts, seq=None, xlen=None):
                 break
     if r is None:
         r = motion
+    r = fr(r)
     return s, r
 
 
@@ -429,7 +455,7 @@ class BaseConf(WeaponType):
         return BaseConf.LABEL_MAP[res['_Label']]+ext
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        out_dir = os.path.join(out_dir, 'wep')
+        out_dir = os.path.join(out_dir, 'base')
         all_res = self.get_all(exclude_falsy=True)
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
@@ -501,7 +527,7 @@ class AdvConf(CharaData):
         '_Tension': 'energy',
         '_Inspiration': 'inspiration'
     }
-    OVERWRITE = ('_Overwrite', '_OverwriteVoice', '_OverwriteGroupId')
+    # OVERWRITE = ('_Overwrite', '_OverwriteVoice', '_OverwriteGroupId')
     ENHANCED_SKILL = ('_EnhancedSkill1', '_EnhancedSkill2')
 
     MISSING_ENDLAG = []
@@ -515,6 +541,8 @@ class AdvConf(CharaData):
 
         if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), adv=self, skill=skill)):
             sconf['attr'] = hitattrs
+        if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f'_IsAffectedByTensionLv{lv}'):
+            sconf['energizable'] = bool(skill[f'_IsAffectedByTensionLv{lv}'])
 
         if (transkills := skill.get('_TransSkill')) and isinstance(transkills, dict):
             k = f's{seq}_phase1'
@@ -546,7 +574,8 @@ class AdvConf(CharaData):
                 'hp': res['_MaxHp'],
                 'ele': ELEMENTS[res['_ElementalType']].lower(),
                 'wt': WEAPON_TYPES[res['_WeaponType']].lower(),
-                'spiral': res['_MaxLimitBreakCount'] == 5
+                'spiral': res['_MaxLimitBreakCount'] == 5,
+                'a': []
             }
         }
         if conf['c']['wt'] == 'gun':
@@ -670,14 +699,14 @@ class AdvConf(CharaData):
                 outconf = self.process_result(res, exclude_falsy=True)
                 out_name = self.outfile_name(outconf, ext)
                 output = os.path.join(out_dir, out_name)
-                ref = os.path.join(ref_dir, out_name)
-                if os.path.exists(ref):
-                    with open(ref, 'r', newline='', encoding='utf-8') as fp:
-                        refconf = json.load(fp)
-                        try:
-                            outconf['c']['a'] = refconf['c']['a']
-                        except:
-                            outconf['c']['a'] = []
+                # ref = os.path.join(ref_dir, out_name)
+                # if os.path.exists(ref):
+                #     with open(ref, 'r', newline='', encoding='utf-8') as fp:
+                #         refconf = json.load(fp)
+                #         try:
+                #             outconf['c']['a'] = refconf['c']['a']
+                #         except:
+                #             outconf['c']['a'] = []
                 with open(output, 'w', newline='', encoding='utf-8') as fp:
                     # json.dump(res, fp, indent=2, ensure_ascii=False)
                     fmt_conf(outconf, f=fp)
@@ -711,6 +740,7 @@ def ab_cond(ab):
 
 
 AB_STATS = {
+    1: 'hp',
     2: 'a',
     4: 'sp',
     5: 'dh',
@@ -783,6 +813,8 @@ def ab_actcond(**kwargs):
     if cond == 'claws':
         if val := actcond.get('_RateSkill'):
             return ['dcs', 3]
+        elif val := actcond.get('_RateDefense'):
+            return ['dcd', 3]
         else:
             return ['dc', 3]
     if cond == 'primed':
@@ -838,9 +870,11 @@ ABILITY_CONVERT = {
     26: ab_generic('cd', 100),
     27: ab_generic('dp'),
     36: ab_generic('da', 100),
+    59: ab_generic('dbt', 100)
 }
 SPECIAL = {
-    448: ['sp', 0.08]
+    448: ['sp', 0.08],
+    1402: ['a', 0.08]
 }
 def convert_ability(ab, debug=False):
     if special_ab := SPECIAL.get(ab.get('_Id')):
@@ -998,6 +1032,8 @@ class DrgConf(DragonData):
         
         if (hitattrs := convert_all_hitattr(action, re.compile(r'.*LV02$'))):
             sconf['attr'] = hitattrs
+        if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and dskill.get(f'_IsAffectedByTensionLv2'):
+            sconf['energizable'] = bool(dskill['_IsAffectedByTensionLv2'])
 
         conf['ds'] = sconf
 
@@ -1093,7 +1129,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     index = DBViewIndex()
-    out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl', 'conf', 'gen')
+    # out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl', 'conf', 'gen')
+    out_dir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', 'out', 'gen')
 
     if args.s and args.slv:
         view = AdvConf(index)
