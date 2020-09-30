@@ -43,6 +43,7 @@ class CommandType(Enum):
     ADD_HIT = 105
     ACTION_CONDITON = 111
     BUFF_FIELD_ATTACH = 125
+    PARENT_BULLET = 127
 
     @classmethod
     def _missing_(cls, value):
@@ -254,6 +255,7 @@ PROCESSORS[CommandType.SETTING_HIT] = build_db_data
 PROCESSORS[CommandType.ADD_HIT] = build_db_data
 PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
 PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
+PROCESSORS[CommandType.PARENT_BULLET] = build_bullet
 
 def log_schema_keys(schema_map, data, command_type):
     schema_map[f'{data["commandType"]:03}-{command_type}'] = list(data.keys())
