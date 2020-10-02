@@ -1,5 +1,6 @@
 from UnityPy.export.SpriteHelper import get_triangles
 from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
+from UnityPy.enums import TextureFormat
 import json
 import os
 import errno
@@ -206,7 +207,7 @@ def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
     if stdout_log:
         print('Texture2D', dest, flush=True)
     try:
-        tpl = (dest, data.image)
+        tpl = (dest, data.image, data.m_TextureFormat)
         try:
             texture_2d[data.path_id]['root'] = tpl
         except KeyError:
@@ -516,7 +517,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
         if images is None:
             continue
         for _, data in images.items():
-            dest, img = data['root']
+            dest, img, tx_format = data['root']
             res = IMAGE_ALPHA_INDEX.match(dest)
             if res:
                 dest, designation, index, category = res.groups()
@@ -525,10 +526,14 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
                 continue
             res = IMAGE_CATEGORY.match(dest)
             if res:
-                dest, category = res.groups()
+                destination, category = res.groups()
                 if category == 'C':
                     category = 'color'
-                all_categorized_images[dest][category] = img
+                print(category, tx_format)
+                if category in ('alpha', 'alphaA8', 'A') and tx_format != TextureFormat.Alpha8:
+                    destination = dest
+                    category = 'color'
+                all_categorized_images[destination][category] = img
                 continue
             all_categorized_images[dest]['color'] = img
             if 'sprites' in data:
@@ -594,6 +599,8 @@ class Extractor:
 
     ### multiprocessing ###
     def pool_download_and_extract(self, download_list, extract=None, region=None):
+        if not download_list:
+            return
         NUM_WORKERS = multiprocessing.cpu_count()
         EX_RE = len(download_list[0]) == 2
 
@@ -682,18 +689,10 @@ if __name__ == '__main__':
             # r'^dragon/motion': 'dragon_motion',
             # r'images/ingame/ui': None,
             # r'uicommon': None,
-            # r'^images/icon/chara/m': None
-            r'^characters/model/.+_h$': None
+            r'^images/icon/others/icon_blank_07_a': None
+            # r'^characters/model/.+_h$': None
         }
     }
-    # IMAGE_PATTERNS = {
-    #     'jp': {
-    #         r'^images/icon/chara/l': '../chara',
-    #         r'^images/icon/dragon/l': '../dragon',
-    #         r'^images/icon/amulet/l': '../amulet',
-    #         r'^images/icon/weapon/l': '../weapon'
-    #     }
-    # }
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
@@ -710,6 +709,5 @@ if __name__ == '__main__':
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
         ex = Extractor(stdout_log=False, mf_mode=1)
-        # ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
-        ex.download_and_extract_by_pattern_diff(IMAGE_PATTERNS)
+        ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
         # ex.local_extract('_apk')

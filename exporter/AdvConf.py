@@ -130,7 +130,7 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                 idx -= 1
             ref_attrs = [part_hitattrs[idx]]
         elif (bld := part.get('_bulletDuration', 0)) > (bci := part.get('_collisionHitInterval', 0)):
-            gen = int(bld/bci)
+            gen = int(bld/bci) + 1
             delay = bci
             ref_attrs = [part_hitattrs[0]]
             # if adv is not None:
@@ -183,6 +183,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
     if 'utp' not in once_per_action and ((utp := hitattr.get('_AddUtp')) or (utp := hitattr.get('_AdditionRecoveryUtp'))):
         attr['utp'] = utp
         once_per_action.add('utp')
+    if (hp := hitattr.get('_HpDrainLimitRate')):
+        attr['hp'] = fr(hp*100)
     # if hitattr.get('_RecoveryValue'):
     #     attr['heal'] = fr(hitattr.get('_RecoveryValue'))
     if part.get('commandType') == 'FIRE_STOCK_BULLET' and (stock := action.get('_MaxStockBullet', 0)) > 1:
@@ -299,8 +301,8 @@ def hit_sr(parts, seq=None, xlen=None):
                 r = recovery
         if part['commandType'] == 'PARTS_MOTION' and part.get('_animation'):
             motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
-            if part['_animation']['name'][0] == 'D':
-                use_motion = True
+            # if part['_animation']['name'][0] == 'D':
+            #     use_motion = True
     if use_motion:
         # maybe ???
         r = motion
@@ -927,8 +929,8 @@ class WpConf(AbilityCrest):
     HDT_PRINT = {
         "name": "High Dragon Print",
         "icon": "HDT",
-        "hp": 176,
-        "att": 39,
+        "hp": 80,
+        "att": 20,
         "rarity": 5,
         "union": 0,
         "a": []
@@ -988,6 +990,13 @@ class WpConf(AbilityCrest):
     
 
 class DrgConf(DragonData):
+    HIGH_DRAGONS = (
+        20050102,
+        20050202,
+        20050302,
+        20050402,
+        20050502,
+    )
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
 
@@ -1040,7 +1049,8 @@ class DrgConf(DragonData):
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        all_res = self.get_all(exclude_falsy=True, where='_Rarity = 5 AND _SellDewPoint = 8500')
+        where_str = '_Rarity = 5 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.HIGH_DRAGONS)) +'))'
+        all_res = self.get_all(exclude_falsy=True, where=where_str)
         out_dir = os.path.join(out_dir, 'drg')
         check_target_path(out_dir)
         outdata = {
