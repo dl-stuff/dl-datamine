@@ -530,7 +530,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
                 if category == 'C':
                     category = 'color'
                 print(category, tx_format)
-                if category in ('alpha', 'alphaA8', 'A') and tx_format != TextureFormat.Alpha8:
+                if category in ('alphaA8', 'A') and tx_format != TextureFormat.Alpha8:
                     destination = dest
                     category = 'color'
                 all_categorized_images[destination][category] = img
