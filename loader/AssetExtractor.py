@@ -390,7 +390,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                 for alpha in ('alpha', 'A', 'alphaA8'):
                     try:
                         alpha_img = sorted_images[alpha]
-                        if alpha_img.mode == 'RGB':
+                        if alpha_img.mode == 'RGB' or alpha_img.getextrema()[3][0] == 255:
                             a = alpha_img.convert('L')
                         else:
                             _, _, _, a = alpha_img.split()
@@ -529,7 +529,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
                 destination, category = res.groups()
                 if category == 'C':
                     category = 'color'
-                if category in ('alphaA8', 'A') and tx_format != TextureFormat.Alpha8:
+                if category in ('alpha', 'alphaA8', 'A') and tx_format not in (TextureFormat.Alpha8, TextureFormat.ETC_RGB4):
                     destination = dest
                     category = 'color'
                 all_categorized_images[destination][category] = img
@@ -688,7 +688,7 @@ if __name__ == '__main__':
             # r'^dragon/motion': 'dragon_motion',
             # r'images/ingame/ui': None,
             # r'uicommon': None,
-            r'^images/icon/others/icon_blank_07_a': None
+            r'^images/ingame/ui': None
             # r'^characters/model/.+_h$': None
         }
     }
@@ -707,6 +707,6 @@ if __name__ == '__main__':
             ex = Extractor(ex_dir='./_images', mf_mode=1)
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
-        ex = Extractor(stdout_log=False, mf_mode=1)
+        ex = Extractor(stdout_log=False, overwrite=False, mf_mode=1)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
         # ex.local_extract('_apk')
