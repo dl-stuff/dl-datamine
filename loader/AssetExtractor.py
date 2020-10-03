@@ -529,7 +529,6 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
                 destination, category = res.groups()
                 if category == 'C':
                     category = 'color'
-                print(category, tx_format)
                 if category in ('alphaA8', 'A') and tx_format != TextureFormat.Alpha8:
                     destination = dest
                     category = 'color'
