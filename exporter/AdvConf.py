@@ -77,7 +77,10 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
     f.write('}')
 
 def fr(num):
-    return round(num, 5)
+    try:
+        return round(num, 5)
+    except TypeError:
+        return 0
 
 def clean_hitattr(attr):
     need_copy = False

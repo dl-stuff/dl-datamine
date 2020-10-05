@@ -529,7 +529,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
                 destination, category = res.groups()
                 if category == 'C':
                     category = 'color'
-                if category in ('alpha', 'alphaA8', 'A') and tx_format not in (TextureFormat.Alpha8, TextureFormat.ETC_RGB4):
+                if category in ('alphaA8', 'A') and tx_format not in (TextureFormat.Alpha8, TextureFormat.ETC_RGB4):
                     destination = dest
                     category = 'color'
                 all_categorized_images[destination][category] = img
@@ -688,7 +688,7 @@ if __name__ == '__main__':
             # r'^dragon/motion': 'dragon_motion',
             # r'images/ingame/ui': None,
             # r'uicommon': None,
-            r'^images/ingame/ui': None
+            r'^images/icon/form': None
             # r'^characters/model/.+_h$': None
         }
     }

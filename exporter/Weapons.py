@@ -43,6 +43,18 @@ class WeaponSkin(DBView):
     def __init__(self, index):
         super().__init__(index, 'WeaponSkin', labeled_fields=['_Name'])
 
+class WeaponBodyGroupSeries(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBodyGroupSeries', labeled_fields=['_GroupSeriesName', '_SeriesLockText'])
+
+class WeaponBodyRarity(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBodyRarity')
+
+class WeaponBodyBuildupGroup(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBodyBuildupGroup')
+
 class WeaponBody(DBView):
     WEAPON_SKINS = (
         '_WeaponSkinId',
@@ -58,9 +70,11 @@ class WeaponBody(DBView):
     def process_result(self, res, exclude_falsy=True, full_query=True):
         if not full_query:
             return res
-        if '_WeaponType' in res:
+        if res.get('_WeaponSeriesId'):
+            res['_WeaponSeriesId'] = self.index['WeaponBodyGroupSeries'].get(res['_WeaponSeriesId'], exclude_falsy=exclude_falsy)
+        if res.get('_WeaponType'):
             res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
-        if '_ElementalType' in res:
+        if res.get('_ElementalType'):
             res['_ElementalType'] = ELEMENTS.get(res['_ElementalType'], res['_ElementalType'])
         skill_ids = {0}
         for i in (3, 2, 1):

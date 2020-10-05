@@ -350,7 +350,8 @@ ABILITY_TYPES = {
     #   "_VariousId1a": 435,
     #   "_VariousId1b": 304030301,
     #   "_VariousId1c": 1084,
-    63: AbilityData.action_condition_timer
+    63: AbilityData.action_condition_timer,
+    65: AbilityData.action_reference
 }
 
 
@@ -639,6 +640,11 @@ class SkillData(DBView):
         skill_data = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
         return self.process_result(skill_data, exclude_falsy=exclude_falsy,
                                    full_query=full_query, full_abilities=full_abilities, full_transSkill=full_transSkill, full_chainSkill=full_chainSkill)
+
+
+class MaterialData(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'MaterialData', labeled_fields=['_Name', '_Detail', '_Description'])
 
 
 if __name__ == '__main__':

@@ -37,7 +37,8 @@ AFFLICTION_TYPES = {
     8: 'UNKNOWN08',
     9: 'Bog',
     10: 'Sleep',
-    11: 'Frostbite'
+    11: 'Frostbite',
+    12: 'Flashburn'
 }
 
 KILLER_STATE = {
