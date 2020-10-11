@@ -6,11 +6,11 @@ from collections import defaultdict
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.AssetExtractor import Extractor
-from exporter.Shared import MaterialData
+from exporter.Shared import MaterialData, AbilityData
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Wyrmprints import AbilityCrest
-from exporter.Weapons import WeaponBody, WeaponBodyBuildupGroup, WeaponBodyGroupSeries
+from exporter.Weapons import WeaponBody, WeaponBodyBuildupGroup, WeaponBodyGroupSeries, WeaponPassiveAbility
 
 
 IMAGE_PATTERNS = {
@@ -19,13 +19,21 @@ IMAGE_PATTERNS = {
         r'^images/icon/dragon/l': '../dragon',
         r'^images/icon/amulet/l': '../amulet',
         r'^images/icon/weapon/l': '../weapon',
-        r'^images/icon/item/materialdata/l': '../material'
+        # r'^images/icon/item/materialdata/l': '../material'
     }
 }
 
 def download_all_icons(out):
     ex = Extractor(ex_dir=None, ex_img_dir=out, stdout_log=False)
     ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
+
+ability_icons = set()
+material_icons = set()
+# images/icon/ability/l/
+def download_set_icons(out, icon_set, prefix, dest):
+    patterns = {'jp': {f'{prefix}{ic}': dest for ic in icon_set}}
+    ex = Extractor(ex_dir=None, ex_img_dir=out, stdout_log=False)
+    ex.download_and_extract_by_pattern(patterns)
 
 def make_bv_id(res, view):
     return f'{res["_BaseId"]}_{res["_VariationId"]:02}'
@@ -179,7 +187,7 @@ def make_wpn_id(skin):
 
 BUILDUP_PIECE = {
     1: 'Unbind',
-    2: 'Refinement',
+    2: 'Refine',
     3: 'Slots',
     5: 'Bonus',
     6: 'Copies'
@@ -196,6 +204,7 @@ def make_weapon_jsons(out, index):
             k2 = f'_BuildupMaterialQuantity{i}'
             try:
                 mats[res[k1]] = res[k2]
+                material_icons.add(res[k1])
             except KeyError:
                 continue
         processed[res['_WeaponBodyBuildupGroupId']][res['_BuildupPieceType']].append({
@@ -209,14 +218,15 @@ def make_weapon_jsons(out, index):
     outfile = 'weaponbuild.json'
     check_target_path(out)
     with open(os.path.join(out, outfile), 'w') as f:
-        json.dump(processed, f, indent=2)
+        json.dump(processed, f)
 
     view = WeaponBody(index)
     all_res = view.get_all(exclude_falsy=True)
     processed = {}
     for res in all_res:
-        if not res.get('_Name'):
+        if not res.get('_Name') or (not res.get('_WeaponBodyBuildupGroupId') and not res.get('_WeaponPassiveAbilityGroupId')):
             continue
+
         skins = {}
         for i, sid in enumerate(WeaponBody.WEAPON_SKINS):
             try:
@@ -232,18 +242,59 @@ def make_weapon_jsons(out, index):
             k2 = f'_CreateEntityQuantity{i}'
             try:
                 mats[res[k1]] = res[k2]
+                material_icons.add(res[k1])
             except KeyError:
                 continue
+        passive = None
+        if res.get('_WeaponPassiveAbilityGroupId'):
+            passive_ab_group = index['WeaponPassiveAbility'].get(res['_WeaponPassiveAbilityGroupId'], by='_WeaponPassiveAbilityGroupId', exclude_falsy=True)
+            passive = {}
+            for p in passive_ab_group:
+                ab = index['AbilityData'].get(p['_AbilityId'], full_query=False)
+                ability_icons.add(ab['_AbilityIconName'].lower())
+                ab_skins = {}
+                for i in (1, 2):
+                    sid = f'_RewardWeaponSkinId{i}'
+                    try:
+                        skin = index['WeaponSkin'].get(p[sid], exclude_falsy=True)
+                        ab_skins[i] = make_wpn_id(skin)
+                    except (KeyError, TypeError):
+                        continue
+                ab_mats = {}
+                for i in range(1, 6):
+                    k1 = f'_UnlockMaterialId{i}'
+                    k2 = f'_UnlockMaterialQuantity{i}'
+                    try:
+                        ab_mats[p[k1]] = p[k2]
+                        material_icons.add(p[k1])
+                    except KeyError:
+                        continue
+                ability_val0 = int(ab.get('_AbilityType1UpValue', 0))
+                ability_info = {
+                    'Icon': ab['_AbilityIconName'],
+                    'NameEN': ab['_Name'].format(ability_val0=ability_val0).strip(),
+                    'NameJP': ab['_NameJP'].format(ability_val0=ability_val0).strip(),
+                    'NameCN': ab['_NameCN'].format(ability_val0=ability_val0).strip(),
+                }
+                    
+                passive[p['_WeaponPassiveAbilityNo']] = {
+                    'UnbindReq': p.get('_UnlockConditionLimitBreakCount', 0),
+                    'Ability': ability_info,
+                    'Cost': p.get('_UnlockCoin', 0),
+                    'Mats': ab_mats,
+                    'Skins': ab_skins
+                }
+
         processed[res['_Id']] = {
             'NameEN': res['_Name'],
             'NameJP': res['_NameJP'],
             'NameCN': res['_NameCN'],
             'Series': res['_WeaponSeriesId'],
             'Build': res.get('_WeaponBodyBuildupGroupId'),
+            'Passive': passive,
             'Element': res['_ElementalType'],
             'Weapon': res['_WeaponType'],
             'Rarity': res['_Rarity'],
-            'Unbind': (res.get('_MaxLimitOverCount', -1) + 1) * 4, # check WeaponBodyRarity
             'Prereq': {
                 'Create': prereqcreate,
                 'FullUp': prereqfull
@@ -251,12 +302,12 @@ def make_weapon_jsons(out, index):
             'Cost': res.get('_CreateCoin', 0),
             'Mats': mats,
             'Skins': skins,
-            'Bonus': any([res.get('_WeaponPassiveEffHp'), res.get('_WeaponPassiveEffAtk')]),
+            # 'Bonus': any([res.get('_WeaponPassiveEffHp'), res.get('_WeaponPassiveEffAtk')]),
         }
     outfile = 'weapon.json'
     check_target_path(out)
     with open(os.path.join(out, outfile), 'w') as f:
-        json.dump(processed, f, indent=2)
+        json.dump(processed, f)
 
 
 if __name__ == '__main__':
@@ -267,14 +318,17 @@ if __name__ == '__main__':
         'Weapon': set()
     }
     outdir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl-collection')
-    # download_all_icons(os.path.join(outdir, 'public'))
+    imgdir = os.path.join(outdir, 'public')
+    # download_all_icons(imgdir)
     datadir = os.path.join(outdir, 'src', 'data')
     index = DBViewIndex()
-    # make_json(datadir, 'chara.json', CharaData(index), make_bv_id, make_chara_json, chara_availability_data)
-    # make_json(datadir, 'dragon.json', DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data)
-    # make_json(datadir, 'amulet.json', AbilityCrest(index), make_base_id, make_amulet_json, amulet_availability_data)
-    # with open(os.path.join(datadir, 'availabilities.json'), 'w') as f:
-    #     json.dump({k: sorted(list(v)) for k, v in all_avail.items()}, f)
-    # make_json(datadir, 'material.json', MaterialData(index), make_id, make_material_json)
-    # make_json(datadir, 'weaponseries.json', WeaponBodyGroupSeries(index), make_id, make_weapon_series_json, name_key='_GroupSeriesName')
+    make_json(datadir, 'chara.json', CharaData(index), make_bv_id, make_chara_json, chara_availability_data, where='_ElementalType != 99')
+    make_json(datadir, 'dragon.json', DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data)
+    make_json(datadir, 'amulet.json', AbilityCrest(index), make_base_id, make_amulet_json, amulet_availability_data)
+    with open(os.path.join(datadir, 'availabilities.json'), 'w') as f:
+        json.dump({k: sorted(list(v)) for k, v in all_avail.items()}, f)
+    make_json(datadir, 'material.json', MaterialData(index), make_id, make_material_json)
+    make_json(datadir, 'weaponseries.json', WeaponBodyGroupSeries(index), make_id, make_weapon_series_json, name_key='_GroupSeriesName')
     make_weapon_jsons(datadir, index)
+    # download_set_icons(imgdir, ability_icons, 'images/icon/ability/l/', '../ability')
+    # download_set_icons(imgdir, material_icons, 'images/icon/item/materialdata/l/', '../material')

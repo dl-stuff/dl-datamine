@@ -55,6 +55,10 @@ class WeaponBodyBuildupGroup(DBView):
     def __init__(self, index):
         super().__init__(index, 'WeaponBodyBuildupGroup')
 
+class WeaponPassiveAbility(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponPassiveAbility')
+
 class WeaponBody(DBView):
     WEAPON_SKINS = (
         '_WeaponSkinId',
@@ -72,6 +76,8 @@ class WeaponBody(DBView):
             return res
         if res.get('_WeaponSeriesId'):
             res['_WeaponSeriesId'] = self.index['WeaponBodyGroupSeries'].get(res['_WeaponSeriesId'], exclude_falsy=exclude_falsy)
+        if res.get('_WeaponPassiveAbilityGroupId'):
+            res['_WeaponPassiveAbilityGroupId'] = self.index['WeaponPassiveAbility'].get(res['_WeaponPassiveAbilityGroupId'], by='_WeaponPassiveAbilityGroupId', exclude_falsy=exclude_falsy)
         if res.get('_WeaponType'):
             res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
         if res.get('_ElementalType'):

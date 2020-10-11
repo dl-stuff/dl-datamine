@@ -695,7 +695,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) > 1:
         if sys.argv[1] == 'diff':
-            ex = Extractor(ex_dir=None)
+            ex = Extractor(dl_dir='./_dl_diff', ex_dir=None)
             if len(sys.argv) > 2:
                 region = sys.argv[2]
                 print(f'{region}: ', flush=True, end='')

@@ -37,11 +37,7 @@ def export_skill_share_json():
             name = snakey(res['_Name']) if not res['_SecondName'] else snakey(res['_SecondName'])
         except:
             continue
-        if name == 'The_Prince':
-            name = 'Euden'
-        if name == 'Gala_Prince':
-            name = 'Gala_Euden'
-        if res['_EditSkillId'] > 0:
+        if res['_EditSkillId'] > 0 and res['_EditSkillCost'] > 0:
             skill = index['SkillData'].get(res['_EditSkillId'], exclude_falsy=False)
             if res['_EditSkillId'] == res['_Skill1']:
                 res_data['s'] = 1

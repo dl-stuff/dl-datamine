@@ -188,6 +188,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
         once_per_action.add('utp')
     if (hp := hitattr.get('_HpDrainLimitRate')):
         attr['hp'] = fr(hp*100)
+    if (cp := hitattr.get('_RecoveryCP')):
+        attr['cp'] = cp
     # if hitattr.get('_RecoveryValue'):
     #     attr['heal'] = fr(hitattr.get('_RecoveryValue'))
     if part.get('commandType') == 'FIRE_STOCK_BULLET' and (stock := action.get('_MaxStockBullet', 0)) > 1:
@@ -240,7 +242,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                 if part.get('_lifetime'):
                     duration = fr(part.get('_lifetime'))
                     btype = 'zone'
-                elif actcond.get('_DurationNum'):
+                elif actcond.get('_DurationNum') and not actcond.get('_DurationSec'):
                     duration = actcond.get('_DurationNum')
                     btype = 'next'
                 else:
@@ -636,6 +638,10 @@ class AdvConf(CharaData):
                                 n += 1
                                 if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
                                     conf[f'x{n}_{mode_name}{prefix.lower()}'] = xaltconf
+        try:
+            conf['c']['gun'] = list(set(conf['c']['gun']))
+        except KeyError:
+            pass
 
         # self.abilities = self.last_abilities(res, as_mapping=True)
         # pprint(self.abilities)
@@ -993,12 +999,13 @@ class WpConf(AbilityCrest):
     
 
 class DrgConf(DragonData):
-    HIGH_DRAGONS = (
+    EXTRA_DRAGONS = (
         20050102,
         20050202,
         20050302,
         20050402,
         20050502,
+        20050507,
     )
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
@@ -1052,7 +1059,7 @@ class DrgConf(DragonData):
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        where_str = '_Rarity = 5 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.HIGH_DRAGONS)) +'))'
+        where_str = '_Rarity = 5 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.EXTRA_DRAGONS)) +'))'
         all_res = self.get_all(exclude_falsy=True, where=where_str)
         out_dir = os.path.join(out_dir, 'drg')
         check_target_path(out_dir)

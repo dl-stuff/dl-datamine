@@ -45,7 +45,7 @@ KILLER_STATE = {
     **AFFLICTION_TYPES,
     99: 'afflicted',
     103: 'debuff_def',
-    198: 'buff', # or maybe only burning ambition?
+    198: 'buff',
     199: 'debuff',
     201: 'break'
 }
