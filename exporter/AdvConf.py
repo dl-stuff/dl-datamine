@@ -340,7 +340,7 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
     return conf
 
 
-def convert_x(aid, xn, xlen=5):
+def convert_x(aid, xn, xlen=5, pattern=None):
     # convert_hitattr(self, hitattr, part, once_per_action, skill=None)
     s, r = hit_sr(xn['_Parts'], seq=aid, xlen=xlen)
     if s is None:
@@ -349,7 +349,7 @@ def convert_x(aid, xn, xlen=5):
         'startup': s,
         'recovery': r
     }
-    xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False)
+    xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
     return xconf
 
 
@@ -608,9 +608,12 @@ class AdvConf(CharaData):
             skill = self.index['SkillData'].get(res[f'_EditSkillId'], 
                 exclude_falsy=exclude_falsy, full_query=True)
             self.chara_skills[res['_EditSkillId']] = (f's99', 99, skill, None)
+
         for m in range(1, 5):
             if (mode := res.get(f'_ModeId{m}')):
                 mode = self.index['CharaModeData'].get(mode, exclude_falsy=exclude_falsy, full_query=True)
+                if not mode:
+                    continue
                 if (gunkind := mode.get('_GunMode')):
                     conf['c']['gun'].append(gunkind)
                     if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
@@ -632,11 +635,14 @@ class AdvConf(CharaData):
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f'{fs}_{mode_name}'] = fsc
                 if (xalt := mode.get('_UniqueComboId')):
+                    xalt_pattern = re.compile(r'.*H0\d_LV02$') if conf['c']['spiral'] else None
                     for prefix in ('', 'Ex'):
                         if xalt.get(f'_{prefix}ActionId'):
                             for n, xn in enumerate(xalt[f'_{prefix}ActionId']):
                                 n += 1
-                                if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum']):
+                                if xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum'], pattern=xalt_pattern):
+                                    conf[f'x{n}_{mode_name}{prefix.lower()}'] = xaltconf
+                                elif xalt_pattern is not None and (xaltconf := convert_x(xn['_Id'], xn, xlen=xalt['_MaxComboNum'])):
                                     conf[f'x{n}_{mode_name}{prefix.lower()}'] = xaltconf
         try:
             conf['c']['gun'] = list(set(conf['c']['gun']))

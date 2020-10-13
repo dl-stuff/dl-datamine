@@ -670,26 +670,7 @@ if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
         'jp': {
-            # r'^action': None,
-            # r'^images/outgame': None
-            # r'_gluonresources/meshes/weapon': None
-            # r'^prefabs/outgame/fort/facility': None
-
-            # r'^characters/motion/axe': 'characters_motion',
-            # r'^characters/motion/bow': 'characters_motion',
-            # r'^characters/motion/can': 'characters_motion',
-            # r'^characters/motion/dag': 'characters_motion',
-            # r'^characters/motion/kat': 'characters_motion',
-            # r'^characters/motion/lan': 'characters_motion',
-            # r'^characters/motion/rod': 'characters_motion',
-            # r'^characters/motion/swd': 'characters_motion',
-            # r'characters/motion/animationclips$': 'characters_motion',
-
-            # r'^dragon/motion': 'dragon_motion',
-            # r'images/ingame/ui': None,
-            # r'uicommon': None,
-            r'^images/icon/form': None
-            # r'^characters/model/.+_h$': None
+            r'^images/icon/dragon/m/': None
         }
     }
 

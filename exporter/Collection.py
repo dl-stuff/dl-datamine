@@ -193,6 +193,9 @@ BUILDUP_PIECE = {
     6: 'Copies'
 }
 
+def make_amulet_buildup_group(out, index):
+    
+
 def make_weapon_jsons(out, index):
     view = WeaponBodyBuildupGroup(index)
     all_res = view.get_all(exclude_falsy=True)
