@@ -76,7 +76,8 @@ def make_material_json(res):
     return {
         'NameEN': res['_Name'],
         'NameJP': res['_NameJP'],
-        'NameCN': res['_NameCN']
+        'NameCN': res['_NameCN'],
+        'SortId': res['_SortId']
     }
 
 def make_weapon_series_json(res):
@@ -192,9 +193,6 @@ BUILDUP_PIECE = {
     5: 'Bonus',
     6: 'Copies'
 }
-
-def make_amulet_buildup_group(out, index):
-    
 
 def make_weapon_jsons(out, index):
     view = WeaponBodyBuildupGroup(index)
@@ -322,7 +320,6 @@ if __name__ == '__main__':
     }
     outdir = os.path.join(pathlib.Path(__file__).parent.absolute(), '..', '..', 'dl-collection')
     imgdir = os.path.join(outdir, 'public')
-    # download_all_icons(imgdir)
     datadir = os.path.join(outdir, 'src', 'data')
     index = DBViewIndex()
     make_json(datadir, 'chara.json', CharaData(index), make_bv_id, make_chara_json, chara_availability_data, where='_ElementalType != 99')
@@ -333,5 +330,7 @@ if __name__ == '__main__':
     make_json(datadir, 'material.json', MaterialData(index), make_id, make_material_json)
     make_json(datadir, 'weaponseries.json', WeaponBodyGroupSeries(index), make_id, make_weapon_series_json, name_key='_GroupSeriesName')
     make_weapon_jsons(datadir, index)
+
+    # download_all_icons(imgdir)
     # download_set_icons(imgdir, ability_icons, 'images/icon/ability/l/', '../ability')
     # download_set_icons(imgdir, material_icons, 'images/icon/item/materialdata/l/', '../material')

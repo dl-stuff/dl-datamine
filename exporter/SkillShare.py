@@ -65,18 +65,6 @@ def export_skill_share_json():
 
     with open('../dl/conf/skillshare.json', 'w', newline='') as f:
         json.dump(skill_share_data, f, indent=2)
-    # with open('skillshare.csv', 'w') as f:
-    #     f.write('name')
-    #     for k in res_data.keys():
-    #         f.write(',')
-    #         f.write(k)
-    #     f.write('\n')
-    #     for name, data in skill_share_data.items():
-    #         f.write(name)
-    #         for v in data.values():
-    #             f.write(',')
-    #             f.write(str(v))
-    #         f.write('\n')
 
 
 if __name__ == '__main__':

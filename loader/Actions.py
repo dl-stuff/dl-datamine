@@ -234,6 +234,13 @@ ACTION_PART = DBTableMetadata(
         '_loopNum': DBTableMetadata.INT,
         '_loopFrame': DBTableMetadata.INT,
         '_loopSec': DBTableMetadata.REAL,
+
+        # TIMESTOP
+        '_stopMotionPositionSec': DBTableMetadata.REAL,
+        '_stopTimeSpanSec': DBTableMetadata.REAL,
+        '_isRepeat': DBTableMetadata.INT,
+        '_isOverridePlaySpeed': DBTableMetadata.INT,
+        '_playSpeed': DBTableMetadata.REAL
     }
 )
 
@@ -242,6 +249,8 @@ PROCESSORS[CommandType.PARTS_MOTION] = build_db_data
 PROCESSORS[CommandType.MARKER] = build_marker
 PROCESSORS[CommandType.BULLET] = build_bullet
 PROCESSORS[CommandType.HIT] = build_db_data
+PROCESSORS[CommandType.TIMESTOP] = build_db_data
+# PROCESSORS[CommandType.TIMECURVE] = build_db_data
 # PROCESSORS[CommandType.COLLISION] = build_collision_data
 PROCESSORS[CommandType.SEND_SIGNAL] = build_db_data
 PROCESSORS[CommandType.ACTIVE_CANCEL] = build_db_data
