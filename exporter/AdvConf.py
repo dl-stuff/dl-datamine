@@ -357,7 +357,8 @@ def hit_sr(parts, seq=None, xlen=None):
                 break
     if r is None:
         r = motion
-    r = max(timestop, r)
+    if r is not None:
+        r = max(timestop, r)
     r = fr(r)
     return s, r, followed_by
 
@@ -569,8 +570,6 @@ def convert_skill_common(skill, lv):
         if actcancel and mstate:
             break
     if actcancel:
-        if timestop > actcancel:
-            print(skill['_Name'], timestop, actcancel)
         actcancel = max(timestop, actcancel)
     recovery = actcancel or mstate or recovery
 

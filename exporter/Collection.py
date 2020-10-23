@@ -331,6 +331,6 @@ if __name__ == '__main__':
     make_json(datadir, 'weaponseries.json', WeaponBodyGroupSeries(index), make_id, make_weapon_series_json, name_key='_GroupSeriesName')
     make_weapon_jsons(datadir, index)
 
-    # download_all_icons(imgdir)
-    # download_set_icons(imgdir, ability_icons, 'images/icon/ability/l/', '../ability')
-    # download_set_icons(imgdir, material_icons, 'images/icon/item/materialdata/l/', '../material')
+    download_all_icons(imgdir)
+    download_set_icons(imgdir, ability_icons, 'images/icon/ability/l/', '../ability')
+    download_set_icons(imgdir, material_icons, 'images/icon/item/materialdata/l/', '../material')
