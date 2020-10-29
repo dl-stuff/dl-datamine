@@ -325,40 +325,80 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
         return None
 
 
-def hit_sr(parts, seq=None, xlen=None):
+def hit_sr(parts, seq=None, xlen=None, is_dragon=False):
     s, r = None, None
     motion = None
     # use_motion = False
     timestop = 0
+    timecurve = None
     followed_by = set()
-    for part in parts:
-        if ('HIT' in part['commandType'] or 'BULLET' in part['commandType']) and s is None:
+    signals = {}
+    signal_end = set()
+    motion_end = None
+    for idx, part in enumerate(parts):
+        if part['commandType'] == 'SEND_SIGNAL':
+            actid = part.get('_actionId', 0)
+            signals[actid] = -1
+            if part.get('_motionEnd'):
+                signal_end.add(actid)
+        elif ('HIT' in part['commandType'] or 'BULLET' in part['commandType']) and s is None:
             s = fr(part['_seconds'])
-        if part['commandType'] == 'ACTIVE_CANCEL':
+        elif part['commandType'] == 'ACTIVE_CANCEL':
             recovery = part['_seconds']
             actid = part.get('_actionId')
-            if seq and actid:
-                if (seq + 1 == actid) or ((seq + 1 - xlen - actid) % 100 == 0):
-                    r = recovery
-            # elif s is not None:
-            #     r = recovery
+            if seq and actid in signals:
+                signals[actid] = recovery
+            if actid and (part.get('_motionEnd') or actid in signal_end):
+                motion_end = recovery
             if act_cancel_id := part.get('_actionId'):
                 followed_by.add((recovery, act_cancel_id))
+        elif part['commandType'] == 'TIMESTOP':
+            # timestop = part.get('_seconds', 0) + part.get('_duration', 0)
+            ts_second = part.get('_seconds', 0)
+            ts_delay = part.get('_duration', 0)
+            timestop = ts_second + ts_delay
+            # if is_dragon:
+            #     found_hit = False
+            #     for npart in parts[idx+1:]:
+            #         if npart['_seconds'] > ts_second:
+            #             # found_hit = found_hit or ('HIT' in npart['commandType'] or 'BULLET' in npart['commandType'])
+            #             if 'HIT' in npart['commandType'] or 'BULLET' in npart['commandType']:
+            #                 npart['_seconds'] += ts_delay
+        elif part['commandType'] == 'TIMECURVE' and not part.get('_isNormalizeCurve'):
+            timecurve = part.get('_duration')
         # if part['commandType'] == 'PARTS_MOTION' and part.get('_animation'):
         #     motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
         #     if part['_animation']['name'][0] == 'D':
         #         use_motion = True
-        if part['commandType'] == 'TIMESTOP':
-            timestop = part.get('_seconds', 0) + part.get('_duration', 0)
-    if r is None:
-        for part in reversed(parts):
-            if part['commandType'] == 'ACTIVE_CANCEL':
-                r = part['_seconds']
-                break
-    if r is None:
-        r = motion
-    if r is not None:
-        r = max(timestop, r)
+    # if timestop > 0:
+    # if not signal_to_next:
+    #     for part in sorted(parts, key=lambda p: -p['_seq']):
+    #         if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
+    #             r = part['_seconds']
+    #             break
+    # print(signals)
+    if is_dragon and motion_end is not None:
+        r = motion_end
+    else:
+        if timecurve is not None:
+            for part in sorted(parts, key=lambda p: -p['_seq']):
+                if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
+                    r = part['_seconds']
+                    break
+        else:
+            try:
+                r = max(signals.values())
+            except:
+                pass
+            if r is None or r <= s:
+                for part in reversed(parts):
+                    if part['commandType'] == 'ACTIVE_CANCEL':
+                        r = part['_seconds']
+                        break
+        if r is None:
+            r = motion_end
+        if r is not None:
+            r = max(timestop, r)
     r = fr(r)
     return s, r, followed_by
 
@@ -404,8 +444,8 @@ def convert_following_actions(startup, followed_by, default=None):
     return interrupt_by, cancel_by
 
 
-def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True):
-    s, r, followed_by = hit_sr(xn['_Parts'], seq=aid, xlen=xlen)
+def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=False):
+    s, r, followed_by = hit_sr(xn['_Parts'], seq=aid, xlen=xlen, is_dragon=is_dragon)
     if s is None:
         pprint(xn)
     xconf = {
@@ -1176,7 +1216,7 @@ class DrgConf(DragonData):
         dcmax = res['_ComboMax']
         for n, xn in enumerate(dcombo):
             n += 1
-            if dxconf := convert_x(xn['_Id'], xn, xlen=dcmax, convert_follow=False):
+            if dxconf := convert_x(xn['_Id'], xn, xlen=dcmax, convert_follow=False, is_dragon=True):
                 conf[f'dx{n}'] = dxconf
 
         dskill = res['_Skill1']
