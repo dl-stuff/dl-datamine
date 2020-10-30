@@ -670,7 +670,7 @@ if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
         'jp': {
-            r'210135_01_base': None
+            r'^raid/model': None
         }
     }
 

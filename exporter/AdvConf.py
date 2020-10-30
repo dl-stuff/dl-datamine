@@ -364,7 +364,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False):
             #             # found_hit = found_hit or ('HIT' in npart['commandType'] or 'BULLET' in npart['commandType'])
             #             if 'HIT' in npart['commandType'] or 'BULLET' in npart['commandType']:
             #                 npart['_seconds'] += ts_delay
-        elif part['commandType'] == 'TIMECURVE' and not part.get('_isNormalizeCurve'):
+        elif is_dragon and part['commandType'] == 'TIMECURVE' and not part.get('_isNormalizeCurve'):
             timecurve = part.get('_duration')
         # if part['commandType'] == 'PARTS_MOTION' and part.get('_animation'):
         #     motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
