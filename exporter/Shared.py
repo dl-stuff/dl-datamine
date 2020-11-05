@@ -351,8 +351,14 @@ ABILITY_TYPES = {
     #   "_VariousId1b": 304030301,
     #   "_VariousId1c": 1084,
     63: AbilityData.action_condition_timer,
-    65: AbilityData.action_reference
+    65: AbilityData.action_reference,
+    68: AbilityData.action_condition
 }
+
+
+class BuffCountData(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'BuffCountData')
 
 
 class PlayerActionHitAttribute(DBView):
@@ -362,14 +368,17 @@ class PlayerActionHitAttribute(DBView):
     def process_result(self, res, exclude_falsy=True):
         res_list = [res] if isinstance(res, dict) else res
         for r in res_list:
-            if '_ActionCondition1' in r and r['_ActionCondition1']:
-                act_cond = self.index['ActionCondition'].get(
-                    r['_ActionCondition1'], exclude_falsy=exclude_falsy)
+            if (act_cond := r.get('_ActionCondition1')):
+                act_cond = self.index['ActionCondition'].get(act_cond, exclude_falsy=exclude_falsy)
                 if act_cond:
                     r['_ActionCondition1'] = act_cond
             for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
                 if ks in r and r[ks] in KILLER_STATE:
                     r[ks] = KILLER_STATE[r[ks]]
+            if (bufc := r.get('_DamageUpDataByBuffCount')):
+                bufc = self.index['BuffCountData'].get(bufc, exclude_falsy=exclude_falsy)
+                if bufc:
+                    r['_DamageUpDataByBuffCount'] = bufc
         return res
 
     def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):

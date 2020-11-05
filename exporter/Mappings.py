@@ -40,7 +40,7 @@ AFFLICTION_TYPES = {
     11: 'Frostbite',
     12: 'Flashburn',
     # 13: 'Crashwind'
-    14: 'shadowblight'
+    14: 'Shadowblight'
 }
 
 KILLER_STATE = {

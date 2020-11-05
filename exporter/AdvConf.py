@@ -29,7 +29,8 @@ DEFAULT_AFF_DURATION = {
     'bog': 8,
     'freeze': 4.5,
     'stun': 6.5,
-    'sleep': 4.5
+    'sleep': 4.5,
+    'shadowblight': 21
 }
 
 DEFAULT_AFF_IV = {
@@ -37,7 +38,8 @@ DEFAULT_AFF_IV = {
     'burn': 3.9,
     'paralysis': 3.9,
     'frostbite': 2.9,
-    'flashburn': 2.9
+    'flashburn': 2.9,
+    'shadowblight': 2.9
 }
 
 def snakey(name):
@@ -103,14 +105,15 @@ def fr(num):
     except TypeError:
         return 0
 
-def clean_hitattr(attr):
+def clean_hitattr(attr, once_per_action):
     need_copy = False
-    for act in ONCE_PER_ACT:
-        try:
-            del attr[act]
-            need_copy = True
-        except KeyError:
-            continue
+    if once_per_action:
+        for act in ONCE_PER_ACT:
+            try:
+                del attr[act]
+                need_copy = True
+            except KeyError:
+                continue
     return attr, need_copy
 
 def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
@@ -135,8 +138,8 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                                 break
         if not part_hitattrs:
             continue
-        if (blt := part.get('_bulletNum', 0)) > 1:
-            last_copy, need_copy = clean_hitattr(part_hitattrs[-1].copy())
+        if (blt := part.get('_bulletNum', 0)) > 1 and not 'extra' in part_hitattrs[-1]:
+            last_copy, need_copy = clean_hitattr(part_hitattrs[-1].copy(), once_per_action)
             if need_copy:
                 part_hitattrs.append(last_copy)
                 part_hitattrs.append(blt-1)
@@ -159,17 +162,21 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
             ref_attrs = [part_hitattrs[0]]
             # if adv is not None:
             #     print(adv.name)
-        elif part.get('_loopFlag') and (loopnum := part.get('_loopNum', 0)) > 0:
-            gen = loopnum + 1
-            # delay = part.get('_loopSec', 0)
-            delay = (part.get('_loopFrame', 0) / 60)
+        elif part.get('_loopFlag'):
+            loopnum = part.get('_loopNum', 0)
+            loopsec = part.get('_loopSec')
+            delay = part.get('_seconds') + (part.get('_loopFrame', 0) / 60)
+            if (loopsec := part.get('_loopSec')):
+                gen = max(loopnum, int(loopsec // delay))
+            else:
+                gen = loopnum
+            gen += 1
             ref_attrs = [part_hitattrs[0]] if len(part_hitattrs) == 1 else [part_hitattrs[1]]
-        
         if gen and delay:
             gen_attrs = []
             for gseq in range(1, gen):
                 for attr in ref_attrs:
-                    gattr, _ = clean_hitattr(attr.copy())
+                    gattr, _ = clean_hitattr(attr.copy(), once_per_action)
                     gattr['iv'] = fr(attr.get('iv', 0)+delay*gseq)
                     gen_attrs.append(gattr)
             part_hitattrs.extend(gen_attrs)
@@ -180,6 +187,8 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
 def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None):
     attr = {}
     target = hitattr.get('_TargetGroup')
+    if hitattr.get('_IgnoreFirstHitCheck'):
+        once_per_action.clear()
     if target != 5 and hitattr.get('_DamageAdjustment'):
         attr['dmg'] = fr(hitattr.get('_DamageAdjustment'))
         killers = []
@@ -314,6 +323,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                 elif actcond.get('_Overwrite'):
                     buffs.append('-refresh')
                 attr['buff'] = buffs
+    if hitattr.get('_IgnoreFirstHitCheck'):
+        once_per_action.clear()
     if attr:
         iv = fr(part['_seconds'] + part.get('_delayTime', 0))
         if iv > 0:
@@ -325,7 +336,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
         return None
 
 
-def hit_sr(parts, seq=None, xlen=None, is_dragon=False):
+def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
     s, r = None, None
     motion = None
     # use_motion = False
@@ -333,7 +344,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False):
     timecurve = None
     followed_by = set()
     signals = {}
-    signal_end = set()
+    signal_end = signal_end or set()
     motion_end = None
     for idx, part in enumerate(parts):
         if part['commandType'] == 'SEND_SIGNAL':
@@ -348,7 +359,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False):
             actid = part.get('_actionId')
             if seq and actid in signals:
                 signals[actid] = recovery
-            if actid and (part.get('_motionEnd') or actid in signal_end):
+            if (actid and part.get('_motionEnd')) or actid in signal_end:
                 motion_end = recovery
             if act_cancel_id := part.get('_actionId'):
                 followed_by.add((recovery, act_cancel_id))
@@ -1181,6 +1192,13 @@ class DrgConf(DragonData):
         20050502,
         20050507,
     )
+    COMMON_ACTIONS = {'dodge': {}, 'dodgeb': {}, 'dshift': {}}
+    COMMON_ACTIONS_DEFAULTS = {
+        # recovery only
+        'dodge': 0.66667,
+        'dodgeb': 0.66667,
+        'dshift': 0.69444,
+    }
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
 
@@ -1203,14 +1221,20 @@ class DrgConf(DragonData):
         if skipped:
             conf['d']['skipped'] = skipped
 
-        # for act, key in [('dodge', '_AvoidActionFront'), ('dshift', '_Transform')]:
-        #     s, r = hit_sr(res[key]['_Parts'])
-        #     actconf = {
-        #         'startup': fr(s),
-        #         'recovery': fr(r)
-        #     }
-        #     actconf = hit_attr_adj(res[key], s, actconf, skip_nohitattr=False)
-        #     conf[act] = actconf
+        for act, key in (('dodge', '_AvoidActionFront'), ('dodgeb', '_AvoidActionBack'), ('dshift', '_Transform')):
+            s, r, _ = hit_sr(res[key]['_Parts'], is_dragon=True, signal_end={None})
+            try:
+                DrgConf.COMMON_ACTIONS[act][r].add(conf['d']['name'])
+            except KeyError:
+                DrgConf.COMMON_ACTIONS[act][r] = {conf['d']['name']}
+            if DrgConf.COMMON_ACTIONS_DEFAULTS[act] != r:
+                conf[act] = {'recovery': r}
+        
+        if 'dodgeb' in conf:
+            if 'dodge' not in conf or conf['dodge']['recovery'] > conf['dodgeb']['recovery']:
+                conf['dodge'] = conf['dodgeb']
+                conf['dodge']['backdash'] = True
+            del conf['dodgeb']
 
         dcombo = res['_DefaultSkill']
         dcmax = res['_ComboMax']
@@ -1219,21 +1243,23 @@ class DrgConf(DragonData):
             if dxconf := convert_x(xn['_Id'], xn, xlen=dcmax, convert_follow=False, is_dragon=True):
                 conf[f'dx{n}'] = dxconf
 
-        dskill = res['_Skill1']
-        sconf, action = convert_skill_common(dskill, 2)
-        sconf['uses'] = dskill.get('_MaxUseNum', 1)
-        
-        if (hitattrs := convert_all_hitattr(action, re.compile(r'.*LV02$'))):
-            sconf['attr'] = hitattrs
-        if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and dskill.get(f'_IsAffectedByTensionLv2'):
-            sconf['energizable'] = bool(dskill['_IsAffectedByTensionLv2'])
+        for act, key in (('ds', '_Skill1'), ('ds_final', '_SkillFinalAttack')):
+            if not (dskill := res.get(key)):
+                continue
+            sconf, action = convert_skill_common(dskill, 2)
+            sconf['uses'] = dskill.get('_MaxUseNum', 1)
+            
+            if (hitattrs := convert_all_hitattr(action, re.compile(r'.*LV02$'))):
+                sconf['attr'] = hitattrs
+            if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and dskill.get(f'_IsAffectedByTensionLv2'):
+                sconf['energizable'] = bool(dskill['_IsAffectedByTensionLv2'])
 
-        conf['ds'] = sconf
+            conf[act] = sconf
 
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        where_str = '_Rarity = 5 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.EXTRA_DRAGONS)) +'))'
+        where_str = '_Rarity = 5 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.EXTRA_DRAGONS)) +')) AND _Id = _EmblemId'
         all_res = self.get_all(exclude_falsy=True, where=where_str)
         out_dir = os.path.join(out_dir, 'drg')
         check_target_path(out_dir)
@@ -1256,7 +1282,7 @@ class DrgConf(DragonData):
                 fmt_conf(data, f=fp, lim=3)
         #     else:
         #         skipped.append(res["_Name"])
-        # print('Skipped:', ','.join(skipped))
+        # pprint(DrgConf.COMMON_ACTIONS)
 
     def get(self, name, by=None):
         res = super().get(name, by=by, full_query=False)
@@ -1320,6 +1346,7 @@ if __name__ == '__main__':
     parser.add_argument('-fm', help='_BurstAttackMarker')
     # parser.add_argument('-x', '_UniqueComboId')
     parser.add_argument('-w', help='_Name')
+    parser.add_argument('-act', help='_ActionId')
     args = parser.parse_args()
 
     index = DBViewIndex()
@@ -1389,3 +1416,7 @@ if __name__ == '__main__':
         elif args.w == 'all':
             view = WepConf(index)
             view.export_all_to_folder(out_dir=out_dir)
+    elif args.act:
+        view = PlayerAction(index)
+        action = view.get(int(args.act), exclude_falsy=True)
+        pprint(hit_sr(action['_Parts'], is_dragon=True))

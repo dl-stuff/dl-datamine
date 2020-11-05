@@ -34,7 +34,7 @@ class DragonData(DBView):
             anim_key = int(f'{res["_BaseId"]}{res["_VariationId"]:02}')
         self.index['ActionParts'].animation_reference = (
             'DragonMotion', anim_key)
-        for s in ('_Skill1', '_Skill2'):
+        for s in ('_Skill1', '_Skill2', '_SkillFinalAttack'):
             try:
                 res[s] = self.index['SkillData'].get(
                     res[s], exclude_falsy=exclude_falsy, full_abilities=full_abilities)
