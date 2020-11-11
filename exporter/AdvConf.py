@@ -17,7 +17,7 @@ from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES
 
-ONCE_PER_ACT = ('sp', 'dp', 'utp', 'buff', 'afflic', 'bleed', 'extra')
+ONCE_PER_ACT = ('sp', 'dp', 'utp', 'buff', 'afflic', 'bleed', 'extra', 'dispel')
 DODGE_ACTIONS = {6, 40}
 DEFAULT_AFF_DURATION = {
     'poison': 15,
@@ -41,6 +41,7 @@ DEFAULT_AFF_IV = {
     'flashburn': 2.9,
     'shadowblight': 2.9
 }
+DISPEL = 100
 
 def snakey(name):
     return re.sub(r'[^0-9a-zA-Z ]', '', unidecode(name.replace('&', 'and')).strip()).replace(' ', '_')
@@ -233,96 +234,99 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
         once_per_action.add(actcond['_Id'])
         if actcond.get('_DamageLink'):
             return convert_hitattr(actcond['_DamageLink'], part, action, once_per_action, adv=adv, skill=skill)
-        alt_buffs = []
-        if adv and skill:
-            for ehs in AdvConf.ENHANCED_SKILL:
-                if (esk := actcond.get(ehs)):
-                    if isinstance(esk, int) or esk.get('_Id') in adv.all_chara_skills:
-                        adv.chara_skill_loop.add(skill['_Id'])
-                    else:
-                        try:
-                            s = int(ehs[-1])
-                        except:
-                            s = 1
-                        eid = next(adv.eskill_counter)
-                        group = 'enhanced' if eid == 1 else f'enhanced{eid}'
-                        adv.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, skill['_Id'])
-                        alt_buffs.append(['sAlt', group, f's{s}'])
-            if (eba := actcond.get('_EnhancedBurstAttack')) and isinstance(eba, dict):
-                eid = next(adv.efs_counter)
-                group = 'enhanced' if eid == 1 else f'enhanced{eid}'
-                adv.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
-                alt_buffs.append(['fsAlt', group])
-
-        if target == 3 and (afflic := actcond.get('_Type')):
-            affname = afflic.lower()
-            attr['afflic'] = [affname, actcond['_Rate']]
-            if (dot := actcond.get('_SlipDamagePower')):
-                attr['afflic'].append(fr(dot))
-            duration = actcond.get('_DurationSec')
-            duration = fr((duration + actcond.get('_MinDurationSec', duration)) / 2)
-            if DEFAULT_AFF_DURATION[affname] != duration:
-                attr['afflic'].append(duration)
-                duration = None
-            if (iv := actcond.get('_SlipDamageIntervalSec')):
-                iv = fr(iv)
-                if DEFAULT_AFF_IV[affname] != iv:
-                    if duration:
-                        attr['afflic'].append(duration)
-                    attr['afflic'].append(iv)
-        elif 'Bleeding' == actcond.get('_Text'):
-            attr['bleed'] = [actcond['_Rate'], fr(actcond['_SlipDamagePower'])]
+        if actcond.get('_EfficacyType') == DISPEL and (rate := actcond.get('_Rate', 0)):
+            attr['dispel'] = rate
         else:
-            buffs = []
-            for tsn, btype in AdvConf.TENSION_KEY.items():
-                if (v := actcond.get(tsn)):
-                    if target == 6:
-                        buffs.append([btype, v, 'team'])
+            alt_buffs = []
+            if adv and skill:
+                for ehs in AdvConf.ENHANCED_SKILL:
+                    if (esk := actcond.get(ehs)):
+                        if isinstance(esk, int) or esk.get('_Id') in adv.all_chara_skills:
+                            adv.chara_skill_loop.add(skill['_Id'])
+                        else:
+                            try:
+                                s = int(ehs[-1])
+                            except:
+                                s = 1
+                            eid = next(adv.eskill_counter)
+                            group = 'enhanced' if eid == 1 else f'enhanced{eid}'
+                            adv.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, skill['_Id'])
+                            alt_buffs.append(['sAlt', group, f's{s}'])
+                if (eba := actcond.get('_EnhancedBurstAttack')) and isinstance(eba, dict):
+                    eid = next(adv.efs_counter)
+                    group = 'enhanced' if eid == 1 else f'enhanced{eid}'
+                    adv.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
+                    alt_buffs.append(['fsAlt', group])
+
+            if target == 3 and (afflic := actcond.get('_Type')):
+                affname = afflic.lower()
+                attr['afflic'] = [affname, actcond['_Rate']]
+                if (dot := actcond.get('_SlipDamagePower')):
+                    attr['afflic'].append(fr(dot))
+                duration = actcond.get('_DurationSec')
+                duration = fr((duration + actcond.get('_MinDurationSec', duration)) / 2)
+                if DEFAULT_AFF_DURATION[affname] != duration:
+                    attr['afflic'].append(duration)
+                    duration = None
+                if (iv := actcond.get('_SlipDamageIntervalSec')):
+                    iv = fr(iv)
+                    if DEFAULT_AFF_IV[affname] != iv:
+                        if duration:
+                            attr['afflic'].append(duration)
+                        attr['afflic'].append(iv)
+            elif 'Bleeding' == actcond.get('_Text'):
+                attr['bleed'] = [actcond['_Rate'], fr(actcond['_SlipDamagePower'])]
+            else:
+                buffs = []
+                for tsn, btype in AdvConf.TENSION_KEY.items():
+                    if (v := actcond.get(tsn)):
+                        if target == 6:
+                            buffs.append([btype, v, 'team'])
+                        else:
+                            buffs.append([btype, v])
+                if not buffs:
+                    if part.get('_lifetime'):
+                        duration = fr(part.get('_lifetime'))
+                        btype = 'zone'
+                    elif actcond.get('_DurationNum') and not actcond.get('_DurationSec'):
+                        duration = actcond.get('_DurationNum')
+                        btype = 'next'
                     else:
-                        buffs.append([btype, v])
-            if not buffs:
-                if part.get('_lifetime'):
-                    duration = fr(part.get('_lifetime'))
-                    btype = 'zone'
-                elif actcond.get('_DurationNum') and not actcond.get('_DurationSec'):
-                    duration = actcond.get('_DurationNum')
-                    btype = 'next'
-                else:
-                    duration = actcond.get('_DurationSec', -1)
-                    duration = fr(duration)
-                    btype = 'team' if target in (2, 6) else 'self'
-                for b in alt_buffs:
-                    if btype == 'next' and b[0] == 'fsAlt':
-                        b.extend((-1, duration))
-                    elif duration > -1:
-                        b.append(duration)
-                    buffs.append(b)
-                if target == 3:
-                    for k, mod in AdvConf.DEBUFFARG_KEY.items():
-                        if (value := actcond.get(k)):
-                            buffs.append(['debuff', fr(value), duration, actcond.get('_Rate')/100, mod])
-                    for k, aff in AdvConf.AFFRES_KEY.items():
-                        if (value := actcond.get(k)):
-                            buffs.append(['affres', fr(value), duration, aff])
-                else:
-                    for k, mod in AdvConf.BUFFARG_KEY.items():
-                        if (value := actcond.get(k)):
-                            if (bele := actcond.get('_TargetElemental')) and btype != 'self':
-                                buffs.append(['ele', fr(value), duration, *mod, ele_bitmap(bele).lower()])
-                            elif k == '_SlipDamageRatio':
-                                buffs.append([btype, -fr(value), duration, *mod])
-                            else:
-                                buffs.append([btype, fr(value), duration, *mod])
-            if buffs:
-                if len(buffs) == 1:
-                    buffs = buffs[0]
-                # if any(actcond.get(k) for k in AdvConf.OVERWRITE):
-                #     buffs.append('-refresh')
-                if actcond.get('_OverwriteGroupId'):
-                    buffs.append(f'-overwrite_{actcond.get("_OverwriteGroupId")}')
-                elif actcond.get('_Overwrite'):
-                    buffs.append('-refresh')
-                attr['buff'] = buffs
+                        duration = actcond.get('_DurationSec', -1)
+                        duration = fr(duration)
+                        btype = 'team' if target in (2, 6) else 'self'
+                    for b in alt_buffs:
+                        if btype == 'next' and b[0] == 'fsAlt':
+                            b.extend((-1, duration))
+                        elif duration > -1:
+                            b.append(duration)
+                        buffs.append(b)
+                    if target == 3:
+                        for k, mod in AdvConf.DEBUFFARG_KEY.items():
+                            if (value := actcond.get(k)):
+                                buffs.append(['debuff', fr(value), duration, actcond.get('_Rate')/100, mod])
+                        for k, aff in AdvConf.AFFRES_KEY.items():
+                            if (value := actcond.get(k)):
+                                buffs.append(['affres', fr(value), duration, aff])
+                    else:
+                        for k, mod in AdvConf.BUFFARG_KEY.items():
+                            if (value := actcond.get(k)):
+                                if (bele := actcond.get('_TargetElemental')) and btype != 'self':
+                                    buffs.append(['ele', fr(value), duration, *mod, ele_bitmap(bele).lower()])
+                                elif k == '_SlipDamageRatio':
+                                    buffs.append([btype, -fr(value), duration, *mod])
+                                else:
+                                    buffs.append([btype, fr(value), duration, *mod])
+                if buffs:
+                    if len(buffs) == 1:
+                        buffs = buffs[0]
+                    # if any(actcond.get(k) for k in AdvConf.OVERWRITE):
+                    #     buffs.append('-refresh')
+                    if actcond.get('_OverwriteGroupId'):
+                        buffs.append(f'-overwrite_{actcond.get("_OverwriteGroupId")}')
+                    elif actcond.get('_Overwrite'):
+                        buffs.append('-refresh')
+                    attr['buff'] = buffs
     if hitattr.get('_IgnoreFirstHitCheck'):
         once_per_action.clear()
     if attr:
@@ -859,7 +863,7 @@ class AdvConf(CharaData):
         return snakey(conf['c']['name']) + ext
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        all_res = self.get_all(exclude_falsy=True, where='_ElementalType != 99')
+        all_res = self.get_all(exclude_falsy=True, where='_ElementalType != 99 AND _IsPlayable = 1')
         ref_dir = os.path.join(out_dir, '..', 'adv')
         out_dir = os.path.join(out_dir, 'adv')
         check_target_path(out_dir)
@@ -1259,7 +1263,7 @@ class DrgConf(DragonData):
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        where_str = '_Rarity = 5 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.EXTRA_DRAGONS)) +')) AND _Id = _EmblemId'
+        where_str = '_Rarity = 5 AND _IsPlayable = 1 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.EXTRA_DRAGONS)) +')) AND _Id = _EmblemId'
         all_res = self.get_all(exclude_falsy=True, where=where_str)
         out_dir = os.path.join(out_dir, 'drg')
         check_target_path(out_dir)

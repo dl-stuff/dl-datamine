@@ -14,7 +14,8 @@ def same(lst):
         return lst[-1]
 
 SPECIAL_EDIT_SKILL = {
-    103505044: 2
+    103505044: 2,
+    105501025: 1
 }
 def export_skill_share_json():
     index = DBViewIndex()
@@ -48,16 +49,22 @@ def export_skill_share_json():
                     res_data['s'] = SPECIAL_EDIT_SKILL[res['_EditSkillId']]
                 except:
                     res_data['s'] = 99
+            if res['_MaxLimitBreakCount'] >= 5:
+                sp_lv = 4
+            else:
+                sp_lv = 3
+            if res['_EditSkillLevelNum'] == 2:
+                sp_lv -= 1
             # res_data['name'] = snakey(skill['_Name'])
             res_data['cost'] = res['_EditSkillCost']
             res_data['type'] = skill['_SkillType']
-            sp_s_list = [
-                skill['_SpEdit'],
-                skill['_SpLv2Edit'],
-                skill['_SpLv3Edit'],
-                skill['_SpLv4Edit'],
-            ]
-            res_data['sp'] = same(sp_s_list)
+            # sp_s_list = [
+            #     skill['_SpEdit'],
+            #     skill['_SpLv2Edit'],
+            #     skill['_SpLv3Edit'],
+            #     skill['_SpLv4Edit'],
+            # ]
+            res_data['sp'] = skill[f'_SpLv{sp_lv}Edit']
         else:
             continue
 

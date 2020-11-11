@@ -670,7 +670,7 @@ if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
         'jp': {
-            r'^raid/model': None
+            r'^prefabs/outgame/questselect/chaptermapicon': None
         }
     }
 
