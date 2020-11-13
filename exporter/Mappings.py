@@ -39,7 +39,7 @@ AFFLICTION_TYPES = {
     10: 'Sleep',
     11: 'Frostbite',
     12: 'Flashburn',
-    # 13: 'Crashwind'
+    13: 'Stormlash',
     14: 'Shadowblight'
 }
 

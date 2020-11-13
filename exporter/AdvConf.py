@@ -30,7 +30,8 @@ DEFAULT_AFF_DURATION = {
     'freeze': 4.5,
     'stun': 6.5,
     'sleep': 4.5,
-    'shadowblight': 21
+    'shadowblight': 21,
+    'stormlash': 21
 }
 
 DEFAULT_AFF_IV = {
@@ -39,7 +40,8 @@ DEFAULT_AFF_IV = {
     'paralysis': 3.9,
     'frostbite': 2.9,
     'flashburn': 2.9,
-    'shadowblight': 2.9
+    'shadowblight': 2.9,
+    'stormlash': 2.9
 }
 DISPEL = 100
 
