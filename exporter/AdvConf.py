@@ -4,6 +4,7 @@ import pathlib
 import json
 import re
 import itertools
+from collections import defaultdict
 from unidecode import unidecode
 from tqdm import tqdm
 from pprint import pprint
@@ -720,9 +721,16 @@ class AdvConf(CharaData):
                     self.chara_skills[ab[f'_VariousId1a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId1a'], skill['_Id'])
         return sconf, k
 
-
     def process_result(self, res, exclude_falsy=True, condense=True):
         self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
+        self.chara_skills = {}
+        self.chara_skill_loop = set()
+        self.eskill_counter = itertools.count(start=1)
+        self.efs_counter = itertools.count(start=1)
+        self.all_chara_skills = {}
+        self.enhanced_fs = []
+        self.ab_alt_buffs = defaultdict(lambda: [])
+
         ab_lst = []
         for i in (1, 2, 3):
             for j in (3, 2, 1):
@@ -730,7 +738,6 @@ class AdvConf(CharaData):
                     ab_lst.append(self.index['AbilityData'].get(ab, full_query=True, exclude_falsy=exclude_falsy))
                     break
         converted, skipped = convert_all_ability(ab_lst)
-
         res = self.condense_stats(res)
         conf = {
             'c': {
@@ -749,6 +756,42 @@ class AdvConf(CharaData):
             conf['c']['gun'] = []
         self.name = conf['c']['name']
 
+        for ab in ab_lst:
+            for i in (1, 2, 3):
+                # enhanced s/fs buff
+                group = None
+                if ab.get(f'_AbilityType{i}') == 14:
+                    unique_name = snakey(self.name.lower()).replace('_', '')
+                    actcond = ab.get(f'_VariousId{i}a')
+                    if not actcond:
+                        actcond = ab.get(f'_VariousId{i}str')
+                    sid = ab.get('_OnSkill')
+                    cd = actcond.get('_CoolDownTimeSec')
+                    for ehs in AdvConf.ENHANCED_SKILL:
+                        if (esk := actcond.get(ehs)):
+                            try:
+                                s = int(ehs[-1])
+                            except:
+                                s = 1
+                            eid = next(self.eskill_counter)
+                            if group is None:
+                                group = unique_name if eid == 1 else f'{unique_name}{eid}'
+                            self.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, None)
+                            if sid and not cd:
+                                self.ab_alt_buffs[sid].append(['sAlt', group, f's{s}', -1, actcond.get('_DurationNum', 0)])
+                    if (eba := actcond.get('_EnhancedBurstAttack')) and isinstance(eba, dict):
+                        eid = next(self.efs_counter)
+                        group = unique_name if eid == 1 else f'{unique_name}{eid}'
+                        self.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
+                        if sid and not cd:
+                            self.ab_alt_buffs[sid].append(['fsAlt', group])
+                    for b in self.ab_alt_buffs[sid]:
+                        if dnum := actcond.get('_DurationNum'):
+                            b.extend((-1, dnum))
+                        elif dtime := actcond.get('_Duration'):
+                            b.append(dtime)
+
+
         if (burst := res.get('_BurstAttack')):
             burst = self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)
             if burst and (marker := burst.get('_BurstMarkerId')):
@@ -759,7 +802,6 @@ class AdvConf(CharaData):
             mlvl = {1: 4, 2: 3}
         else:
             mlvl = {1: 3, 2: 2}
-        self.chara_skills = {}
         for s in (1, 2):
             skill = self.index['SkillData'].get(res[f'_Skill{s}'], 
                 exclude_falsy=exclude_falsy, full_query=True)
@@ -811,12 +853,6 @@ class AdvConf(CharaData):
 
         # self.abilities = self.last_abilities(res, as_mapping=True)
         # pprint(self.abilities)
-
-        self.chara_skill_loop = set()
-        self.eskill_counter = itertools.count(start=1)
-        self.efs_counter = itertools.count(start=1)
-        self.all_chara_skills = {}
-        self.enhanced_fs = []
         # for k, seq, skill in self.chara_skills.values():
         while self.chara_skills:
             k, seq, skill, prev_id = next(iter(self.chara_skills.values()))
@@ -827,6 +863,14 @@ class AdvConf(CharaData):
                 lv = mlvl[seq]
             cskill, k = self.convert_skill(k, seq, skill, lv)
             conf[k] = cskill
+            if (ab_alt_buffs := self.ab_alt_buffs.get(seq)):
+                if len(ab_alt_buffs) == 1:
+                    ab_alt_buffs = [ab_alt_buffs[0], '-refresh']
+                else:
+                    ab_alt_buffs = [*ab_alt_buffs, '-refresh']
+                if 'attr' not in conf[k]:
+                    conf[k]['attr'] = []
+                conf[k]['attr'].append({'buff': ab_alt_buffs})
             del self.chara_skills[skill.get('_Id')]
 
         for efs, eba, emk in self.enhanced_fs:
@@ -1141,7 +1185,7 @@ class WpConf(AbilityCrest):
         for i in (1, 2, 3):
             k = f'_Abilities{i}3'
             if (ab := res.get(k)):
-                ab_lst.append(self.index['AbilityData'].get(ab, full_query=True, exclude_falsy=exclude_falsy))
+                ab_lst.append(self.index['AbilityData'].get(ab, full_query=True, exclude_falsy=exclude_falsy))            
         converted, skipped = convert_all_ability(ab_lst)
 
         boon = res.get('_UnionAbilityGroupId', 0)
