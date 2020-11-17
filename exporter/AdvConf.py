@@ -1017,21 +1017,21 @@ def ab_actcond(**kwargs):
     if astr:
         full_astr, value = None, None
         if (val := actcond.get('_Tension')):
-            full_atr = f'{astr}_energy'
+            full_astr = f'{astr}_energy'
             value = int(val)
-        if (att := actcond.get('_RateAttack')):
+        elif (att := actcond.get('_RateAttack')):
             full_astr = f'{astr}_att'
             value = fr(att)
-        if (cchance := actcond.get('_RateCritical')):
+        elif (cchance := actcond.get('_RateCritical')):
             full_astr = f'{astr}_crit_chance'
             value = fr(cchance)
-        if (cdmg := actcond.get('_EnhancedCritical')):
+        elif (cdmg := actcond.get('_EnhancedCritical')):
             full_astr = f'{astr}_crit_damage'
             value = fr(cdmg)
-        if (defence := actcond.get('_RateDefense')):
+        elif (defence := actcond.get('_RateDefense')):
             full_astr = f'{astr}_defense'
             value = fr(defence)
-        if (regen := actcond.get('_SlipDamageRatio')):
+        elif (regen := actcond.get('_SlipDamageRatio')):
             full_astr = f'{astr}_regen'
             value = fr(regen*-100)
         if full_astr and value:
