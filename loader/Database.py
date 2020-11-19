@@ -267,6 +267,10 @@ class DBView:
         name = '_' + res.get('_Name', '')
         return f'{res["_Id"]}{name}{ext}'
 
+    def link(self, res, key, view, **kwargs):
+        if (idx := res.get(key)) and (linked := self.index[view].get(idx, **kwargs)):
+            res[key] = linked
+
     def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, expand_one=True):
         if order and '.' not in order:
             order = self.name + '.' + order

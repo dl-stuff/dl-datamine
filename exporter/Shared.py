@@ -24,23 +24,16 @@ class ActionCondition(DBView):
     def process_result(self, res, exclude_falsy=True):
         if '_Type' in res:
             res['_Type'] = AFFLICTION_TYPES.get(res['_Type'], res['_Type'])
-        if '_EnhancedBurstAttack' in res and res['_EnhancedBurstAttack']:
-            res['_EnhancedBurstAttack'] = self.index['PlayerAction'].get(
-                res['_EnhancedBurstAttack'], exclude_falsy=exclude_falsy)
-        if '_AdditionAttack' in res and res['_AdditionAttack']:
-            res['_AdditionAttack'] = self.index['PlayerActionHitAttribute'].get(
-                res['_AdditionAttack'], exclude_falsy=exclude_falsy)
+        self.link(res, '_EnhancedBurstAttack', 'PlayerAction', exclude_falsy=exclude_falsy)
+        self.link(res, '_AdditionAttack', 'PlayerActionHitAttribute', exclude_falsy=exclude_falsy)
         reset_seen_skills = len(self.seen_skills) == 0
         if res['_Id'] not in self.seen_skills:
             self.seen_skills.add(res['_Id'])
             for s in ('_EnhancedSkill1', '_EnhancedSkill2', '_EnhancedSkillWeapon'):
-                if s in res and res[s] and res[s] not in self.seen_skills:
-                    skill = self.index['SkillData'].get(
-                        res[s], exclude_falsy=exclude_falsy)
-                    if skill:
+                if (sid := res.get(s)) not in self.seen_skills:
+                    if (skill := self.index['SkillData'].get(sid, exclude_falsy=exclude_falsy)):
                         res[s] = skill
-        if (dlk := res.get('_DamageLink')) and (dmglink := self.index['PlayerActionHitAttribute'].get(dlk, exclude_falsy=exclude_falsy)):
-            res['_DamageLink'] = dmglink
+        self.link(res, '_DamageLink', 'PlayerActionHitAttribute', exclude_falsy=exclude_falsy)
         if reset_seen_skills:
             self.seen_skills = set()
         return res
@@ -75,12 +68,8 @@ class ActionGrant(DBView):
         super().__init__(index, 'ActionGrant')
 
     def process_result(self, res, exclude_falsy=True):
-        res['_TargetAction'] = TARGET_ACTION_TYPES.get(
-            res['_TargetAction'], res['_TargetAction'])
-        grant_cond = self.index['ActionCondition'].get(
-            res['_GrantCondition'], exclude_falsy=exclude_falsy)
-        if grant_cond:
-            res['_GrantCondition'] = grant_cond
+        res['_TargetAction'] = TARGET_ACTION_TYPES.get(res['_TargetAction'], res['_TargetAction'])
+        self.link(res, '_GrantCondition', 'ActionCondition', exclude_falsy=exclude_falsy)
         return res
 
     def get(self, pk, by=None, fields=None, order=None, exclude_falsy=False):
@@ -102,8 +91,7 @@ class AbilityData(DBView):
 
     @staticmethod
     def a_ids(res, i):
-        a_ids = [res[f'_VariousId{i}{a}'] for a in (
-            'a', 'b', 'c', '') if f'_VariousId{i}{a}' in res and res[f'_VariousId{i}{a}']]
+        a_ids = [res[f'_VariousId{i}{a}'] for a in ('a', 'b', 'c', '') if f'_VariousId{i}{a}' in res and res[f'_VariousId{i}{a}']]
         return a_ids
 
     @staticmethod
@@ -251,13 +239,12 @@ class AbilityData(DBView):
 
     def process_result(self, res, full_query=True, exclude_falsy=True):
         try:
-            res['_ConditionType'] = ABILITY_CONDITION_TYPES.get(
-                res['_ConditionType'], res['_ConditionType'])
-        except:
+            res['_ConditionType'] = ABILITY_CONDITION_TYPES.get(res['_ConditionType'], res['_ConditionType'])
+        except KeyError:
             pass
         try:
             res[f'_TargetAction'] = TARGET_ACTION_TYPES[res[f'_TargetAction']]
-        except:
+        except KeyError:
             pass
         for i in (1, 2, 3):
             try:
@@ -368,17 +355,11 @@ class PlayerActionHitAttribute(DBView):
     def process_result(self, res, exclude_falsy=True):
         res_list = [res] if isinstance(res, dict) else res
         for r in res_list:
-            if (act_cond := r.get('_ActionCondition1')):
-                act_cond = self.index['ActionCondition'].get(act_cond, exclude_falsy=exclude_falsy)
-                if act_cond:
-                    r['_ActionCondition1'] = act_cond
+            self.link(r, '_ActionCondition1', 'ActionCondition', exclude_falsy=exclude_falsy)
+            self.link(r, '_DamageUpDataByBuffCount', 'BuffCountData', exclude_falsy=exclude_falsy)
             for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
                 if ks in r and r[ks] in KILLER_STATE:
                     r[ks] = KILLER_STATE[r[ks]]
-            if (bufc := r.get('_DamageUpDataByBuffCount')):
-                bufc = self.index['BuffCountData'].get(bufc, exclude_falsy=exclude_falsy)
-                if bufc:
-                    r['_DamageUpDataByBuffCount'] = bufc
         return res
 
     def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
@@ -470,9 +451,7 @@ class ActionParts(DBView):
                     if hit_attr:
                         r[label] = hit_attr
 
-            if '_actionConditionId' in r and r['_actionConditionId'] and (act_cond := self.index['ActionCondition'].get(r['_actionConditionId'], exclude_falsy=exclude_falsy)):
-                r['_actionConditionId'] = act_cond
-
+            self.link(r, '_actionConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']
                 animation = []
@@ -509,9 +488,7 @@ class PlayerAction(DBView):
 
     def process_result(self, player_action, exclude_falsy=True, full_query=True):
         pa_id = player_action['_Id']
-        action_parts = self.index['ActionParts'].get(
-            pa_id, by='_ref', order='_seconds ASC', exclude_falsy=exclude_falsy)
-        if action_parts:
+        if action_parts := self.index['ActionParts'].get(pa_id, by='_ref', order='_seconds ASC', exclude_falsy=exclude_falsy):
             player_action['_Parts'] = action_parts
         if (mid := player_action.get('_BurstMarkerId')) and (marker := self.get(mid, exclude_falsy=exclude_falsy)):
             player_action['_BurstMarkerId'] = marker
@@ -567,8 +544,7 @@ class SkillChainData(DBView):
 
     def process_result(self, res):
         for r in res:
-            r['_Skill'] = self.index['SkillData'].get(
-                r['_Id'], full_chainSkill=False)
+            r['_Skill'] = self.index['SkillData'].get(r['_Id'], full_chainSkill=False)
         return res
 
     def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, expand_one=True):
@@ -581,8 +557,7 @@ class SkillData(DBView):
     TRANS_PREFIX = '_Trans'
 
     def __init__(self, index):
-        super().__init__(index, 'SkillData', labeled_fields=[
-            '_Name', '_Description1', '_Description2', '_Description3', '_Description4', '_TransText'])
+        super().__init__(index, 'SkillData', labeled_fields=['_Name', '_Description1', '_Description2', '_Description3', '_Description4', '_TransText'])
 
     @staticmethod
     def get_all_from(view, prefix, data, **kargs):
@@ -605,6 +580,8 @@ class SkillData(DBView):
 
     def process_result(self, skill_data, exclude_falsy=True,
                        full_query=True, full_abilities=False, full_transSkill=True, full_chainSkill=True):
+        if not skill_data:
+            return
         if not full_query:
             return skill_data
         # Actions
@@ -635,13 +612,10 @@ class SkillData(DBView):
                 seen_id.add(next_trans_skill['_Id'])
             skill_data['_TransSkill'] = trans_skill_group
 
-        if '_TransBuff' in skill_data and skill_data['_TransBuff'] and (tb := self.index['PlayerAction'].get(skill_data['_TransBuff'], exclude_falsy=exclude_falsy)):
-            skill_data['_TransBuff'] = tb
-
+        self.link(skill_data, '_TransBuff', 'PlayerAction', exclude_falsy=exclude_falsy)
         # ChainGroupId
-        if full_chainSkill and '_ChainGroupId' in skill_data and skill_data['_ChainGroupId']:
-            skill_data['_ChainGroupId'] = self.index['SkillChainData'].get(
-                skill_data['_ChainGroupId'], by='_GroupId', exclude_falsy=exclude_falsy)
+        if full_chainSkill:
+            self.link(skill_data, '_ChainGroupId', 'SkillChainData', by='_GroupId', exclude_falsy=exclude_falsy)
         return skill_data
 
     def get(self, pk, fields=None, exclude_falsy=True,
