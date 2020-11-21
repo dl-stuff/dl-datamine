@@ -1413,7 +1413,7 @@ BUFF_FMT = {
     'team': 'increases the {mtype} of the team by {value:.0%}',
     'nearby': 'increases the {mtype} of the user and nearby allies by {value:.0%}',
     'next': 'increases the damage of the next {mtype} by {value:.0%}',
-    'zone': 'creates a buff zone that increases the {mtype} of allies by {value:.0%}',
+    'zone': 'creates a buff zone that increases the {mtype} of allies within by {value:.0%}',
 }
 DEBUFF_FMT = 'reduces enemy {mtype} by {value:.0%} with {rate:.0%} chance'
 DEBUFFB_FMT = 'creates a debuff zone that reduces the defense of enemies within by {value:.0%}'
@@ -1427,6 +1427,25 @@ MTYPE = {
     'sp': 'skill haste',
     'spd': 'attack speed',
     'cspd': 'charge speed'
+}
+
+KS_PAST_TENSE = {
+    'poison': 'poisoned',
+    'burn': 'burning',
+    'freeze': 'frozen',
+    'paralysis': 'paralyzed',
+    'blind': 'blinded',
+    'stun': 'stunned',
+    'curse': 'cursed',
+    'UNKNOWN08': 'bolbed',
+    'bog': 'bogged',
+    'sleep': 'sleeping',
+    'frostbite': 'Frostbitten',
+    'stormlash': 'stormlashed',
+    'shadowblight': 'shadowblighted',
+    'def down': 'defense reduced',
+    'buff': 'buffed',
+    'break': 'broken'
 }
 
 def condense_desc(desc_list):
@@ -1540,6 +1559,12 @@ def describe_conf(adv_conf):
                         attr_desc.append(f'inflict {aff_type} for {durations[0]}-{durations[1]}s with {aff_rate/100:.2%} chance')
                     else:
                         attr_desc.append(f'inflict {aff_type} for {durations[0]}s with {aff_rate/100:.0%} chance')
+            if killer := attr.get('killer'):
+                mod = 1 + killer[0]
+                cond = ' or '.join([KS_PAST_TENSE.get(state, state) for state in killer[1]])
+                attr_desc.append(f'{mod}x damage to {cond} foes')
+            if crisis := attr.get('crisis'):
+                attr_desc.append(f'more damage as hp decreases, up to {crisis+1}x')
             if buff := attr.get('buff'):
                 if isinstance(buff[0], list):
                     for b in buff:
