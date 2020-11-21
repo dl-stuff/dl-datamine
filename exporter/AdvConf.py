@@ -7,7 +7,7 @@ import itertools
 from collections import defaultdict
 from unidecode import unidecode
 from tqdm import tqdm
-from pprint import pprint
+from pprint import pprint, pformat
 import argparse
 
 from loader.Database import DBViewIndex, DBView, check_target_path
@@ -28,13 +28,12 @@ DEFAULT_AFF_DURATION = {
     'flashburn': 21,
     'blind': 8,
     'bog': 8,
-    'freeze': 4.5,
-    'stun': 6.5,
-    'sleep': 4.5,
+    'freeze': (3, 6),
+    'stun': (6, 7),
+    'sleep': (6, 7),
     'shadowblight': 21,
     'stormlash': 21
 }
-
 DEFAULT_AFF_IV = {
     'poison': 2.9,
     'burn': 3.9,
@@ -266,9 +265,14 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                 attr['afflic'] = [affname, actcond['_Rate']]
                 if (dot := actcond.get('_SlipDamagePower')):
                     attr['afflic'].append(fr(dot))
-                duration = actcond.get('_DurationSec')
-                duration = fr((duration + actcond.get('_MinDurationSec', duration)) / 2)
-                if DEFAULT_AFF_DURATION[affname] != duration:
+                duration = fr(actcond.get('_DurationSec'))
+                min_duration = fr(actcond.get('_MinDurationSec'))
+                # duration = fr((duration + actcond.get('_MinDurationSec', duration)) / 2)
+                if min_duration:
+                    if DEFAULT_AFF_DURATION[affname] != (min_duration, duration):
+                        attr['afflic'].append(duration)
+                        attr['afflic'].append(min_duration)
+                elif DEFAULT_AFF_DURATION[affname] != duration:
                     attr['afflic'].append(duration)
                     duration = None
                 if (iv := actcond.get('_SlipDamageIntervalSec')):
@@ -283,7 +287,9 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                 buffs = []
                 for tsn, btype in AdvConf.TENSION_KEY.items():
                     if (v := actcond.get(tsn)):
-                        if target == 6:
+                        if target == 2:
+                            buffs.append([btype, v, 'nearby'])
+                        elif target == 6:
                             buffs.append([btype, v, 'team'])
                         else:
                             buffs.append([btype, v])
@@ -297,7 +303,12 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                     else:
                         duration = actcond.get('_DurationSec', -1)
                         duration = fr(duration)
-                        btype = 'team' if target in (2, 6) else 'self'
+                        if target == 2:
+                            btype = 'nearby'
+                        elif target == 6:
+                            btype = 'team'
+                        else:
+                            btype = 'self'
                     for b in alt_buffs:
                         if btype == 'next' and b[0] == 'fsAlt':
                             b.extend((-1, duration))
@@ -695,10 +706,10 @@ class AdvConf(CharaData):
         10650101, # gala sarisse
     )
 
-    def convert_skill(self, k, seq, skill, lv):
+    def convert_skill(self, k, seq, skill, lv, no_loop=False):
         sconf, action = convert_skill_common(skill, lv)
 
-        if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), adv=self, skill=skill)):
+        if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), adv=None if no_loop else self, skill=skill)):
             sconf['attr'] = hitattrs
         if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f'_IsAffectedByTensionLv{lv}'):
             sconf['energizable'] = bool(skill[f'_IsAffectedByTensionLv{lv}'])
@@ -721,7 +732,7 @@ class AdvConf(CharaData):
                     self.chara_skills[ab[f'_VariousId1a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId1a'], skill['_Id'])
         return sconf, k
 
-    def process_result(self, res, exclude_falsy=True, condense=True):
+    def process_result(self, res, exclude_falsy=True, condense=True, all_levels=False):
         self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
         self.chara_skills = {}
         self.chara_skill_loop = set()
@@ -863,6 +874,10 @@ class AdvConf(CharaData):
                 lv = mlvl[seq]
             cskill, k = self.convert_skill(k, seq, skill, lv)
             conf[k] = cskill
+            if all_levels:
+                for s_lv in range(1, lv):
+                    s_cskill, _ = self.convert_skill(k, seq, skill, s_lv, no_loop=True)
+                    conf[k][f'lv{s_lv}'] = s_cskill
             if (ab_alt_buffs := self.ab_alt_buffs.get(seq)):
                 if len(ab_alt_buffs) == 1:
                     ab_alt_buffs = [ab_alt_buffs[0], '-refresh']
@@ -898,26 +913,28 @@ class AdvConf(CharaData):
 
         return conf
 
-    def get(self, name):
+    def get(self, name, all_levels=False):
         res = super().get(name, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res)
+        return self.process_result(res, all_levels=all_levels)
 
     @staticmethod
     def outfile_name(conf, ext):
         return snakey(conf['c']['name']) + ext
 
-    def export_all_to_folder(self, out_dir='./out', ext='.json'):
+    def export_all_to_folder(self, out_dir='./out', ext='.json', desc=False):
         all_res = self.get_all(exclude_falsy=True, where='_ElementalType != 99 AND _IsPlayable = 1')
-        ref_dir = os.path.join(out_dir, '..', 'adv')
-        out_dir = os.path.join(out_dir, 'adv')
+        # ref_dir = os.path.join(out_dir, '..', 'adv')
+        if desc:
+            desc_out = open(os.path.join(out_dir, 'desc.txt'), 'w')
+            out_dir = os.path.join(out_dir, 'advdesc')
+        else:
+            out_dir = os.path.join(out_dir, 'adv')
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-            if not res.get('_IsPlayable'):
-                continue
             try:
-                outconf = self.process_result(res, exclude_falsy=True)
+                outconf = self.process_result(res, exclude_falsy=True, all_levels=desc)
                 out_name = self.outfile_name(outconf, ext)
                 output = os.path.join(out_dir, out_name)
                 # ref = os.path.join(ref_dir, out_name)
@@ -928,6 +945,11 @@ class AdvConf(CharaData):
                 #             outconf['c']['a'] = refconf['c']['a']
                 #         except:
                 #             outconf['c']['a'] = []
+                if desc:
+                    desc_out.write(outconf['c']['name'])
+                    desc_out.write('\n')
+                    desc_out.write(describe_conf(outconf))
+                    desc_out.write('\n\n')
                 with open(output, 'w', newline='', encoding='utf-8') as fp:
                     # json.dump(res, fp, indent=2, ensure_ascii=False)
                     fmt_conf(outconf, f=fp)
@@ -936,6 +958,8 @@ class AdvConf(CharaData):
                 pprint(outconf)
                 raise e
         print('Missing endlag for:', AdvConf.MISSING_ENDLAG)
+        if desc:
+            desc_out.close()
 
 
 def ab_cond(ab):
@@ -1384,9 +1408,155 @@ class WepConf(WeaponBody):
         # print('Skipped:', ','.join(skipped))
 
 
+BUFF_FMT = {
+    'self': 'increases the {mtype} of the user by {value:.0%}',
+    'team': 'increases the {mtype} of the team by {value:.0%}',
+    'nearby': 'increases the {mtype} of the user and nearby allies by {value:.0%}',
+    'next': 'increases the damage of the next {mtype} by {value:.0%}',
+    'zone': 'creates a buff zone that increases the {mtype} of allies by {value:.0%}',
+}
+DEBUFF_FMT = 'reduces enemy {mtype} by {value:.0%} with {rate:.0%} chance'
+DEBUFFB_FMT = 'creates a debuff zone that reduces the defense of enemies within by {value:.0%}'
+AFFRES_FMT = 'reduces enemy {aff} resist by {value:.0%}'
+MTYPE = {
+    'att': 'strength',
+    'def': 'defense',
+    'crit': 'critical',
+    'fs': 'force strike',
+    's': 'skill',
+    'sp': 'skill haste',
+    'spd': 'attack speed',
+    'cspd': 'charge speed'
+}
+
+def condense_desc(desc_list):
+    condensed = []
+    prev_desc = None
+    prev_count = 0
+    for desc in sorted(desc_list):
+        desc = desc[1:]
+        if not desc:
+            continue
+        if desc != prev_desc:
+            if prev_desc is not None and prev_count > 1:
+                prev_desc.append(f'{prev_count} times')
+            condensed.append(desc)
+            prev_desc = desc
+            prev_count = 1
+        else:
+            prev_count += 1
+    if prev_desc is not None and prev_count > 1:
+        prev_desc.append(f'{prev_count} times')
+    return condensed
+
+def describe_buff(buff):
+    btype = buff[0]
+    if btype in ('energy', 'inspiration'):
+        stack = buff[1]
+        if len(buff) == 3:
+            if buff[2] == 'team':
+                return f'increases {btype} level of team by {stack}'
+            else:
+                return f'increases {btype} level of the user and nearby allies by {stack}'
+        else:
+            return f'increases {btype} level of the user by {stack}'
+    buff_desc = ''
+    value = buff[1]
+
+    if btype == 'debuff':
+        if buff[4] == 'defb':
+            buff_desc = DEBUFFB_FMT.format(value=-value)
+        else:
+            mtype = MTYPE.get(buff[4], buff[4])
+            buff_desc = DEBUFF_FMT.format(mtype=mtype, value=-value, rate=buff[3])
+    elif btype == 'affres':
+        buff_desc = AFFRES_FMT.format(aff=buff[3], value=-value)
+    elif btype in BUFF_FMT:
+        mtype = MTYPE.get(buff[3], buff[3])
+        if buff[4] != 'buff':
+            mtype += ' ' + buff[4]
+        buff_desc = BUFF_FMT[btype].format(mtype=mtype, value=value)
+    if buff_desc:
+        if buff[2] != -1:
+            buff_desc += f' for {buff[2]}s'
+        return buff_desc
+        if buff[-1].startswith('-overwrite') or buff[-1].startswith('-refresh'):
+            buff_desc += f', does not stack'
+
+def describe_conf(adv_conf):
+    conf_desc = {}
+    flatten = {}
+    for name, conf in adv_conf.items():
+        if ('attr' not in conf):
+            continue
+        try:
+            base, group = name.split('_')
+        except ValueError:
+            base = name
+            group = 'default'
+        mlv = 0
+        for lv in conf:
+            if lv.startswith('lv'):
+                nlv = int(lv[-1])
+                mlv = nlv + 1
+                if ('attr' not in conf[lv]):
+                    continue
+                flatten[(base, group, nlv)] = conf[lv]
+        flatten[(base, group, mlv)] = conf
+    for key, conf in flatten.items():
+        conf_desc[key] = []
+        for attr in conf['attr']:
+            if isinstance(attr, int):
+                for _ in range(attr-1):
+                    conf_desc[key].append(attr_desc.copy())
+                continue
+            attr_desc = [attr.get('iv', 0)]
+            if dmg := attr.get('dmg'):
+                attr_desc.append(f'deal {dmg:.2%} damage')
+            if bleed := attr.get('bleed'):
+                rate = bleed[0]
+                mod = bleed[1]
+                attr_desc.append(f'inflict bleed for 30s with {rate/100:.0%} chance and deal {mod:.2%} damage every 4.9s')
+            if afflic := attr.get('afflic'):
+                afflic_desc = []
+                aff_type = afflic[0]
+                aff_rate = afflic[1]
+                if aff_type in DEFAULT_AFF_IV: # dot
+                    mod = afflic[2]
+                    try:
+                        duration = afflic[3]
+                    except IndexError:
+                        duration = DEFAULT_AFF_DURATION[aff_type]
+                    try:
+                        iv = afflic[4]
+                    except IndexError:
+                        iv = DEFAULT_AFF_IV[aff_type]
+                    attr_desc.append(f'inflict {aff_type} for {duration}s with {aff_rate/100:.0%} chance and deal {mod:.2%} damage every {iv}s')
+                else: # cc
+                    durations = afflic[2:]
+                    if len(durations) == 0:
+                        durations = DEFAULT_AFF_DURATION[aff_type]
+                    elif len(durations) == 2:
+                        attr_desc.append(f'inflict {aff_type} for {durations[0]}-{durations[1]}s with {aff_rate/100:.2%} chance')
+                    else:
+                        attr_desc.append(f'inflict {aff_type} for {durations[0]}s with {aff_rate/100:.0%} chance')
+            if buff := attr.get('buff'):
+                if isinstance(buff[0], list):
+                    for b in buff:
+                        if bdesc := describe_buff(b):
+                            attr_desc.append(bdesc)
+                else:
+                    if bdesc := describe_buff(buff):
+                        attr_desc.append(bdesc)
+            conf_desc[key].append(attr_desc)
+        conf_desc[key] = condense_desc(conf_desc[key])
+    return pformat(conf_desc)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', help='_Name/_SecondName')
+    parser.add_argument('--desc', help='wiki describe', action='store_true')
     parser.add_argument('-d', help='_Name')
     parser.add_argument('-wp', help='_Name')
     parser.add_argument('-s', help='_SkillId')
@@ -1421,9 +1591,13 @@ if __name__ == '__main__':
     elif args.a:
         view = AdvConf(index)
         if args.a == 'all':
-            view.export_all_to_folder(out_dir=out_dir)
+            view.export_all_to_folder(out_dir=out_dir, desc=args.desc)
         else:
-            fmt_conf(view.get(args.a), f=sys.stdout)
+            adv_conf = view.get(args.a, all_levels=args.desc)
+            if args.desc:
+                print(describe_conf(adv_conf))
+            else:
+                fmt_conf(adv_conf, f=sys.stdout)
     elif args.d:
         view = DrgConf(index)
         if args.d == 'all':
