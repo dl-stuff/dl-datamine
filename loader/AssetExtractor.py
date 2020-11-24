@@ -190,8 +190,8 @@ def process_json(tree):
             tree = tree['dict']
         elif 'list' in tree:
             tree = tree['list']
-        elif 'entriesValue' in tree and 'entriesHashCode' in tree:
-            return {k: process_json(v) for k, v in zip(tree['entriesHashCode'], tree['entriesValue'])}
+        elif 'entriesValue' in tree and 'entriesKey' in tree:
+            return {k: process_json(v) for k, v in zip(tree['entriesKey'], tree['entriesValue'])}
         else:
             return tree
     return tree
@@ -669,8 +669,8 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        'jp': {
-            r'^prefabs/outgame/questselect/chaptermapicon': None
+        'en': {
+            r'^story/unitstory/chara': None
         }
     }
 

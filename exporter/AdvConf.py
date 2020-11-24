@@ -79,28 +79,31 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
                     r_str_lst.append(json.dumps(d))
             return '[\n' + INDENT*(depth+1) + (',').join(r_str_lst) + '\n' + INDENT*depth + ']' 
         return json.dumps(data)
-    f.write('{\n')
-    # f.write(INDENT*depth)
-    end = len(data) - 1
-    if depth == 0:
-        items = enumerate(sorted(data.items(), key=confsort))
+    if not isinstance(data, dict):
+        f.write(json.dumps(data))
     else:
-        items = enumerate(data.items())
-    for idx, kv in items:
-        k, v = kv
-        f.write(INDENT*(depth+1))
-        f.write('"')
-        f.write(k)
-        f.write('": ')
-        res = fmt_conf(v, k, depth+1, f, lim)
-        if res is not None:
-            f.write(res)
-        if idx < end:
-            f.write(',\n')
+        f.write('{\n')
+        # f.write(INDENT*depth)
+        end = len(data) - 1
+        if depth == 0:
+            items = enumerate(sorted(data.items(), key=confsort))
         else:
-            f.write('\n')
-    f.write(INDENT*depth)
-    f.write('}')
+            items = enumerate(data.items())
+        for idx, kv in items:
+            k, v = kv
+            f.write(INDENT*(depth+1))
+            f.write('"')
+            f.write(k)
+            f.write('": ')
+            res = fmt_conf(v, k, depth+1, f, lim)
+            if res is not None:
+                f.write(res)
+            if idx < end:
+                f.write(',\n')
+            else:
+                f.write('\n')
+        f.write(INDENT*depth)
+        f.write('}')
 
 def fr(num):
     try:
@@ -119,7 +122,7 @@ def clean_hitattr(attr, once_per_action):
                 continue
     return attr, need_copy
 
-def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
+def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action['_Parts']
     hitattrs = []
     once_per_action = set()
@@ -130,17 +133,18 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                 if len(hitattr_lst) == 1:
                     hitattr_lst = hitattr_lst[0]
                 if isinstance(hitattr_lst, dict):
-                    if (attr := convert_hitattr(hitattr_lst, part, action, once_per_action, adv=adv, skill=skill)):
+                    if (attr := convert_hitattr(hitattr_lst, part, action, once_per_action, meta=meta, skill=skill)):
                         part_hitattrs.append(attr)
                 elif isinstance(hitattr_lst, list):
                     for hitattr in hitattr_lst:
                         if (not pattern or pattern.match(hitattr['_Id'])) and \
-                            (attr := convert_hitattr(hitattr, part, action, once_per_action, adv=adv, skill=skill)):
+                            (attr := convert_hitattr(hitattr, part, action, once_per_action, meta=meta, skill=skill)):
                             part_hitattrs.append(attr)
                             if not pattern:
                                 break
         if not part_hitattrs:
             continue
+        is_msl = True
         if (blt := part.get('_bulletNum', 0)) > 1 and not 'extra' in part_hitattrs[-1]:
             last_copy, need_copy = clean_hitattr(part_hitattrs[-1].copy(), once_per_action)
             if need_copy:
@@ -175,19 +179,21 @@ def convert_all_hitattr(action, pattern=None, adv=None, skill=None):
                 gen = loopnum
             gen += 1
             ref_attrs = [part_hitattrs[0]] if len(part_hitattrs) == 1 else [part_hitattrs[1]]
+            is_msl = False
         if gen and delay:
             gen_attrs = []
+            timekey = 'msl' if is_msl else 'iv'
             for gseq in range(1, gen):
                 for attr in ref_attrs:
                     gattr, _ = clean_hitattr(attr.copy(), once_per_action)
-                    gattr['iv'] = fr(attr.get('iv', 0)+delay*gseq)
+                    gattr[timekey] = fr(attr.get(timekey, 0)+delay*gseq)
                     gen_attrs.append(gattr)
             part_hitattrs.extend(gen_attrs)
         hitattrs.extend(part_hitattrs)
     once_per_action = set()
     return hitattrs
 
-def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None):
+def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
     attr = {}
     target = hitattr.get('_TargetGroup')
     if hitattr.get('_IgnoreFirstHitCheck'):
@@ -210,7 +216,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
             once_per_action.add('sp')
         elif (sp_p := hitattr.get('_RecoverySpRatio')):
             attr['sp'] = [fr(sp_p), '%']
-            if (sp_i := hitattr.get('_RecoverySpSkillIndex')):
+            if (sp_i := hitattr.get('_RecoverySpSkillIndex')) or (sp_i := hitattr.get('_RecoverySpSkillIndex2')):
                 attr['sp'].append(f's{sp_i}')
             once_per_action.add('sp')
     if 'dp' not in once_per_action and (dp := hitattr.get('_AdditionRecoveryDpLv1')):
@@ -232,32 +238,32 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
     if 0 < (attenuation := part.get('_attenuationRate', 0)) < 1:
         attr['fade'] = fr(attenuation)
 
+    # attr_tag = None
     if (actcond := hitattr.get('_ActionCondition1')) and actcond['_Id'] not in once_per_action:
         once_per_action.add(actcond['_Id'])
+        # attr_tag = actcond['_Id']
+        # if (remove := actcond.get('_RemoveConditionId')):
+        #     attr['del'] = remove
         if actcond.get('_DamageLink'):
-            return convert_hitattr(actcond['_DamageLink'], part, action, once_per_action, adv=adv, skill=skill)
+            return convert_hitattr(actcond['_DamageLink'], part, action, once_per_action, meta=meta, skill=skill)
         if actcond.get('_EfficacyType') == DISPEL and (rate := actcond.get('_Rate', 0)):
             attr['dispel'] = rate
         else:
             alt_buffs = []
-            if adv and skill:
-                for ehs in AdvConf.ENHANCED_SKILL:
+            if meta and skill:
+                for ehs, s in AdvConf.ENHANCED_SKILL.items():
                     if (esk := actcond.get(ehs)):
-                        if isinstance(esk, int) or esk.get('_Id') in adv.all_chara_skills:
-                            adv.chara_skill_loop.add(skill['_Id'])
+                        if isinstance(esk, int) or esk.get('_Id') in meta.all_chara_skills:
+                            meta.chara_skill_loop.add(skill['_Id'])
                         else:
-                            try:
-                                s = int(ehs[-1])
-                            except:
-                                s = 1
-                            eid = next(adv.eskill_counter)
+                            eid = next(meta.eskill_counter)
                             group = 'enhanced' if eid == 1 else f'enhanced{eid}'
-                            adv.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, skill['_Id'])
+                            meta.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, skill['_Id'])
                             alt_buffs.append(['sAlt', group, f's{s}'])
                 if (eba := actcond.get('_EnhancedBurstAttack')) and isinstance(eba, dict):
-                    eid = next(adv.efs_counter)
+                    eid = next(meta.efs_counter)
                     group = 'enhanced' if eid == 1 else f'enhanced{eid}'
-                    adv.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
+                    meta.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
                     alt_buffs.append(['fsAlt', group])
 
             if target == 3 and (afflic := actcond.get('_Type')):
@@ -287,10 +293,11 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                 buffs = []
                 for tsn, btype in AdvConf.TENSION_KEY.items():
                     if (v := actcond.get(tsn)):
-                        if target == 2:
-                            buffs.append([btype, v, 'nearby'])
-                        elif target == 6:
-                            buffs.append([btype, v, 'team'])
+                        if target in (2, 6):
+                            if part.get('_collisionParams_01', 0) > 0:
+                                buffs.append([btype, v, 'nearby'])
+                            else:
+                                buffs.append([btype, v, 'team'])
                         else:
                             buffs.append([btype, v])
                 if not buffs:
@@ -303,14 +310,15 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
                     else:
                         duration = actcond.get('_DurationSec', -1)
                         duration = fr(duration)
-                        if target == 2:
-                            btype = 'nearby'
-                        elif target == 6:
-                            btype = 'team'
+                        if target in (2, 6):
+                            if part.get('_collisionParams_01', 0) > 0:
+                                btype = 'nearby'
+                            else:
+                                btype = 'team'
                         else:
                             btype = 'self'
                     for b in alt_buffs:
-                        if btype == 'next' and b[0] == 'fsAlt':
+                        if btype == 'next' and b[0] in ('fsAlt', 'sAlt'):
                             b.extend((-1, duration))
                         elif duration > -1:
                             b.append(duration)
@@ -344,11 +352,14 @@ def convert_hitattr(hitattr, part, action, once_per_action, adv=None, skill=None
     if hitattr.get('_IgnoreFirstHitCheck'):
         once_per_action.clear()
     if attr:
-        iv = fr(part['_seconds'] + part.get('_delayTime', 0))
+        iv = fr(part['_seconds'])
         if iv > 0:
             attr['iv'] = iv
-        if 'BULLET' in part['commandType']:
-            attr['msl'] = 1
+        # if 'BULLET' in part['commandType']
+        if (delay := part.get('_delayTime', 0)):
+            attr['msl'] = fr(delay)
+        # if attr_tag:
+        #     attr['tag'] = attr_tag
         return attr
     else:
         return None
@@ -615,7 +626,9 @@ class BaseConf(WeaponType):
                 fmt_conf(res, f=fp)
 
 def convert_skill_common(skill, lv):
-    action = skill.get('_AdvancedActionId1', 0)
+    action = 0
+    if lv >= skill.get('_AdvancedSkillLv1', float('inf')):
+        action = skill.get('_AdvancedActionId1', 0)
     if isinstance(action, int):
         action = skill.get('_ActionId1')
 
@@ -659,7 +672,89 @@ def convert_skill_common(skill, lv):
 
     return sconf, action
 
-class AdvConf(CharaData):
+
+class SkillProcessHelper:
+    def reset_meta(self):
+        self.chara_skills = {}
+        self.chara_skill_loop = set()
+        self.eskill_counter = itertools.count(start=1)
+        self.efs_counter = itertools.count(start=1)
+        self.all_chara_skills = {}
+        self.enhanced_fs = []
+        self.ab_alt_buffs = defaultdict(lambda: [])
+
+    def convert_skill(self, k, seq, skill, lv, no_loop=False):
+        sconf, action = convert_skill_common(skill, lv)
+
+        if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), meta=None if no_loop else self, skill=skill)):
+            sconf['attr'] = hitattrs
+        if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f'_IsAffectedByTensionLv{lv}'):
+            sconf['energizable'] = bool(skill[f'_IsAffectedByTensionLv{lv}'])
+
+        if (transkills := skill.get('_TransSkill')) and isinstance(transkills, dict):
+            k = f's{seq}_phase1'
+            for idx, ts in enumerate(transkills.items()):
+                tsid, tsk = ts
+                if tsid not in self.all_chara_skills:
+                    self.chara_skills[tsid] = (f's{seq}_phase{idx+1}', seq, tsk, skill.get('_Id'))
+
+        if (ab := skill.get(f'_Ability{lv}')):
+            if isinstance(ab, int):
+                ab = self.index['AbilityData'].get(ab, exclude_falsy=True)
+            for a in (1, 2, 3):
+                if ab.get('_AbilityType1') == 44: # alt skill
+                    s = int(ab['_TargetAction1'][-1])
+                    eid = next(self.eskill_counter)
+                    group = 'enhanced' if eid == 1 else f'enhanced{eid}'
+                    self.chara_skills[ab[f'_VariousId1a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId1a'], skill['_Id'])
+        return sconf, k
+
+    def process_skill(self, res, conf, mlvl, all_levels=False):
+        # exceptions exist
+        while self.chara_skills:
+            k, seq, skill, prev_id = next(iter(self.chara_skills.values()))
+            self.all_chara_skills[skill.get('_Id')] = (k, seq, skill, prev_id)
+            if seq == 99:
+                lv = mlvl[res['_EditSkillLevelNum']]
+            else:
+                lv = mlvl.get(seq, 2)
+            cskill, k = self.convert_skill(k, seq, skill, lv)
+            conf[k] = cskill
+            if all_levels:
+                for s_lv in range(1, lv):
+                    s_cskill, _ = self.convert_skill(k, seq, skill, s_lv, no_loop=True)
+                    conf[k][f'lv{s_lv}'] = s_cskill
+            if (ab_alt_buffs := self.ab_alt_buffs.get(seq)):
+                if len(ab_alt_buffs) == 1:
+                    ab_alt_buffs = [ab_alt_buffs[0], '-refresh']
+                else:
+                    ab_alt_buffs = [*ab_alt_buffs, '-refresh']
+                if 'attr' not in conf[k]:
+                    conf[k]['attr'] = []
+                conf[k]['attr'].append({'buff': ab_alt_buffs})
+            del self.chara_skills[skill.get('_Id')]
+
+        for efs, eba, emk in self.enhanced_fs:
+            n = ''
+            for fs, fsc in convert_fs(eba, emk).items():
+                conf[f'{fs}_{efs}'] = fsc
+
+        # if res.get('_Id') not in AdvConf.DO_NOT_FIND_LOOP:
+        #     if self.chara_skill_loop:
+        #         for loop_id in self.chara_skill_loop:
+        #             k, seq, _, prev_id = self.all_chara_skills.get(loop_id)
+        #             loop_sequence = [(k, seq)]
+        #             while prev_id != loop_id and prev_id is not None:
+        #                 k, seq, _, pid = self.all_chara_skills.get(prev_id)
+        #                 loop_sequence.append((k, seq))
+        #                 prev_id = pid
+        #             for p, ks in enumerate(reversed(loop_sequence)):
+        #                 k, seq = ks
+        #                 conf[f's{seq}_phase{p+1}'] = conf[k]
+        #                 del conf[k]
+
+
+class AdvConf(CharaData, SkillProcessHelper):
     GENERIC_BUFF = ('skill_A', 'skill_B', 'skill_C', 'skill_D', 'skill_006_01')
     BUFFARG_KEY = {
         '_RateAttack': ('att', 'buff'),
@@ -698,7 +793,11 @@ class AdvConf(CharaData):
         '_Inspiration': 'inspiration'
     }
     # OVERWRITE = ('_Overwrite', '_OverwriteVoice', '_OverwriteGroupId')
-    ENHANCED_SKILL = ('_EnhancedSkill1', '_EnhancedSkill2')
+    ENHANCED_SKILL = {
+        '_EnhancedSkill1': 1,
+        '_EnhancedSkill2': 2,
+        '_EnhancedSkillWeapon': 3
+    }
 
     MISSING_ENDLAG = []
     DO_NOT_FIND_LOOP = (
@@ -706,41 +805,9 @@ class AdvConf(CharaData):
         10650101, # gala sarisse
     )
 
-    def convert_skill(self, k, seq, skill, lv, no_loop=False):
-        sconf, action = convert_skill_common(skill, lv)
-
-        if (hitattrs := convert_all_hitattr(action, re.compile(f'.*LV0{lv}$'), adv=None if no_loop else self, skill=skill)):
-            sconf['attr'] = hitattrs
-        if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f'_IsAffectedByTensionLv{lv}'):
-            sconf['energizable'] = bool(skill[f'_IsAffectedByTensionLv{lv}'])
-
-        if (transkills := skill.get('_TransSkill')) and isinstance(transkills, dict):
-            k = f's{seq}_phase1'
-            for idx, ts in enumerate(transkills.items()):
-                tsid, tsk = ts
-                if tsid not in self.all_chara_skills:
-                    self.chara_skills[tsid] = (f's{seq}_phase{idx+1}', seq, tsk, skill.get('_Id'))
-
-        if (ab := skill.get(f'_Ability{lv}')):
-            if isinstance(ab, int):
-                ab = self.index['AbilityData'].get(ab, exclude_falsy=True)
-            for a in (1, 2, 3):
-                if ab.get('_AbilityType1') == 44: # alt skill
-                    s = int(ab['_TargetAction1'][-1])
-                    eid = next(self.eskill_counter)
-                    group = 'enhanced' if eid == 1 else f'enhanced{eid}'
-                    self.chara_skills[ab[f'_VariousId1a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId1a'], skill['_Id'])
-        return sconf, k
-
     def process_result(self, res, exclude_falsy=True, condense=True, all_levels=False):
         self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
-        self.chara_skills = {}
-        self.chara_skill_loop = set()
-        self.eskill_counter = itertools.count(start=1)
-        self.efs_counter = itertools.count(start=1)
-        self.all_chara_skills = {}
-        self.enhanced_fs = []
-        self.ab_alt_buffs = defaultdict(lambda: [])
+        self.reset_meta()
 
         ab_lst = []
         for i in (1, 2, 3):
@@ -760,7 +827,7 @@ class AdvConf(CharaData):
                 'wt': WEAPON_TYPES[res['_WeaponType']].lower(),
                 'spiral': res['_MaxLimitBreakCount'] == 5,
                 'a': converted,
-                'skipped': skipped
+                # 'skipped': skipped
             }
         }
         if conf['c']['wt'] == 'gun':
@@ -778,12 +845,8 @@ class AdvConf(CharaData):
                         actcond = ab.get(f'_VariousId{i}str')
                     sid = ab.get('_OnSkill')
                     cd = actcond.get('_CoolDownTimeSec')
-                    for ehs in AdvConf.ENHANCED_SKILL:
+                    for ehs, s in AdvConf.ENHANCED_SKILL.items():
                         if (esk := actcond.get(ehs)):
-                            try:
-                                s = int(ehs[-1])
-                            except:
-                                s = 1
                             eid = next(self.eskill_counter)
                             if group is None:
                                 group = unique_name if eid == 1 else f'{unique_name}{eid}'
@@ -802,17 +865,11 @@ class AdvConf(CharaData):
                         elif dtime := actcond.get('_Duration'):
                             b.append(dtime)
 
-
         if (burst := res.get('_BurstAttack')):
             burst = self.index['PlayerAction'].get(res['_BurstAttack'], exclude_falsy=exclude_falsy)
             if burst and (marker := burst.get('_BurstMarkerId')):
                 conf.update(convert_fs(burst, marker))
 
-        # exceptions exist
-        if conf['c']['spiral']:
-            mlvl = {1: 4, 2: 3}
-        else:
-            mlvl = {1: 3, 2: 2}
         for s in (1, 2):
             skill = self.index['SkillData'].get(res[f'_Skill{s}'], 
                 exclude_falsy=exclude_falsy, full_query=True)
@@ -865,51 +922,16 @@ class AdvConf(CharaData):
         # self.abilities = self.last_abilities(res, as_mapping=True)
         # pprint(self.abilities)
         # for k, seq, skill in self.chara_skills.values():
-        while self.chara_skills:
-            k, seq, skill, prev_id = next(iter(self.chara_skills.values()))
-            self.all_chara_skills[skill.get('_Id')] = (k, seq, skill, prev_id)
-            if seq == 99:
-                lv = mlvl[res['_EditSkillLevelNum']]
-            else:
-                lv = mlvl[seq]
-            cskill, k = self.convert_skill(k, seq, skill, lv)
-            conf[k] = cskill
-            if all_levels:
-                for s_lv in range(1, lv):
-                    s_cskill, _ = self.convert_skill(k, seq, skill, s_lv, no_loop=True)
-                    conf[k][f'lv{s_lv}'] = s_cskill
-            if (ab_alt_buffs := self.ab_alt_buffs.get(seq)):
-                if len(ab_alt_buffs) == 1:
-                    ab_alt_buffs = [ab_alt_buffs[0], '-refresh']
-                else:
-                    ab_alt_buffs = [*ab_alt_buffs, '-refresh']
-                if 'attr' not in conf[k]:
-                    conf[k]['attr'] = []
-                conf[k]['attr'].append({'buff': ab_alt_buffs})
-            del self.chara_skills[skill.get('_Id')]
-
-        for efs, eba, emk in self.enhanced_fs:
-            n = ''
-            for fs, fsc in convert_fs(eba, emk).items():
-                conf[f'{fs}_{efs}'] = fsc
-
-        if res.get('_Id') not in AdvConf.DO_NOT_FIND_LOOP:
-            if self.chara_skill_loop:
-                for loop_id in self.chara_skill_loop:
-                    k, seq, _, prev_id = self.all_chara_skills.get(loop_id)
-                    loop_sequence = [(k, seq)]
-                    while prev_id != loop_id and prev_id is not None:
-                        k, seq, _, pid = self.all_chara_skills.get(prev_id)
-                        loop_sequence.append((k, seq))
-                        prev_id = pid
-                    for p, ks in enumerate(reversed(loop_sequence)):
-                        k, seq = ks
-                        conf[f's{seq}_phase{p+1}'] = conf[k]
-                        del conf[k]
 
         if (udrg := res.get('_UniqueDragonId')):
             conf['dragonform'] = self.index['DrgConf'].get(udrg, by='_Id')
             del conf['dragonform']['d']
+
+        if conf['c']['spiral']:
+            mlvl = {1: 4, 2: 3}
+        else:
+            mlvl = {1: 3, 2: 2}
+        self.process_skill(res, conf, mlvl, all_levels=all_levels)
 
         return conf
 
@@ -1047,6 +1069,8 @@ def ab_actcond(**kwargs):
     elif cond == 'hp drop under':
         if ab.get('_OccurenceNum'):
             astr = 'lo'
+        elif ab.get('_MaxCount') == 5:
+            astr = 'uo'
         else:
             astr = 'ro'
     elif cond == 'every combo':
@@ -1105,6 +1129,16 @@ def ab_actcond(**kwargs):
         if full_astr and value:
             return [full_astr, value, *extra_args]
 
+def ab_prep(**kwargs):
+    ab = kwargs['ab']
+    upval = kwargs.get('upval', 0)
+    astr = 'prep'
+    if ab.get('_OnSkill') == 99:
+        astr = 'scharge_all'
+        upval /= 100
+    if (condstr := ab_cond(ab)):
+        return [astr, upval, condstr]
+    return [astr, upval]
 
 def ab_generic(name, div=None):
     def ab_whatever(**kwargs):
@@ -1130,7 +1164,7 @@ ABILITY_CONVERT = {
     7: ab_generic('cc', 100),
     11: ab_generic('spf', 100),
     14: ab_actcond,
-    17: ab_generic('prep'),
+    17: ab_prep,
     18: ab_generic('bt', 100),
     19: ab_generic('dbt', 100),
     20: ab_aff_k,
@@ -1257,7 +1291,7 @@ class WpConf(AbilityCrest):
         return self.process_result(res)
     
 
-class DrgConf(DragonData):
+class DrgConf(DragonData, SkillProcessHelper):
     EXTRA_DRAGONS = (
         20050102,
         20050202,
@@ -1273,6 +1307,19 @@ class DrgConf(DragonData):
         'dodgeb': 0.66667,
         'dshift': 0.69444,
     }
+
+    def convert_skill(self, k, seq, skill, lv, no_loop=False):
+        conf, k = super().convert_skill(k, seq, skill, lv, no_loop=no_loop)
+        conf['sp_db'] = skill.get('_SpLv2Dragon', 45)
+        conf['uses'] = skill.get('_MaxUseNum', 1)
+        try:
+            attr = conf['attr']
+            del conf['attr']
+            conf['attr'] = attr
+        except KeyError:
+            pass
+        return conf, k
+
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
 
@@ -1292,8 +1339,8 @@ class DrgConf(DragonData):
                 'a': converted
             }
         }
-        if skipped:
-            conf['d']['skipped'] = skipped
+        # if skipped:
+        #     conf['d']['skipped'] = skipped
 
         for act, key in (('dodge', '_AvoidActionFront'), ('dodgeb', '_AvoidActionBack'), ('dshift', '_Transform')):
             s, r, _ = hit_sr(res[key]['_Parts'], is_dragon=True, signal_end={None})
@@ -1317,33 +1364,28 @@ class DrgConf(DragonData):
             if dxconf := convert_x(xn['_Id'], xn, xlen=dcmax, convert_follow=False, is_dragon=True):
                 conf[f'dx{n}'] = dxconf
 
-        for act, key in (('ds', '_Skill1'), ('ds_final', '_SkillFinalAttack')):
+        self.reset_meta()
+        dupe_skill = {}
+        for act, seq, key in (('ds', 1, '_Skill1'), ('ds_final', 0, '_SkillFinalAttack')):
             if not (dskill := res.get(key)):
                 continue
-            sconf, action = convert_skill_common(dskill, 2)
-            sconf['uses'] = dskill.get('_MaxUseNum', 1)
-            
-            if (hitattrs := convert_all_hitattr(action, re.compile(r'.*LV02$'))):
-                sconf['attr'] = hitattrs
-            if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and dskill.get(f'_IsAffectedByTensionLv2'):
-                sconf['energizable'] = bool(dskill['_IsAffectedByTensionLv2'])
-
-            conf[act] = sconf
+            if dskill['_Id'] in self.chara_skills:
+                dupe_skill[act] = self.chara_skills[dskill['_Id']][0]
+            else:
+                self.chara_skills[dskill['_Id']] = (act, seq, dskill, None)
+        self.process_skill(res, conf, {})
+        for act, src in dupe_skill.items():
+            conf[act] = conf[src].copy()
 
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
         where_str = '_Rarity = 5 AND _IsPlayable = 1 AND (_SellDewPoint = 8500 OR _Id in ('+ ','.join(map(str, DrgConf.EXTRA_DRAGONS)) +')) AND _Id = _EmblemId'
+        # where_str = '_IsPlayable = 1'
         all_res = self.get_all(exclude_falsy=True, where=where_str)
         out_dir = os.path.join(out_dir, 'drg')
         check_target_path(out_dir)
-        outdata = {
-            'flame': {},
-            'water': {},
-            'wind': {},
-            'light': {},
-            'shadow': {}
-        }
+        outdata = {ele.lower(): {} for ele in ELEMENTS.values()}
         # skipped = []
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             conf = self.process_result(res, exclude_falsy=True)
@@ -1365,7 +1407,7 @@ class DrgConf(DragonData):
         return self.process_result(res)
 
 
-class WepConf(WeaponBody):
+class WepConf(WeaponBody, SkillProcessHelper):
     T2_ELE = ('shadow', 'flame')
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
@@ -1373,36 +1415,64 @@ class WepConf(WeaponBody):
         # if skin['_FormId'] % 10 == 1 and res['_ElementalType'] in WepConf.T2_ELE:
         #     return None
         tier = res.get('_MaxLimitOverCount', 0) + 1
+        try:
+            ele_type = res['_ElementalType'].lower()
+        except AttributeError:
+            ele_type = 'any'
+        ab_lst = []
+        for i in (1, 2, 3):
+            for j in (3, 2, 1):
+                if (ab := res.get(f'_Abilities{i}{j}')):
+                    ab_lst.append(ab)
+                    break
+        converted, skipped = convert_all_ability(ab_lst)
         conf = {
-            'name': res['_Name'],
-            'icon': f'{skin["_BaseId"]}_{skin["_VariationId"]:02}_{skin["_FormId"]}',
-            'att': res[f'_MaxAtk{tier}'],
-            'hp': res[f'_MaxHp{tier}'],
-            'ele': res['_ElementalType'].lower(),
-            'wt': res['_WeaponType'].lower(),
-            'tier': tier
+            'w': {
+                'name': res['_Name'],
+                'icon': f'{skin["_BaseId"]}_{skin["_VariationId"]:02}_{skin["_FormId"]}',
+                'att': res.get(f'_MaxAtk{tier}', 0),
+                'hp': res.get(f'_MaxHp{tier}', 0),
+                'ele': ele_type,
+                'wt': res['_WeaponType'].lower(),
+                'series': res['_WeaponSeriesId']['_GroupSeriesName'].replace(' Weapons', ''),
+                # 'crest': {
+                #     5: res.get('_CrestSlotType1MaxCount', 0),
+                #     4: res.get('_CrestSlotType2MaxCount', 0)
+                # },
+                'tier': tier,
+                'a': converted
+                # 'skipped': skipped
+            }
         }
+
+        self.reset_meta()
+        dupe_skill = {}
+        for act, seq, key in (('s3', 3, f'_ChangeSkillId3'),):
+            if not (skill := res.get(key)):
+                continue
+            if skill['_Id'] in self.chara_skills:
+                dupe_skill[act] = self.chara_skills[skill['_Id']][0]
+            else:
+                self.chara_skills[skill['_Id']] = (act, seq, skill, None)
+        self.process_skill(res, conf, {})
+
         return conf
 
     def export_all_to_folder(self, out_dir='./out', ext='.json'):
-        all_res = self.get_all(exclude_falsy=True, where='_WeaponSeriesId = 4')
+        all_res = self.get_all(exclude_falsy=True, where='_IsPlayable = 1')
+        out_dir = os.path.join(out_dir, 'wep')
         check_target_path(out_dir)
-        outdata = {
-            'flame': {},
-            'water': {},
-            'wind': {},
-            'light': {},
-            'shadow': {}
-        }
+        outdata = {wt.lower(): {ele.lower(): {} for ele in ('any', *ELEMENTS.values())} for wt in WEAPON_TYPES.values()}
         # skipped = []
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             conf = self.process_result(res, exclude_falsy=True)
             # outfile = snakey(conf['d']['ele']) + '.json'
             if conf:
-                outdata[conf['ele']][conf['wt']] = conf
-        output = os.path.join(out_dir, f'weapons.json')
-        with open(output, 'w', newline='', encoding='utf-8') as fp:
-            fmt_conf(outdata, f=fp)
+                outdata[conf['w']['wt']][conf['w']['ele']][snakey(conf['w']['series']).lower()] = conf
+        for wt, data in outdata.items():
+            output = os.path.join(out_dir, f'{wt}.json')
+            with open(output, 'w', newline='', encoding='utf-8') as fp:
+                fmt_conf(data, f=fp, lim=4)
         #     else:
         #         skipped.append(res["_Name"])
         # print('Skipped:', ','.join(skipped))
@@ -1607,7 +1677,7 @@ if __name__ == '__main__':
         view.chara_skills = {}
         view.enhanced_fs = []
         view.chara_skill_loop = set()
-        sconf, k = view.convert_skill('s1', 1, view.index['SkillData'].get(int(args.s), exclude_falsy=True), int(args.slv))
+        sconf, k = view.convert_skill('s1', 0, view.index['SkillData'].get(int(args.s), exclude_falsy=True), int(args.slv))
         sconf = {k: sconf}
         fmt_conf(sconf, f=sys.stdout)
         print('\n')

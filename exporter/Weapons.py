@@ -89,8 +89,8 @@ class WeaponBody(DBView):
                 skill_ids.add(res[key])
                 res[key] = self.index['SkillData'].get(res[key], exclude_falsy=exclude_falsy, full_abilities=True)
         ab_ids = {0}
-        for i in (1, 2):
-            for j in range(3, 2, 1):
+        for i in (1, 2, 3):
+            for j in (3, 2, 1):
                 key = f'_Abilities{i}{j}'
                 if key in res and res[key] not in ab_ids:
                     ab_ids.add(res[key])

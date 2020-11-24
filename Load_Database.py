@@ -47,6 +47,15 @@ IMAGE_PATTERNS = {
     r'^images/outgame': 'outgame',
 }
 
+
+def extract_story_function_json(ex):
+    ex.download_and_extract_by_pattern({'jp': {r'^story/function': None}})
+    ex_path = os.path.join(ex.ex_dir, 'jp', 'story', 'function.json')
+    with open(ex_path) as func:
+        data = json.load(func)['functions'][0]['variables']
+    with open('./out/_storynames.json', 'w') as out:
+        json.dump({k: v for k, v in zip(data['entriesKey'], data['entriesValue'])}, out, indent=4, ensure_ascii=False)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Import data to database.')
     parser.add_argument(
@@ -67,7 +76,8 @@ if __name__ == '__main__':
             ex.download_and_extract_by_pattern(LABEL_PATTERNS)
         else:
             ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
-        load_aiscript('./_ex_sim/jp/aiscript')
+        load_aiscript(os.path.join(ex.ex_dir, 'jp', 'aiscript'))
+        extract_story_function_json(ex)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')
