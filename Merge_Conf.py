@@ -11,12 +11,11 @@ GEN = './out/gen'
 TIMING = {'startup', 'recovery', 'charge'}
 DO_NOT_MERGE = {
     # 'adv': {'interrupt', 'cancel'},
-    'drg': {'startup', 'recovery'},
+    'drg': {'startup', 'recovery', 'a'},
 }
 FMT_LIM = {
     'drg': 3,
-    'wep': 4,
-    None: 1
+    'wep': 4
 }
 
 
@@ -79,18 +78,6 @@ def merge_conf(name, kind, maplist=None):
     # fmt_conf(simconf, f=sys.stdout)
 
 
-def merge_all_conf():
-    for root, _, files in os.walk(GEN):
-        kind = None
-        if root != GEN:
-            kind = os.path.basename(root)
-        for fn in files:
-            name, ext = os.path.splitext(fn)
-            if ext != '.json':
-                continue
-            merge_conf(name, kind)
-
-
 def convert_map(maplist):
     mapdict = {}
     for pair in maplist:
@@ -101,13 +88,39 @@ def convert_map(maplist):
         mapdict[a] = b
     return mapdict
 
+
+def merge_kind_conf(kind):
+    for root, _, files in os.walk(os.path.join(GEN, kind)):
+        for fn in files:
+            name, ext = os.path.splitext(fn)
+            if ext != '.json':
+                continue
+            merge_conf(name, kind)
+
+
+def merge_all_conf():
+    for root, _, files in os.walk(GEN):
+        kind = None
+        if root == GEN:
+            continue
+        for fn in files:
+            name, ext = os.path.splitext(fn)
+            if ext != '.json':
+                continue
+            merge_conf(name, kind)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Merge conf to sim directory')
     parser.add_argument('-name', type=str, help='target merge', default=None)
     parser.add_argument('-kind', type=str, help='target kind (adv/drg/wep/base)')
     parser.add_argument('-map', type=str, nargs='*', help='suffix map')
+    parser.add_argument('--all', action='store_true', help='run everything')
     args = parser.parse_args()
-    if args.name:
-        merge_conf(args.name, args.kind, args.map)
-    else:
+    if args.all:
         merge_all_conf()
+    else:
+        if args.name:
+            merge_conf(args.name, args.kind, args.map)
+        elif args.kind:
+            merge_kind_conf(args.kind)
