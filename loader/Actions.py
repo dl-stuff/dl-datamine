@@ -56,6 +56,8 @@ def build_db_data(meta, ref, seq, data):
         if k in data:
             if isinstance(data[k], str):
                 db_data[k] = data[k].strip()
+            elif ACTION_PART.get_field(k) == DBTableMetadata.BLOB and not any(data[k]):
+                db_data[k] = None
             else:
                 db_data[k] = data[k]
         else:
@@ -65,7 +67,6 @@ def build_db_data(meta, ref, seq, data):
         db_data['_loopNum'] = loop['loopNum']
         db_data['_loopFrame'] = loop['restartFrame']
         db_data['_loopSec'] = loop['restartSec']
-
     db_data['_Id'] = f'{ref}{seq:05}'
     # if db_data['_Id'] in seen_id:
     #     print(db_data['_Id'])
@@ -113,14 +114,14 @@ def build_formation_bullet(meta, ref, seq, data):
 
 def build_marker(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
-    charge_lvl_sec = db_data['_chargeLvSec']
-    if '_nextLevelMarkerCount' in data and data['_nextLevelMarkerCount']:
-        for lvl in data['_nextLevelMarkerData']:
-            charge_lvl_sec.extend(lvl['_chargeLvSec'])
-    if not any(charge_lvl_sec):
-        db_data['_chargeLvSec'] = None
-    else:
-        db_data['_chargeLvSec'] = charge_lvl_sec
+    if charge_lvl_sec := db_data.get('_chargeLvSec'):
+        if '_nextLevelMarkerCount' in data and data['_nextLevelMarkerCount']:
+            for lvl in data['_nextLevelMarkerData']:
+                charge_lvl_sec.extend(lvl['_chargeLvSec'])
+        if not any(charge_lvl_sec):
+            db_data['_chargeLvSec'] = None
+        else:
+            db_data['_chargeLvSec'] = charge_lvl_sec
     return db_data
 
 def build_animation(meta, ref, seq, data):
@@ -186,6 +187,10 @@ ACTION_PART = DBTableMetadata(
         '_bulletNum': DBTableMetadata.INT,
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
+        '_generateNumDependOnBuffCount': DBTableMetadata.INT,
+        '_buffCountConditionId': DBTableMetadata.INT,
+        '_setBulletDelayOneByOne': DBTableMetadata.INT,
+        '_bulletDelayTime': DBTableMetadata.BLOB,
         '_lifetime': DBTableMetadata.REAL,
         '_conditionType': DBTableMetadata.INT,
         '_conditionValue': DBTableMetadata.BLOB,
@@ -228,6 +233,7 @@ ACTION_PART = DBTableMetadata(
         # BUFF_FIELD_ATTACH
         '_isAttachToBuffField': DBTableMetadata.INT,
         '_isAttachToSelfBuffField': DBTableMetadata.INT,
+        '_hitDelaySec': DBTableMetadata.REAL,
 
         # LOOP DATA
         '_loopFlag': DBTableMetadata.INT,

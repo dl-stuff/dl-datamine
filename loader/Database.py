@@ -59,6 +59,9 @@ class DBTableMetadata:
                 self.pk = c['name']
             self.field_type[c['name']] = c['type']
 
+    def get_field(self, key):
+        return self.field_type[key]
+
     @property
     def fields(self):
         return ','.join(filter(lambda k: k != self.DBID, self.field_type.keys()))

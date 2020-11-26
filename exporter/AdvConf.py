@@ -163,10 +163,10 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             while isinstance(part_hitattrs[idx], int):
                 idx -= 1
             ref_attrs = [part_hitattrs[idx]]
-        elif (bld := part.get('_bulletDuration', 0)) > (bci := part.get('_collisionHitInterval', 0)):
-            gen = int(bld/bci) + 1
-            delay = bci
-            ref_attrs = [part_hitattrs[0]]
+        elif (bci := part.get('_collisionHitInterval', 0)) and ((bld := part.get('_bulletDuration', 0)) > bci or (bld := part.get('_duration', 0)) > bci):
+                gen = int(bld/bci) + 1
+                delay = bci
+                ref_attrs = [part_hitattrs[0]]
             # if adv is not None:
             #     print(adv.name)
         elif part.get('_loopFlag'):
@@ -186,6 +186,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             for gseq in range(1, gen):
                 for attr in ref_attrs:
                     gattr, _ = clean_hitattr(attr.copy(), once_per_action)
+                    if not gattr:
+                        continue
                     gattr[timekey] = fr(attr.get(timekey, 0)+delay*gseq)
                     gen_attrs.append(gattr)
             part_hitattrs.extend(gen_attrs)
@@ -390,8 +392,10 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
                 signals[actid] = recovery
             if (actid and part.get('_motionEnd')) or actid in signal_end:
                 motion_end = recovery
-            if act_cancel_id := part.get('_actionId'):
-                followed_by.add((recovery, act_cancel_id))
+            if actid:
+                followed_by.add((recovery, actid))
+            # else:
+            #     recovery = max(timestop, recovery)
         elif part['commandType'] == 'TIMESTOP':
             # timestop = part.get('_seconds', 0) + part.get('_duration', 0)
             ts_second = part.get('_seconds', 0)
@@ -636,9 +640,13 @@ def convert_skill_common(skill, lv):
     actcancel = None
     mstate = None
     timestop = 0
+    followed_by = set()
     for part in action['_Parts']:
-        if part['commandType'] == 'ACTIVE_CANCEL' and '_actionId' not in part and actcancel is None:
-            actcancel = part['_seconds']
+        if part['commandType'] == 'ACTIVE_CANCEL' and actcancel is None:
+            if '_actionId' in part:
+                followed_by.add((part['_seconds'], part['_actionId']))
+            else:
+                actcancel = part['_seconds']
         if part['commandType'] == 'PARTS_MOTION' and mstate is None:
             if (animation := part.get('_animation')):
                 if isinstance(animation, list):
@@ -663,6 +671,12 @@ def convert_skill_common(skill, lv):
         'startup': startup,
         'recovery': None if not recovery else fr(recovery),
     }
+
+    interrupt, cancel = convert_following_actions(0, followed_by)
+    if interrupt:
+        sconf['interrupt'] = interrupt
+    if cancel:
+        sconf['cancel'] = cancel
 
     if nextaction := action.get('_NextAction'):
         for part in nextaction['_Parts']:
@@ -1344,12 +1358,19 @@ class DrgConf(DragonData, SkillProcessHelper):
 
         for act, key in (('dodge', '_AvoidActionFront'), ('dodgeb', '_AvoidActionBack'), ('dshift', '_Transform')):
             s, r, _ = hit_sr(res[key]['_Parts'], is_dragon=True, signal_end={None})
-            try:
-                DrgConf.COMMON_ACTIONS[act][r].add(conf['d']['name'])
-            except KeyError:
-                DrgConf.COMMON_ACTIONS[act][r] = {conf['d']['name']}
+                    # try:
+                    #     DrgConf.COMMON_ACTIONS[act][tuple(actconf['attr'][0].items())].add(conf['d']['name'])
+                    # except KeyError:
+                    #     DrgConf.COMMON_ACTIONS[act][tuple(actconf['attr'][0].items())] = {conf['d']['name']}
             if DrgConf.COMMON_ACTIONS_DEFAULTS[act] != r:
                 conf[act] = {'recovery': r}
+            if act == 'dshift':
+                hitattrs = convert_all_hitattr(res[key])
+                if hitattrs and hitattrs[0]['dmg'] != 2.0:
+                    try:
+                        conf[act]['attr'] = hitattrs
+                    except KeyError:
+                        conf[act] = {'attr': hitattrs}
         
         if 'dodgeb' in conf:
             if 'dodge' not in conf or conf['dodge']['recovery'] > conf['dodgeb']['recovery']:
@@ -1396,8 +1417,6 @@ class DrgConf(DragonData, SkillProcessHelper):
             output = os.path.join(out_dir, f'{ele}.json')
             with open(output, 'w', newline='', encoding='utf-8') as fp:
                 fmt_conf(data, f=fp, lim=3)
-        #     else:
-        #         skipped.append(res["_Name"])
         # pprint(DrgConf.COMMON_ACTIONS)
 
     def get(self, name, by=None):
