@@ -19,10 +19,8 @@ def same(lst, idx):
         return lst[-1]
 
 SPECIAL_EDIT_SKILL = {
-    101502035: 2,
-    101502011: 1,
-    103503029: 1,
-    107503023: 1
+    103505044: 2,
+    105501025: 1
 }
 def export_skill_share_json():
     index = DBViewIndex()
@@ -45,11 +43,7 @@ def export_skill_share_json():
             name = snakey(res['_Name']) if not res['_SecondName'] else snakey(res['_SecondName'])
         except:
             continue
-        if name == 'The_Prince':
-            name = 'Euden'
-        if name == 'Gala_Prince':
-            name = 'Gala_Euden'
-        if res['_EditSkillId'] > 0:
+        if res['_EditSkillId'] > 0 and res['_EditSkillCost'] > 0:
             skill = index['SkillData'].get(res['_EditSkillId'], exclude_falsy=False)
             if res['_EditSkillId'] == res['_Skill1']:
                 res_data['s'] = 1
@@ -59,18 +53,23 @@ def export_skill_share_json():
                 try:
                     res_data['s'] = SPECIAL_EDIT_SKILL[res['_EditSkillId']]
                 except:
-                    res_data['s'] = -1
-                    print(f'Unhandled special skill share {name} - {res["_EditSkillId"]}')
+                    res_data['s'] = 99
+            if res['_MaxLimitBreakCount'] >= 5:
+                sp_lv = 4
+            else:
+                sp_lv = 3
+            if res['_EditSkillLevelNum'] == 2:
+                sp_lv -= 1
             # res_data['name'] = snakey(skill['_Name'])
             res_data['cost'] = res['_EditSkillCost']
             res_data['type'] = skill['_SkillType']
-            sp_s_list = [
-                skill['_SpEdit'],
-                skill['_SpLv2Edit'],
-                skill['_SpLv3Edit'],
-                skill['_SpLv4Edit'],
-            ]
-            res_data['sp'] = same(sp_s_list, res['_EditSkillId'])
+            # sp_s_list = [
+            #     skill['_SpEdit'],
+            #     skill['_SpLv2Edit'],
+            #     skill['_SpLv3Edit'],
+            #     skill['_SpLv4Edit'],
+            # ]
+            res_data['sp'] = skill[f'_SpLv{sp_lv}Edit']
         else:
             continue
 
@@ -78,18 +77,6 @@ def export_skill_share_json():
 
     with open('../dl/conf/skillshare.json', 'w', newline='') as f:
         json.dump(skill_share_data, f, indent=2)
-    # with open('skillshare.csv', 'w') as f:
-    #     f.write('name')
-    #     for k in res_data.keys():
-    #         f.write(',')
-    #         f.write(k)
-    #     f.write('\n')
-    #     for name, data in skill_share_data.items():
-    #         f.write(name)
-    #         for v in data.values():
-    #             f.write(',')
-    #             f.write(str(v))
-    #         f.write('\n')
 
 
 if __name__ == '__main__':

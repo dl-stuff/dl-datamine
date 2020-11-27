@@ -2,6 +2,7 @@ import os
 import argparse
 from time import monotonic
 from tqdm import tqdm
+import json
 
 from loader.AssetExtractor import Extractor
 from loader.Database import DBManager
@@ -9,17 +10,11 @@ from loader.Database import DBManager
 from loader.Master import load_master, load_json
 from loader.Actions import load_actions
 from loader.Motion import load_character_motion, load_dragon_motion
+from loader.Aiscript import load_aiscript
 
 JP = 'jp'
 EN = 'en'
 CN = 'cn'
-
-MANIFESTS = {
-    JP: 'manifest/assetbundle.manifest.json',
-    EN: 'manifest/assetbundle.en_us.manifest.json',
-    CN: 'manifest/assetbundle.zh_cn.manifest.json',
-    # TW: 'manifest/assetbundle.zh_tw.manifest.json'
-}
 
 MASTER = 'master'
 ACTIONS = 'actions'
@@ -52,6 +47,15 @@ IMAGE_PATTERNS = {
     r'^images/outgame': 'outgame',
 }
 
+
+def extract_story_function_json(ex):
+    ex.download_and_extract_by_pattern({'jp': {r'^story/function': None}})
+    ex_path = os.path.join(ex.ex_dir, 'jp', 'story', 'function.json')
+    with open(ex_path) as func:
+        data = json.load(func)['functions'][0]['variables']
+    with open('./out/_storynames.json', 'w') as out:
+        json.dump({k: v for k, v in zip(data['entriesKey'], data['entriesValue'])}, out, indent=4, ensure_ascii=False)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Import data to database.')
     parser.add_argument(
@@ -65,16 +69,22 @@ if __name__ == '__main__':
     #     ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
     start = monotonic()
 
-    in_dir = '_extract'
+    in_dir = '_ex_sim'
     if args.do_prep:
-        ex = Extractor(MANIFESTS, ex_dir=in_dir, stdout_log=False, overwrite=True)
-        for region, labels in LABEL_PATTERNS.items():
-            ex.download_and_extract_by_pattern(labels, region=region)
+        ex = Extractor(ex_dir=in_dir, stdout_log=False, overwrite=True)
+        if not os.path.isdir(in_dir):
+            ex.download_and_extract_by_pattern(LABEL_PATTERNS)
+        else:
+            ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
+        load_aiscript(os.path.join(ex.ex_dir, 'jp', 'aiscript'))
+        extract_story_function_json(ex)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')
     load_json(db, os.path.join(in_dir, CN, MASTER, TEXT_LABEL), 'TextLabelCN')
-    load_actions(db, os.path.join(in_dir, JP, ACTIONS))
+    schema_map = load_actions(db, os.path.join(in_dir, JP, ACTIONS))
+    with open('./out/_action_schema.json', 'w') as f:
+        json.dump(schema_map, f, indent=4, sort_keys=True)
     load_character_motion(db, os.path.join(in_dir, JP, CHARACTERS_MOTION))
     load_dragon_motion(db, os.path.join(in_dir, JP, DRAGON_MOTION))
 

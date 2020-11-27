@@ -1,7 +1,8 @@
 import json
 import os
 from enum import Enum
-from Database import check_target_path
+from tqdm import tqdm
+from loader.Database import check_target_path
 
 OUTPUT = 'out/_aiscript'
 
@@ -473,11 +474,12 @@ def load_aiscript_file(file_path):
         bolb.write(root.py_str())
 
 def load_aiscript(path):
-    for root, _, files in os.walk(path):
-        for file_name in files:
-            load_aiscript_file(os.path.join(root, file_name))
-
-if __name__ == '__main__':
     check_target_path(OUTPUT)
+    for root, _, files in os.walk(path):
+        for file_name in tqdm(files, desc='aiscript'):
+            load_aiscript_file(os.path.join(root, file_name))
+    
+if __name__ == '__main__':
+    # check_target_path(OUTPUT)
     # load_aiscript_file('./_extract/jp/aiscript/HBS_0020301_01.json')
-    load_aiscript('./_extract/jp/aiscript')
+    load_aiscript('./_ex_sim/jp/aiscript')

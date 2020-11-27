@@ -52,7 +52,10 @@ def load_master(db, path, stdout_log=False):
     for root, _, files in os.walk(path):
         for fn in tqdm(files, desc='master'):
             path = os.path.join(root, fn)
-            table = os.path.basename(os.path.splitext(path)[0])
+            base, ext = os.path.splitext(path)
+            if ext != '.json':
+                continue
+            table = os.path.basename(base)
             load_json(db, path, table, stdout_log)
 
 if __name__ == '__main__':

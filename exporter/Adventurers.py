@@ -2,7 +2,7 @@ import json
 import os
 from operator import itemgetter
 
-from loader.Database import DBViewIndex, DBView
+from loader.Database import DBViewIndex, DBView, DBManager
 from loader.Actions import CommandType
 from exporter.Shared import AbilityData, SkillData, PlayerAction, ActionCondition
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
@@ -38,8 +38,8 @@ class CharaUniqueCombo(DBView):
             return res
         if '_ActionId' in res and res['_ActionId']:
             base_action_id = res['_ActionId']
-            res['_ActionId'] = [self.index['PlayerAction'].get(
-                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum'])]
+            res['_ActionId'] = list(filter(None, (self.index['PlayerAction'].get(
+                base_action_id+i, exclude_falsy=exclude_falsy) for i in range(0, res['_MaxComboNum']))))
         if '_ExActionId' in res and res['_ExActionId']:
             base_action_id = res['_ExActionId']
             res['_ExActionId'] = [self.index['PlayerAction'].get(
@@ -123,7 +123,8 @@ class CharaData(DBView):
                     res[ex2], exclude_falsy=exclude_falsy)
         return res
 
-    def last_abilities(self, res, exclude_falsy=True):
+    def last_abilities(self, res, exclude_falsy=True, as_mapping=False):
+        ab_map = {}
         for i in (1, 2, 3):
             j = 4
             ab = f'_Abilities{i}{j}'
@@ -133,19 +134,23 @@ class CharaData(DBView):
             if j > 0:
                 res[ab] = self.index['AbilityData'].get(
                     res[ab], full_query=True, exclude_falsy=exclude_falsy)
+                ab_map[ab] = res[ab]
         ex = f'_ExAbilityData5'
         if ex in res and res[ex]:
             res[ex] = self.index['ExAbilityData'].get(
                 res[ex], exclude_falsy=exclude_falsy)
+            ab_map[ex] = res[ex]
         ex2 = f'_ExAbility2Data5'
         if ex2 in res and res[ex2]:
             res[ex2] = self.index['AbilityData'].get(
                 res[ex2], exclude_falsy=exclude_falsy)
+            ab_map[ex2] = res[ex2]
+        if as_mapping:
+            return ab_map
         return res
 
     def process_result(self, res, exclude_falsy=True, condense=True):
-        self.index['ActionParts'].animation_reference = (
-            'CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
+        self.index['ActionParts'].animation_reference = ('CharacterMotion', int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'))
         if '_WeaponType' in res:
             res['_WeaponType'] = WEAPON_TYPES.get(
                 res['_WeaponType'], res['_WeaponType'])
@@ -162,9 +167,8 @@ class CharaData(DBView):
             res['_ModeChangeType'] = MODE_CHANGE_TYPES.get(
                 res['_ModeChangeType'], res['_ModeChangeType'])
         for m in ('_ModeId1', '_ModeId2', '_ModeId3', '_ModeId4'):
-            if m in res:
-                res[m] = self.index['CharaModeData'].get(
-                    res[m], exclude_falsy=exclude_falsy, full_query=True)
+            if m in res and (mode := self.index['CharaModeData'].get(res[m], exclude_falsy=exclude_falsy, full_query=True)):
+                res[m] = mode
 
         skill_ids = {0}
         for s in ('_Skill1', '_Skill2'):
@@ -210,24 +214,31 @@ class CharaData(DBView):
         return res
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True, condense=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+        res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        if not res:
+            res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+        if not res:
+            res = super().get(pk, by='_Id', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
         return self.process_result(res, exclude_falsy=exclude_falsy, condense=True)
 
     @staticmethod
     def outfile_name(res, ext='.json'):
-        name = 'UNKNOWN' if '_Name' not in res else res[
-            '_Name'] if '_SecondName' not in res else res['_SecondName']
+        name = 'UNKNOWN' if '_Name' not in res else res['_Name'] if '_SecondName' not in res else res['_SecondName']
+        if res['_ElementalType'] == 99:
+            return f'{res["_Id"]:02}_{name}{ext}'
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         out_dir = os.path.join(out_dir, 'adventurers')
-        super().export_all_to_folder(out_dir, ext,
-                                     exclude_falsy=exclude_falsy, condense=True)
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
+    def export_one_to_folder(self, pk=10250101, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, 'adventurers')
+        super().export_one_to_folder(pk, out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
 if __name__ == '__main__':
     index = DBViewIndex()
     view = CharaData(index)
-    view.export_all_to_folder()
+    view.export_one_to_folder()

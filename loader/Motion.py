@@ -82,7 +82,7 @@ def load_motion(db, path, meta, ref_pattern, state_ref):
                 with open(file_path) as f:
                     data = json.load(f)
                     motions.append(build_motion(data, ref_pattern, state_ref))
-            except (KeyError, TypeError):
+            except (KeyError, TypeError, json.decoder.JSONDecodeError):
                 pass
     db.insert_many(meta.name, motions)
 
@@ -95,5 +95,5 @@ def load_dragon_motion(db, path):
 if __name__ == '__main__':
     from loader.Database import DBManager
     db = DBManager()
-    load_character_motion(db, './_extract/jp/characters_motion')
-    load_dragon_motion(db, './_extract/jp/dragon_motion')
+    load_character_motion(db, './_ex_sim/jp/characters_motion')
+    load_dragon_motion(db, './_ex_sim/jp/dragon_motion')

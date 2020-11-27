@@ -6,7 +6,8 @@ WEAPON_TYPES = {
     5: 'Lance',
     6: 'Bow',
     7: 'Wand',
-    8: 'staff'
+    8: 'Staff',
+    9: 'Gun'
 }
 
 ELEMENTS = {
@@ -36,16 +37,19 @@ AFFLICTION_TYPES = {
     8: 'UNKNOWN08',
     9: 'Bog',
     10: 'Sleep',
-    11: 'Frostbite'
+    11: 'Frostbite',
+    12: 'Flashburn',
+    13: 'Stormlash',
+    14: 'Shadowblight'
 }
 
 KILLER_STATE = {
     **AFFLICTION_TYPES,
-    99: 'Afflicted',
-    103: 'Def Down',
-    198: 'Buff', # or maybe only burning ambition?
-    199: 'Debuff',
-    201: 'Break'
+    99: 'afflicted',
+    103: 'debuff_def',
+    198: 'buff',
+    199: 'debuff',
+    201: 'break'
 }
 
 ABILITY_CONDITION_TYPES = {
@@ -71,7 +75,7 @@ ABILITY_CONDITION_TYPES = {
     28: 's2 charge under',
     29: 'affliction proc',
     30: 'affliction resisted',
-    31: 'transform',
+    31: 'shapeshift',
     32: 'teammates alive',
     34: 'energy level',
     36: 'energy buffed',
@@ -83,7 +87,24 @@ ABILITY_CONDITION_TYPES = {
     46: 'knocked back',
     47: 'not knocked back',
     48: 'buffed',
-    50: 'enemy has def down'
+    50: 'enemy has def down',
+    51: 'shapeshift end',
+    52: 'dragondrive',
+    53: 'dragondrive',
+    # 54: 'aether',
+    58: 'hp leq', # chains
+    59: 'hp geq', # chains
+    60: 'hp geq then', # diff effect per hp thresh
+    61: 'hp else',
+    62: 'unique gauge',
+    # 64: 'unique buff',
+    # 65: 'aether',
+    67: 'enemy hp leq',
+    68: 'periodic buff',
+    69: 'affliction resisted',
+    # 70: 'unique buff'
+    # 71: 'unique buff'
+    # 72: 'unqiue buff'
 }
 
 TRIBE_TYPES = {

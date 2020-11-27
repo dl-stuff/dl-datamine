@@ -59,6 +59,9 @@ class DBTableMetadata:
                 self.pk = c['name']
             self.field_type[c['name']] = c['type']
 
+    def get_field(self, key):
+        return self.field_type[key]
+
     @property
     def fields(self):
         return ','.join(filter(lambda k: k != self.DBID, self.field_type.keys()))
@@ -267,6 +270,10 @@ class DBView:
         name = '_' + res.get('_Name', '')
         return f'{res["_Id"]}{name}{ext}'
 
+    def link(self, res, key, view, **kwargs):
+        if (idx := res.get(key)) and (linked := self.index[view].get(idx, **kwargs)):
+            res[key] = linked
+
     def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, expand_one=True):
         if order and '.' not in order:
             order = self.name + '.' + order
@@ -305,6 +312,13 @@ class DBView:
             with open(output, 'w', newline='', encoding='utf-8') as fp:
                 json.dump(res, fp, indent=2, ensure_ascii=False)
 
+    def export_one_to_folder(self, pk, out_dir, ext='.json', exclude_falsy=True, **kargs):
+        res = self.get(pk, exclude_falsy=exclude_falsy)
+        check_target_path(out_dir)
+        out_name = self.outfile_name(res, ext)
+        output = os.path.join(out_dir, out_name)
+        with open(output, 'w', newline='', encoding='utf-8') as fp:
+            json.dump(res, fp, indent=2, ensure_ascii=False)
 
 class DBViewIndex:
 

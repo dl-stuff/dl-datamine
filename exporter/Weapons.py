@@ -8,6 +8,7 @@ from exporter.Shared import AbilityData, SkillData, PlayerAction, get_valid_file
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
 class WeaponData(DBView):
+    """deprecated as of 2.0"""
     def __init__(self, index):
         super().__init__(index, 'WeaponData', labeled_fields=['_Name', '_Text'])
 
@@ -32,10 +33,81 @@ class WeaponData(DBView):
     @staticmethod
     def outfile_name(res, ext='.json'):
         name = 'UNKNOWN' if '_Name' not in res else res['_Name']
-        if '_BaseId' in res:
-            return get_valid_filename(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
-        else:
-            return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
+        return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
+
+    def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
+        out_dir = os.path.join(out_dir, 'weapons')
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
+
+class WeaponSkin(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponSkin', labeled_fields=['_Name'])
+
+class WeaponBodyGroupSeries(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBodyGroupSeries', labeled_fields=['_GroupSeriesName', '_SeriesLockText'])
+
+class WeaponBodyRarity(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBodyRarity')
+
+class WeaponBodyBuildupGroup(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBodyBuildupGroup')
+
+class WeaponPassiveAbility(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'WeaponPassiveAbility')
+
+class WeaponBody(DBView):
+    WEAPON_SKINS = (
+        '_WeaponSkinId',
+        '_RewardWeaponSkinId1',
+        '_RewardWeaponSkinId2',
+        '_RewardWeaponSkinId3',
+        '_RewardWeaponSkinId4',
+        '_RewardWeaponSkinId5'
+    )
+    def __init__(self, index):
+        super().__init__(index, 'WeaponBody', labeled_fields=['_Name', '_Text'])
+
+    def process_result(self, res, exclude_falsy=True, full_query=True):
+        if not full_query:
+            return res
+        if res.get('_WeaponSeriesId'):
+            res['_WeaponSeriesId'] = self.index['WeaponBodyGroupSeries'].get(res['_WeaponSeriesId'], exclude_falsy=exclude_falsy)
+        if res.get('_WeaponPassiveAbilityGroupId'):
+            res['_WeaponPassiveAbilityGroupId'] = self.index['WeaponPassiveAbility'].get(res['_WeaponPassiveAbilityGroupId'], by='_WeaponPassiveAbilityGroupId', exclude_falsy=exclude_falsy)
+        if res.get('_WeaponType'):
+            res['_WeaponType'] = WEAPON_TYPES.get(res['_WeaponType'], res['_WeaponType'])
+        if res.get('_ElementalType'):
+            res['_ElementalType'] = ELEMENTS.get(res['_ElementalType'], res['_ElementalType'])
+        skill_ids = {0}
+        for i in (3, 2, 1):
+            key = f'_ChangeSkillId{i}'
+            if key in res and res[key] not in skill_ids:
+                skill_ids.add(res[key])
+                res[key] = self.index['SkillData'].get(res[key], exclude_falsy=exclude_falsy, full_abilities=True)
+        ab_ids = {0}
+        for i in (1, 2, 3):
+            for j in (3, 2, 1):
+                key = f'_Abilities{i}{j}'
+                if key in res and res[key] not in ab_ids:
+                    ab_ids.add(res[key])
+                    res[key] = self.index['AbilityData'].get(res[key], full_query=True, exclude_falsy=exclude_falsy)
+        for skin in WeaponBody.WEAPON_SKINS:
+            if res.get(skin):
+                res[skin] = self.index['WeaponSkin'].get(res[skin], exclude_falsy=exclude_falsy)
+        return res
+
+    def get(self, pk, fields=None, exclude_falsy=False, full_query=True):
+        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+        return self.process_result(res, exclude_falsy, full_query)
+
+    @staticmethod
+    def outfile_name(res, ext='.json'):
+        name = 'UNKNOWN' if '_Name' not in res else res['_Name']
+        return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
 
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         out_dir = os.path.join(out_dir, 'weapons')
@@ -77,37 +149,7 @@ class WeaponType(DBView):
         super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
 
-# class Agito2_Mjolnir(WeaponBase):
-#     ele = ['flame']
-#     wt = 'axe'
-#     att = 1781
-#     s3 = agito_buffs['flame'][1]
-
-from unidecode import unidecode
-def export_py_def():
-    index = DBViewIndex()
-    view = WeaponData(index)
-    all_res = view.get_all(exclude_falsy=False)
-    with open('weapons.py', 'w') as f:
-        for r in filter(lambda r: r['_FormId'] >= 60000, all_res):
-            r = view.process_result(r)
-            f.write('class Agito')
-            f.write(str(r['_GradeId']))
-            f.write('_')
-            f.write(re.sub(r'[^0-9a-zA-Z ]', '', unidecode(r['_Name'].strip())).replace(' ', '_'))
-            f.write('(WeaponBase):\n    ele = [\'')
-            f.write(r['_ElementalType'].lower())
-            f.write('\']\n    wt = \'')
-            f.write(r['_Type'].lower())
-            f.write('\'\n    att = ')
-            f.write(str(r['_MaxAtk']))
-            f.write('\n    s3 = agito_buffs[\'')
-            f.write(r['_ElementalType'].lower())
-            f.write('\'][1]\n\n')
-
-
 if __name__ == '__main__':
-    export_py_def()
-    # index = DBViewIndex()
-    # view = WeaponData(index)
-    # view.export_all_to_folder()
+    index = DBViewIndex()
+    view = WeaponBody(index)
+    view.export_all_to_folder()
