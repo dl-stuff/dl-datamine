@@ -32,7 +32,8 @@ DEFAULT_AFF_DURATION = {
     'stun': (6, 7),
     'sleep': (6, 7),
     'shadowblight': 21,
-    'stormlash': 21
+    'stormlash': 21,
+    'scorchrend': 21
 }
 DEFAULT_AFF_IV = {
     'poison': 2.9,
@@ -41,7 +42,8 @@ DEFAULT_AFF_IV = {
     'frostbite': 2.9,
     'flashburn': 2.9,
     'shadowblight': 2.9,
-    'stormlash': 2.9
+    'stormlash': 2.9,
+    'scorchrend': 2.9
 }
 DISPEL = 100
 
@@ -124,9 +126,12 @@ def clean_hitattr(attr, once_per_action):
 
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action['_Parts']
+    clear_once_per_action = action.get('_OnHitExecType') == 1
     hitattrs = []
     once_per_action = set()
     for part in actparts:
+        if clear_once_per_action:
+            once_per_action.clear()
         part_hitattrs = []
         for label in ActionParts.HIT_LABELS:
             if (hitattr_lst := part.get(label)):
@@ -198,8 +203,6 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
 def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
     attr = {}
     target = hitattr.get('_TargetGroup')
-    if hitattr.get('_IgnoreFirstHitCheck'):
-        once_per_action.clear()
     if target != 5 and hitattr.get('_DamageAdjustment'):
         attr['dmg'] = fr(hitattr.get('_DamageAdjustment'))
         killers = []
@@ -262,7 +265,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                             group = 'enhanced' if eid == 1 else f'enhanced{eid}'
                             meta.chara_skills[esk.get('_Id')] = (f's{s}_{group}', s, esk, skill['_Id'])
                             alt_buffs.append(['sAlt', group, f's{s}'])
-                if (eba := actcond.get('_EnhancedBurstAttack')) and isinstance(eba, dict):
+                if isinstance((eba := actcond.get('_EnhancedBurstAttack')), dict):
                     eid = next(meta.efs_counter)
                     group = 'enhanced' if eid == 1 else f'enhanced{eid}'
                     meta.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
@@ -351,8 +354,6 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                     elif actcond.get('_Overwrite'):
                         buffs.append('-refresh')
                     attr['buff'] = buffs
-    if hitattr.get('_IgnoreFirstHitCheck'):
-        once_per_action.clear()
     if attr:
         iv = fr(part['_seconds'])
         if iv > 0:
@@ -705,7 +706,7 @@ class SkillProcessHelper:
         if (not hitattrs or all(['dmg' not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f'_IsAffectedByTensionLv{lv}'):
             sconf['energizable'] = bool(skill[f'_IsAffectedByTensionLv{lv}'])
 
-        if (transkills := skill.get('_TransSkill')) and isinstance(transkills, dict):
+        if isinstance((transkills := skill.get('_TransSkill')), dict):
             k = f's{seq}_phase1'
             for idx, ts in enumerate(transkills.items()):
                 tsid, tsk = ts

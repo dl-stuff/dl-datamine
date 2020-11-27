@@ -253,7 +253,7 @@ class AbilityData(DBView):
                 pass
             try:
                 res = ABILITY_TYPES[res[f'_AbilityType{i}']](self, res, i)
-            except KeyError:
+            except (KeyError, IndexError):
                 pass
         if (ele := res.get('_ElementalType')):
             res['_ElementalType'] = ELEMENTS.get(ele, ele)

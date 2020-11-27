@@ -40,14 +40,15 @@ AFFLICTION_TYPES = {
     11: 'Frostbite',
     12: 'Flashburn',
     13: 'Stormlash',
-    14: 'Shadowblight'
+    14: 'Shadowblight',
+    15: 'Scorchrend'
 }
 
 KILLER_STATE = {
     **AFFLICTION_TYPES,
     99: 'afflicted',
     103: 'debuff_def',
-    198: 'buff',
+    198: 'buffed',
     199: 'debuff',
     201: 'break'
 }

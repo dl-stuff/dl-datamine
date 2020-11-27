@@ -39,7 +39,7 @@ class Command(Enum):
 	Mul = 29
 	OrderCloser = 30
 	OrderAliveFarther = 31
-	Reserve06 = 32
+	BerserkAction = 32
 	Reserve07 = 33
 	Reserve08 = 34
 	Reserve09 = 35
@@ -283,6 +283,7 @@ def fmt_gmsetbanditevent(inst):
 def fmt_rechprate(inst):
     return f'{INDENT*inst.depth}recHPRate()'
 
+
 FMT_PYTHON = {
     Command.Def: fmt_def,
     Command.Set: fmt_set,
@@ -315,6 +316,7 @@ FMT_PYTHON = {
     Command.GM_SetSuddenEvent: fmt_gmsetsuddenevent,
     Command.GM_SetBanditEvent: fmt_gmsetbanditevent,
     Command.RecHpRate: fmt_rechprate,
+    Command.BerserkAction: fmt_actionset
 }
 
 

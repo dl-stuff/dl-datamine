@@ -62,6 +62,7 @@ class WeaponPassiveAbility(DBView):
 class WeaponBody(DBView):
     WEAPON_SKINS = (
         '_WeaponSkinId',
+        '_WeaponSkinId2',
         '_RewardWeaponSkinId1',
         '_RewardWeaponSkinId2',
         '_RewardWeaponSkinId3',
