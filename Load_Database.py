@@ -71,7 +71,7 @@ if __name__ == '__main__':
 
     in_dir = '_ex_sim'
     if args.do_prep:
-        ex = Extractor(ex_dir=in_dir, stdout_log=False, overwrite=True)
+        ex = Extractor(dl_dir='./_dl_sim', ex_dir=in_dir, stdout_log=False, overwrite=True)
         if not os.path.isdir(in_dir):
             ex.download_and_extract_by_pattern(LABEL_PATTERNS)
         else:

@@ -34,6 +34,7 @@ class ActionCondition(DBView):
                     if (skill := self.index['SkillData'].get(sid, exclude_falsy=exclude_falsy)):
                         res[s] = skill
         self.link(res, '_DamageLink', 'PlayerActionHitAttribute', exclude_falsy=exclude_falsy)
+        self.link(res, '_LevelUpId', 'ActionCondition', exclude_falsy=exclude_falsy)
         if reset_seen_skills:
             self.seen_skills = set()
         return res
@@ -88,6 +89,8 @@ class AbilityData(DBView):
         10: 'attack speed',
         12: 'fs charge rate'
     }
+    MAP_COND_VALUE = (70, 81)
+    MAP_COND_VALUE2 = (71, 80)
 
     @staticmethod
     def a_ids(res, i):
@@ -239,6 +242,10 @@ class AbilityData(DBView):
 
     def process_result(self, res, full_query=True, exclude_falsy=True):
         try:
+            if res['_ConditionType'] in AbilityData.MAP_COND_VALUE:
+                self.link(res, '_ConditionValue', 'ActionCondition', exclude_falsy=exclude_falsy)
+            if res['_ConditionType'] in AbilityData.MAP_COND_VALUE2:
+                self.link(res, '_ConditionValue2', 'ActionCondition', exclude_falsy=exclude_falsy)
             res['_ConditionType'] = ABILITY_CONDITION_TYPES.get(res['_ConditionType'], res['_ConditionType'])
         except KeyError:
             pass
@@ -246,6 +253,7 @@ class AbilityData(DBView):
             res[f'_TargetAction'] = TARGET_ACTION_TYPES[res[f'_TargetAction']]
         except KeyError:
             pass
+        self.link(res, '_RequiredBuff', 'ActionCondition', exclude_falsy=exclude_falsy)
         for i in (1, 2, 3):
             try:
                 res[f'_TargetAction{i}'] = TARGET_ACTION_TYPES[res[f'_TargetAction{i}']]

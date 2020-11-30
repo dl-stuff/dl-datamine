@@ -73,6 +73,10 @@ def build_db_data(meta, ref, seq, data):
     # seen_id.add(db_data['_Id'])
     db_data['_ref'] = int(ref)
     db_data['_seq'] = seq
+    cond_data = data['_conditionData']
+    if cond_data['_conditionType'] and any(cond_data['_conditionValue']):
+        db_data['_conditionType'] = cond_data['_conditionType']
+        db_data['_conditionValue'] = cond_data['_conditionValue']
     return db_data
 
 # def build_collision_data(meta, ref, seq, data):
@@ -88,10 +92,6 @@ def build_bullet(meta, ref, seq, data):
         db_data['_abDuration'] = ab_duration
     if (ab_interval := data['_arrangeBullet']['_abHitInterval']):
         db_data['_abHitInterval'] = ab_interval
-    cond_data = data['_conditionData']
-    if cond_data['_conditionType']:
-        db_data['_conditionType'] = cond_data['_conditionType']
-        db_data['_conditionValue'] = cond_data['_conditionValue']
     return db_data
 
 def build_formation_bullet(meta, ref, seq, data):
