@@ -669,8 +669,8 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        'en': {
-            r'^story/unitstory/chara': None
+        'jp': {
+            r'^images/icon/modechange': None
         }
     }
 

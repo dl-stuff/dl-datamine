@@ -185,9 +185,9 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             gen += 1
             ref_attrs = [part_hitattrs[0]] if len(part_hitattrs) == 1 else [part_hitattrs[1]]
             is_msl = False
+        gen_attrs = []
+        timekey = 'msl' if is_msl else 'iv'
         if gen and delay:
-            gen_attrs = []
-            timekey = 'msl' if is_msl else 'iv'
             for gseq in range(1, gen):
                 for attr in ref_attrs:
                     gattr, _ = clean_hitattr(attr.copy(), once_per_action)
@@ -195,7 +195,27 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                         continue
                     gattr[timekey] = fr(attr.get(timekey, 0)+delay*gseq)
                     gen_attrs.append(gattr)
-            part_hitattrs.extend(gen_attrs)
+        if part.get('_generateNumDependOnBuffCount'):
+            # possible that this can be used with _generateNum
+            buffcond = part['_buffCountConditionId']
+            buffname = snakey(buffcond['_Text']).lower()
+            gen = buffcond['_MaxDuplicatedCount']
+            for idx, delay in enumerate(map(float, json.loads(part['_bulletDelayTime']))):
+                if idx >= gen:
+                    break
+                delay = float(delay)
+                for attr in part_hitattrs:
+                    if idx == 0:
+                        attr[timekey] = fr(attr.get(timekey, 0)+delay)
+                        attr['cond'] = ['var>=', [buffname, idx+1]]
+                    else:
+                        gattr, _ = clean_hitattr(attr.copy(), once_per_action)
+                        if not gattr:
+                            continue
+                        gattr[timekey] = fr(attr.get(timekey, 0)+delay)
+                        gattr['cond'] = ['var>=', [buffname, idx+1]]
+                        gen_attrs.append(gattr)
+        part_hitattrs.extend(gen_attrs)
         hitattrs.extend(part_hitattrs)
     once_per_action = set()
     return hitattrs
@@ -381,17 +401,19 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
     for idx, part in enumerate(parts):
         if part['commandType'] == 'SEND_SIGNAL':
             actid = part.get('_actionId', 0)
-            signals[actid] = -1
-            if part.get('_motionEnd'):
-                signal_end.add(actid)
+            if not (is_dragon and actid % 100 in (20, 21)) and not actid in DODGE_ACTIONS:
+                signals[actid] = -10
+                if part.get('_motionEnd'):
+                    signal_end.add(actid)
         elif ('HIT' in part['commandType'] or 'BULLET' in part['commandType']) and s is None:
             s = fr(part['_seconds'])
         elif part['commandType'] == 'ACTIVE_CANCEL':
+            # print(part)
             recovery = part['_seconds']
             actid = part.get('_actionId')
             if seq and actid in signals:
                 signals[actid] = recovery
-            if (actid and part.get('_motionEnd')) or actid in signal_end:
+            if part.get('_motionEnd') or actid in signal_end:
                 motion_end = recovery
             if actid:
                 followed_by.add((recovery, actid))
@@ -421,27 +443,29 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
     #         if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
     #             r = part['_seconds']
     #             break
-    # print(signals)
-    if is_dragon and motion_end is not None:
-        r = motion_end
-    else:
-        if timecurve is not None:
-            for part in sorted(parts, key=lambda p: -p['_seq']):
-                if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
-                    r = part['_seconds']
-                    break
-        else:
-            try:
-                r = max(signals.values())
-            except:
-                pass
-            if r is None or r <= s:
-                for part in reversed(parts):
-                    if part['commandType'] == 'ACTIVE_CANCEL':
-                        r = part['_seconds']
-                        break
+    # print(signals, motion_end, timecurve)
+    if timecurve is not None:
+        for part in sorted(parts, key=lambda p: -p['_seq']):
+            if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
+                r = part['_seconds']
+                break
         if r is None:
             r = motion_end
+        if r is not None:
+            r = max(timestop, r)
+    else:
+        try:
+            r = max(signals.values())
+        except:
+            pass
+    if r is None or r < s:
+        if motion_end:
+            r = motion_end
+        else:
+            for part in reversed(parts):
+                if part['commandType'] == 'ACTIVE_CANCEL':
+                    r = part['_seconds']
+                    break
         if r is not None:
             r = max(timestop, r)
     r = fr(r)
@@ -845,6 +869,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                 # 'skipped': skipped
             }
         }
+        # cykagames reeee
+        if res['_Id'] == 10750203:
+            conf['c']['name'] = 'Forager Cleo'
         if conf['c']['wt'] == 'gun':
             conf['c']['gun'] = []
         self.name = conf['c']['name']
@@ -1060,6 +1087,8 @@ def ab_damage(**kwargs):
                 res = ['od', upval/100]
             elif cond == 'break':
                 res = ['bk', upval/100]
+            elif cond == 'enemy has def down':
+                res = ['k_debuff_def', upval/100]
         condstr = ab_cond(kwargs.get('ab'))
         if res:
             if condstr:
@@ -1121,6 +1150,9 @@ def ab_actcond(**kwargs):
             if not extra_args:
                 extra_args.append(fr(actcond.get('_DurationSec')))
             extra_args.append(fr(cooltime))
+    elif cond == 'chain hp geq':
+        astr = 'achain'
+        extra_args = [f'hp{ab.get("_ConditionValue")}']
     if astr:
         full_astr, value = None, None
         if (val := actcond.get('_Tension')):

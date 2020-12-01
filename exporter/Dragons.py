@@ -64,6 +64,8 @@ class DragonData(DBView):
             res = super().get(pk, by='_SecondName', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
             if not res:
                 res = super().get(pk, by='_Name', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
+                if not res:
+                    res = super().get(pk, by='_Id', fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         else:
             res = super().get(pk, by=by, fields=fields, mode=DBManager.LIKE, exclude_falsy=exclude_falsy)
         if not full_query:

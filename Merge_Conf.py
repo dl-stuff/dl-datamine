@@ -115,10 +115,18 @@ if __name__ == '__main__':
     parser.add_argument('-name', type=str, help='target merge', default=None)
     parser.add_argument('-kind', type=str, help='target kind (adv/drg/wep/base)')
     parser.add_argument('-map', type=str, nargs='*', help='suffix map')
+    parser.add_argument('-fmt', type=str, help='format a conf file')
     parser.add_argument('--all', action='store_true', help='run everything')
     args = parser.parse_args()
     if args.all:
         merge_all_conf()
+    elif args.fmt:
+        with open(args.fmt, 'r') as fn:
+            data = json.load(fn)
+        for k, v in data.items():
+            data[k] = dict(sorted(v.items()))
+        with open(args.fmt, 'w') as fn:
+            fmt_conf(data, f=fn, lim=3)
     else:
         if args.name:
             merge_conf(args.name, args.kind, args.map)

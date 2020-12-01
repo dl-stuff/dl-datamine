@@ -460,6 +460,8 @@ class ActionParts(DBView):
                         r[label] = hit_attr
 
             self.link(r, '_actionConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
+            self.link(r, '_buffCountConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
+
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']
                 animation = []
