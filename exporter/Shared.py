@@ -300,7 +300,7 @@ ABILITY_TYPES = {
     16: AbilityData.generic_description('debuff chance'),
     17: AbilityData.generic_description('skill prep'),
     18: AbilityData.generic_description('buff time'),
-    # 19
+    19: AbilityData.generic_description('debuff time'),
     20: AbilityData.affliction_punisher,
     21: AbilityData.generic_description('player exp'),
     22: AbilityData.generic_description('adv exp'),
@@ -318,7 +318,7 @@ ABILITY_TYPES = {
     35: AbilityData.generic_description('gauge inhibitor'),
     36: AbilityData.generic_description('dragon damage'),
     37: AbilityData.generic_description('enemy ability resist'),
-    # 38
+    38: AbilityData.action_condition,
     39: AbilityData.action_grant,
     40: AbilityData.generic_description('gauge defense & skill damage'),
     41: AbilityData.generic_description('event point feh'),
@@ -339,15 +339,18 @@ ABILITY_TYPES = {
     57: AbilityData.elemental_damage,
     58: AbilityData.generic_description('dragondrive defense'),
     59: AbilityData.generic_description('debuff time'),
-    # 60 61 - galaxi
-    # 62 - ssinoa
-    #   "_AbilityType1": 62,
-    #   "_VariousId1a": 435,
-    #   "_VariousId1b": 304030301,
-    #   "_VariousId1c": 1084,
+    # 60 - galaxi/nevin
+    61: AbilityData.generic_description('mode change'),
+    62: AbilityData.random_action_condition, # except its pick ConditionValue of N
     63: AbilityData.action_condition_timer,
+    # 64
+    64: AbilityData.generic_description('gauge gain'),
     65: AbilityData.action_reference,
-    68: AbilityData.action_condition
+    66: AbilityData.generic_description('revive hp'),
+    67: AbilityData.generic_description('stamina strength'),
+    68: AbilityData.action_condition,
+    69: AbilityData.generic_description('gauge drains/s'),
+    70: AbilityData.generic_description('gauge cost'),
 }
 
 
@@ -461,6 +464,7 @@ class ActionParts(DBView):
 
             self.link(r, '_actionConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
             self.link(r, '_buffCountConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
+            self.link(r, '_autoFireActionId', 'PlayerAction', exclude_falsy=exclude_falsy)
 
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']

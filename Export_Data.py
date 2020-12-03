@@ -17,9 +17,9 @@ CLASSES = [
     WeaponBody,
     AbilityCrest,
     WeaponType,
-    PlayerActionHitAttribute,
-    PlayerAction,
-    AbilityData,
+    # PlayerActionHitAttribute,
+    # PlayerAction,
+    # AbilityData,
     UnionAbility,
 ]
 

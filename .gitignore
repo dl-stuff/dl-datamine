@@ -5,6 +5,7 @@
 *.txt
 *.sqlite
 *.sh
+apktool*
 
 /manifest/parse.py
 /manifest/DL_DecryptManifest.exe

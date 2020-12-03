@@ -77,7 +77,7 @@ if __name__ == '__main__':
         else:
             ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
         load_aiscript(os.path.join(ex.ex_dir, 'jp', 'aiscript'))
-        extract_story_function_json(ex)
+        # extract_story_function_json(ex)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), 'TextLabelJP')

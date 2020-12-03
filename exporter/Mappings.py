@@ -126,7 +126,7 @@ ABILITY_CONDITION_TYPES = {
     # 76 77 78 79
     80: 'has multi buff',
     81: 'has cartridge',
-    82: 'scale with hp',
+    82: 'hp bound',
     # 83: 'mode from buff(?)'
     # 84 85
     86: 'has revive',
@@ -134,6 +134,7 @@ ABILITY_CONDITION_TYPES = {
     88: 'in buffzone',
     # 89
     90: 'on dragon gauge',
+    91: 'on generic buff'
 }
 
 TRIBE_TYPES = {

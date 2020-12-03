@@ -684,10 +684,12 @@ if __name__ == '__main__':
             else:
                 for region, manifest in MANIFESTS.items():
                     ex.download_and_extract_by_diff(region=region)
+        elif sys.argv[1] == 'apk':
+            ex = Extractor(ex_dir='_ex_apk', ex_img_dir='_im_apk', stdout_log=False, overwrite=False, mf_mode=1)
+            ex.local_extract('_apk')
         else:
             ex = Extractor(ex_dir='./_images', mf_mode=1)
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
         ex = Extractor(stdout_log=False, overwrite=False, mf_mode=1)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
-        # ex.local_extract('_apk')

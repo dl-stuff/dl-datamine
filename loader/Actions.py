@@ -25,25 +25,28 @@ class CommandType(Enum):
     MULTI_BULLET = 24
     ANIMATION = 25 # or maybe effects ?
     CONTROL = 30 # some kinda control related thing
+    POINT_EFFECT = 35 # nidhogg jaw effect
     COLLISION = 37 # seen in arrange bullet
     PARABOLA_BULLET = 41
     TIMESTOP = 48 # control animation playback ?
     TIMECURVE = 49 # control animation playback ?
     PIVOT_BULLET = 53
-    MOVEMENT_IN_SKILL = 54 # only eze s1 uses this
+    MOVEMENT_IN_SKILL = 54
     ROTATION_IN_SKILL = 55
-    SATALITE_HIT = 58
+    SATALITE = 58
     FIRE_STOCK_BULLET = 59
     CONDITION_TEXT = 63 # unsure where text is sourced, not in TextLabel
     SETTING_HIT = 66
-    FORMATION_BULLET = 100 # megaman stuff
-    EFFECT_MM2 = 101 # megaman stuff
-    CHANGE_MODE = 108 # megaman stuff
+    TEXTURE = 73 # megaman texture change
+    FORMATION_BULLET = 100
+    SHADER_EFFECT = 101 # megaman stuff
+    CHANGE_MODE = 108
     SHADER = 101
     ADD_HIT = 105
     ACTION_CONDITON = 111
     BUFF_FIELD_ATTACH = 125
     BUTTERFLY_BULLET = 127
+    PART_CONDITION = 129 # helsa/fjoachim
 
     @classmethod
     def _missing_(cls, value):
@@ -250,6 +253,13 @@ ACTION_PART = DBTableMetadata(
 
         # TIMECURVE
         '_isNormalizeCurve': DBTableMetadata.INT,
+
+        # AUTOFIRE
+        '_autoFireInterval': DBTableMetadata.REAL,
+        '_autoFireActionId': DBTableMetadata.INT,
+        '_autoFireEffectTrigger': DBTableMetadata.INT,
+        '_autoFireEffectTriggerResetTime': DBTableMetadata.REAL,
+        '_autoFireAutoSearchEnemyRadius': DBTableMetadata.REAL
     }
 )
 
@@ -267,6 +277,7 @@ PROCESSORS[CommandType.MULTI_BULLET] = build_bullet
 PROCESSORS[CommandType.ANIMATION] = build_animation
 PROCESSORS[CommandType.PARABOLA_BULLET] = build_bullet
 PROCESSORS[CommandType.PIVOT_BULLET] = build_bullet
+PROCESSORS[CommandType.SATALITE] = build_db_data
 PROCESSORS[CommandType.FIRE_STOCK_BULLET] = build_bullet
 PROCESSORS[CommandType.FORMATION_BULLET] = build_formation_bullet
 PROCESSORS[CommandType.SETTING_HIT] = build_db_data
@@ -276,7 +287,7 @@ PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
 PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 
 def log_schema_keys(schema_map, data, command_type):
-    schema_map[f'{data["commandType"]:03}-{command_type}'] = list(data.keys())
+    schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}
     for subdata in data.values():
         try:
             if (command_type := subdata.get('commandType')):
@@ -340,3 +351,5 @@ if __name__ == '__main__':
     from loader.Database import DBManager
     db = DBManager()
     schema_map = load_actions(db, './_ex_sim/jp/actions')
+    with open('./out/_action_schema.json', 'w') as f:
+        json.dump(schema_map, f, indent=4, sort_keys=True)
