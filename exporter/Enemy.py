@@ -200,7 +200,7 @@ class EnemyParam(DBView):
             out_name = get_valid_filename(f'{group_name}{ext}')
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
-                json.dump(res_list, fp, indent=2, ensure_ascii=False)
+                json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
 
 if __name__ == '__main__':
     index = DBViewIndex()

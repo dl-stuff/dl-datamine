@@ -11,7 +11,8 @@ MODE_CHANGE_TYPES = {
     1: 'Skill',
     2: 'Hud',
     3: 'Dragon',
-    4: 'Buff'
+    4: 'Buff',
+    5: 'Ability'
 }
 
 

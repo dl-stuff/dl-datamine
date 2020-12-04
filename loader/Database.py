@@ -4,6 +4,7 @@ import os
 import errno
 from tqdm import tqdm
 from collections import defaultdict
+from enum import Enum
 
 DB_FILE = 'dl.sqlite'
 
@@ -17,9 +18,17 @@ def check_target_path(target):
             if exc.errno != errno.EEXIST:
                 raise
 
+class ShortEnum(Enum):
+    @classmethod
+    def _missing_(cls, value):
+        return f'UNKNOWN.{value}'
+
+    def __str__(self):
+        return self.name
+
 class DBDict(dict):
     def __repr__(self):
-        return json.dumps(self, indent=2)
+        return json.dumps(self, indent=2, default=str)
 
 class DBTableMetadata:
     PK = ' PRIMARY KEY'
@@ -310,7 +319,7 @@ class DBView:
             out_name = self.outfile_name(res, ext)
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
-                json.dump(res, fp, indent=2, ensure_ascii=False)
+                json.dump(res, fp, indent=2, ensure_ascii=False, default=str)
 
     def export_one_to_folder(self, pk, out_dir, ext='.json', exclude_falsy=True, **kargs):
         res = self.get(pk, exclude_falsy=exclude_falsy)
@@ -318,7 +327,7 @@ class DBView:
         out_name = self.outfile_name(res, ext)
         output = os.path.join(out_dir, out_name)
         with open(output, 'w', newline='', encoding='utf-8') as fp:
-            json.dump(res, fp, indent=2, ensure_ascii=False)
+            json.dump(res, fp, indent=2, ensure_ascii=False, default=str)
 
 class DBViewIndex:
 

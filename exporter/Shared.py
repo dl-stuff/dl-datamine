@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from loader.Actions import CommandType
-from exporter.Mappings import AFFLICTION_TYPES, ABILITY_CONDITION_TYPES, KILLER_STATE, TRIBE_TYPES, TARGET_ACTION_TYPES, ELEMENTS, WEAPON_TYPES
+from exporter.Mappings import AFFLICTION_TYPES, KILLER_STATE, TRIBE_TYPES, ELEMENTS, WEAPON_TYPES, AbilityCondition, AbilityTargetAction, ActionTargetGroup
 
 
 def get_valid_filename(s):
@@ -61,7 +61,7 @@ class ActionCondition(DBView):
             out_name = get_valid_filename(f'{group_name}00000000{ext}')
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
-                json.dump(res_list, fp, indent=2, ensure_ascii=False)
+                json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
 
 
 class ActionGrant(DBView):
@@ -69,7 +69,7 @@ class ActionGrant(DBView):
         super().__init__(index, 'ActionGrant')
 
     def process_result(self, res, exclude_falsy=True):
-        res['_TargetAction'] = TARGET_ACTION_TYPES.get(res['_TargetAction'], res['_TargetAction'])
+        res['_TargetAction'] = AbilityTargetAction(res['_TargetAction'])
         self.link(res, '_GrantCondition', 'ActionCondition', exclude_falsy=exclude_falsy)
         return res
 
@@ -89,8 +89,15 @@ class AbilityData(DBView):
         10: 'attack speed',
         12: 'fs charge rate'
     }
-    MAP_COND_VALUE = (70, 81)
-    MAP_COND_VALUE2 = (71, 80)
+    MAP_COND_VALUE = (
+        AbilityCondition.BUFFED_SPECIFIC_ID,
+        AbilityCondition.BUFF_DISAPPEARED,
+        AbilityCondition.BUFF_CONSUMED
+    )
+    MAP_COND_VALUE2 = (
+        AbilityCondition.BUFFED_SPECIFIC_ID_COUNT,
+        AbilityCondition.BUFF_COUNT_MORE_THAN
+    )
 
     @staticmethod
     def a_ids(res, i):
@@ -218,11 +225,19 @@ class AbilityData(DBView):
         return res
 
     @staticmethod
-    def random_action_condition(ad, res, i):
+    def random_1_action_condition(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i)
         res, a_str = AbilityData.link_various_str(ad, res, i)
-        res[f'_Description{i}'] = f'random action condition {a_ids, a_str}'
+        res[f'_Description{i}'] = f'random 1 action condition {a_ids, a_str}'
         return res
+
+    @staticmethod
+    def random_n_action_condition(ad, res, i):
+        res, a_ids = AbilityData.link_various_ids(ad, res, i)
+        res, a_str = AbilityData.link_various_str(ad, res, i)
+        res[f'_Description{i}'] = f'random N action condition {a_ids, a_str}'
+        return res
+
 
     @staticmethod
     def elemental_damage(ad, res, i):
@@ -242,22 +257,23 @@ class AbilityData(DBView):
 
     def process_result(self, res, full_query=True, exclude_falsy=True):
         try:
-            if res['_ConditionType'] in AbilityData.MAP_COND_VALUE:
+            ac_enum = AbilityCondition(res['_ConditionType'])
+            if ac_enum in AbilityData.MAP_COND_VALUE:
                 self.link(res, '_ConditionValue', 'ActionCondition', exclude_falsy=exclude_falsy)
-            if res['_ConditionType'] in AbilityData.MAP_COND_VALUE2:
+            if ac_enum in AbilityData.MAP_COND_VALUE2:
                 self.link(res, '_ConditionValue2', 'ActionCondition', exclude_falsy=exclude_falsy)
-            res['_ConditionType'] = ABILITY_CONDITION_TYPES.get(res['_ConditionType'], res['_ConditionType'])
+            res['_ConditionType'] = ac_enum
         except KeyError:
             pass
         try:
-            res[f'_TargetAction'] = TARGET_ACTION_TYPES[res[f'_TargetAction']]
+            res['_TargetAction'] = AbilityTargetAction(res['_TargetAction'])
         except KeyError:
             pass
         self.link(res, '_RequiredBuff', 'ActionCondition', exclude_falsy=exclude_falsy)
         for i in (1, 2, 3):
             try:
-                res[f'_TargetAction{i}'] = TARGET_ACTION_TYPES[res[f'_TargetAction{i}']]
-            except:
+                res[f'_TargetAction{i}'] = AbilityTargetAction(res[f'_TargetAction{i}'])
+            except KeyError:
                 pass
             try:
                 res = ABILITY_TYPES[res[f'_AbilityType{i}']](self, res, i)
@@ -267,7 +283,6 @@ class AbilityData(DBView):
             res['_ElementalType'] = ELEMENTS.get(ele, ele)
         if (wep := res.get('_WeaponType')):
             res['_WeaponType'] = WEAPON_TYPES.get(wep, wep)
-
         return res
 
     def get(self, key, fields=None, full_query=True, exclude_falsy=True):
@@ -279,7 +294,7 @@ class AbilityData(DBView):
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         processed_res = [self.process_result(res, exclude_falsy=exclude_falsy) for res in self.get_all(exclude_falsy=exclude_falsy)]
         with open(os.path.join(out_dir, f'_abilities{ext}'), 'w', newline='', encoding='utf-8') as fp:
-            json.dump(processed_res, fp, indent=2, ensure_ascii=False)
+            json.dump(processed_res, fp, indent=2, ensure_ascii=False, default=str)
 
 
 ABILITY_TYPES = {
@@ -321,36 +336,36 @@ ABILITY_TYPES = {
     38: AbilityData.action_condition,
     39: AbilityData.action_grant,
     40: AbilityData.generic_description('gauge defense & skill damage'),
-    41: AbilityData.generic_description('event point feh'),
-    # 42: something dragonform related
+    41: AbilityData.generic_description('event points'),
+    42: AbilityData.generic_description('level up dragon auto'),
     43: AbilityData.ability_reference,
     44: AbilityData.skill_reference,
-    45: AbilityData.action_reference,
-    46: AbilityData.generic_description('dragon gauge flat increaase'),
-    # 47
+    45: AbilityData.action_reference, # force strikes
+    46: AbilityData.generic_description('dragon gauge all team'),
+    # 47 extend afflic time?
     48: AbilityData.generic_description('dragon gauge decrease rate'),
-    49: AbilityData.generic_description('conditional shapeshift fill'),
-    51: AbilityData.random_action_condition,
+    49: AbilityData.generic_description('dragon gauge self'),
+    # 50 do nothing
+    51: AbilityData.random_1_action_condition,
     52: AbilityData.generic_description('buff icon critical rate'),
     # 53
     54: AbilityData.generic_description('combo damage boost'),
     55: AbilityData.generic_description('combo time'),
     56: AbilityData.generic_description('dragondrive'),
     57: AbilityData.elemental_damage,
-    58: AbilityData.generic_description('dragondrive defense'),
+    58: AbilityData.generic_description('dragondrive charge'),
     59: AbilityData.generic_description('debuff time'),
-    # 60 - galaxi/nevin
+    60: AbilityData.generic_description('stop autofire'),
     61: AbilityData.generic_description('mode change'),
-    62: AbilityData.random_action_condition, # except its pick ConditionValue of N
+    62: AbilityData.random_n_action_condition,
     63: AbilityData.action_condition_timer,
-    # 64
-    64: AbilityData.generic_description('gauge gain'),
-    65: AbilityData.action_reference,
+    64: AbilityData.generic_description('cp gauge gain'),
+    65: AbilityData.action_reference, # dodge
     66: AbilityData.generic_description('revive hp'),
     67: AbilityData.generic_description('stamina strength'),
-    68: AbilityData.action_condition,
-    69: AbilityData.generic_description('gauge drains/s'),
-    70: AbilityData.generic_description('gauge cost'),
+    68: AbilityData.action_condition, # enemy
+    69: AbilityData.generic_description('cp gauge drain'),
+    70: AbilityData.generic_description('cp gauge cost'),
 }
 
 
@@ -366,6 +381,10 @@ class PlayerActionHitAttribute(DBView):
     def process_result(self, res, exclude_falsy=True):
         res_list = [res] if isinstance(res, dict) else res
         for r in res_list:
+            try:
+                r['_TargetGroup'] = ActionTargetGroup(r['_TargetGroup'])
+            except KeyError:
+                pass
             self.link(r, '_ActionCondition1', 'ActionCondition', exclude_falsy=exclude_falsy)
             self.link(r, '_DamageUpDataByBuffCount', 'BuffCountData', exclude_falsy=exclude_falsy)
             for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
@@ -399,7 +418,7 @@ class PlayerActionHitAttribute(DBView):
             out_name = get_valid_filename(f'{group_name}{ext}')
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
-                json.dump(res_list, fp, indent=2, ensure_ascii=False)
+                json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
 
 
 class CharacterMotion(DBView):
@@ -435,7 +454,7 @@ class ActionParts(DBView):
             action_parts = [action_parts]
         for r in action_parts:
             if 'commandType' in r:
-                r['commandType'] = CommandType(r['commandType']).name
+                r['commandType'] = CommandType(r['commandType'])
             del r['_Id']
             if hide_ref:
                 del r['_ref']
@@ -549,7 +568,7 @@ class PlayerAction(DBView):
             out_name = get_valid_filename(f'{group_name}{ext}')
             output = os.path.join(out_dir, out_name)
             with open(output, 'w', newline='', encoding='utf-8') as fp:
-                json.dump(res_list, fp, indent=2, ensure_ascii=False)
+                json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
 
 
 class SkillChainData(DBView):

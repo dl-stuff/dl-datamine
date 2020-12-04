@@ -39,7 +39,7 @@ class Command(Enum):
 	Mul = 29
 	OrderCloser = 30
 	OrderAliveFarther = 31
-	BerserkAction = 32
+	FromActionSetBoost = 32
 	Reserve07 = 33
 	Reserve08 = 34
 	Reserve09 = 35
@@ -91,8 +91,7 @@ class Target(Enum):
 	REGISTERED_02 = 45
 	REGISTERED_03 = 46
 	REGISTERED_04 = 47
-    # assumed names
-	ARENA_CENTER = 48
+	HOSTILE_DEAD_ALIVE_00 = 48
 
 
 class Compare(Enum):

@@ -1,14 +1,11 @@
 import json
 import os
 from tqdm import tqdm
-from loader.Database import DBManager, DBTableMetadata
-from enum import Enum
+from loader.Database import DBManager, DBTableMetadata, ShortEnum
 import re
 
 
-
-class CommandType(Enum):
-    UNKNOWN = -1
+class CommandType(ShortEnum):
     PARTS_MOTION = 2
     MOVEMENT = 5
     ROTATION = 7
@@ -47,10 +44,6 @@ class CommandType(Enum):
     BUFF_FIELD_ATTACH = 125
     BUTTERFLY_BULLET = 127
     PART_CONDITION = 129 # helsa/fjoachim
-
-    @classmethod
-    def _missing_(cls, value):
-        return cls.UNKNOWN
 
 # seen_id = set()
 def build_db_data(meta, ref, seq, data):
@@ -352,4 +345,4 @@ if __name__ == '__main__':
     db = DBManager()
     schema_map = load_actions(db, './_ex_sim/jp/actions')
     with open('./out/_action_schema.json', 'w') as f:
-        json.dump(schema_map, f, indent=4, sort_keys=True)
+        json.dump(schema_map, f, indent=4, sort_keys=True, default=str)

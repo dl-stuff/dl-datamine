@@ -57,7 +57,7 @@ class UnionAbility(DBView):
     def export_all_to_folder(self, out_dir='./out', ext='.json', exclude_falsy=True):
         processed_res = [self.process_result(res, exclude_falsy=exclude_falsy) for res in self.get_all(exclude_falsy=exclude_falsy)]
         with open(os.path.join(out_dir, f'_union{ext}'), 'w', newline='', encoding='utf-8') as fp:
-            json.dump(processed_res, fp, indent=2, ensure_ascii=False)
+            json.dump(processed_res, fp, indent=2, ensure_ascii=False, default=str)
 
 
 class AbilityCrest(DBView):

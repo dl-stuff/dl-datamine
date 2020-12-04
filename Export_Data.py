@@ -20,7 +20,7 @@ CLASSES = [
     # PlayerActionHitAttribute,
     # PlayerAction,
     # AbilityData,
-    UnionAbility,
+    # UnionAbility,
 ]
 
 if __name__ == '__main__':

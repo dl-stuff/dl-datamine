@@ -11,12 +11,13 @@ from pprint import pprint, pformat
 import argparse
 
 from loader.Database import DBViewIndex, DBView, check_target_path
+from loader.Actions import CommandType
 from exporter.Shared import ActionParts, PlayerAction, AbilityData
 from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction
 
 ONCE_PER_ACT = ('sp', 'dp', 'utp', 'buff', 'afflic', 'bleed', 'extra', 'dispel')
 DODGE_ACTIONS = {6, 40}
@@ -223,12 +224,12 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
 def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
     attr = {}
     target = hitattr.get('_TargetGroup')
-    if target != 5 and hitattr.get('_DamageAdjustment'):
+    if target not in (ActionTargetGroup.DUNOBJ, ActionTargetGroup.HOSTILE_AND_DUNOBJ) and hitattr.get('_DamageAdjustment'):
         attr['dmg'] = fr(hitattr.get('_DamageAdjustment'))
         killers = []
         for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
             if hitattr.get(ks):
-                killers.append(hitattr.get(ks).lower())
+                killers.append(hitattr.get(ks))
         if len(killers) > 0:
             attr['killer'] = [fr(hitattr['_KillerStateDamageRate']-1), killers]
         if (crisis := hitattr.get('_CrisisLimitRate')):
@@ -256,7 +257,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr['cp'] = cp
     # if hitattr.get('_RecoveryValue'):
     #     attr['heal'] = fr(hitattr.get('_RecoveryValue'))
-    if part.get('commandType') == 'FIRE_STOCK_BULLET' and (stock := action.get('_MaxStockBullet', 0)) > 1:
+    if part.get('commandType') == CommandType.FIRE_STOCK_BULLET and (stock := action.get('_MaxStockBullet', 0)) > 1:
         attr['extra'] = stock
     if (bc := attr.get('_DamageUpRateByBuffCount')):
         attr['bufc'] = bc
@@ -291,7 +292,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                     meta.enhanced_fs.append((group, eba, eba.get('_BurstMarkerId')))
                     alt_buffs.append(['fsAlt', group])
 
-            if target == 3 and (afflic := actcond.get('_Type')):
+            if target == ActionTargetGroup.HOSTILE and (afflic := actcond.get('_Type')):
                 affname = afflic.lower()
                 attr['afflic'] = [affname, actcond['_Rate']]
                 if (dot := actcond.get('_SlipDamagePower')):
@@ -318,7 +319,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                 buffs = []
                 for tsn, btype in AdvConf.TENSION_KEY.items():
                     if (v := actcond.get(tsn)):
-                        if target in (2, 6):
+                        if target in (ActionTargetGroup.ALLY, ActionTargetGroup.MYPARTY):
                             if part.get('_collisionParams_01', 0) > 0:
                                 buffs.append([btype, v, 'nearby'])
                             else:
@@ -335,7 +336,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                     else:
                         duration = actcond.get('_DurationSec', -1)
                         duration = fr(duration)
-                        if target in (2, 6):
+                        if target in (ActionTargetGroup.ALLY, ActionTargetGroup.MYPARTY):
                             if part.get('_collisionParams_01', 0) > 0:
                                 btype = 'nearby'
                             else:
@@ -348,7 +349,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                         elif duration > -1:
                             b.append(duration)
                         buffs.append(b)
-                    if target == 3:
+                    if target == ActionTargetGroup.HOSTILE:
                         for k, mod in AdvConf.DEBUFFARG_KEY.items():
                             if (value := actcond.get(k)):
                                 buffs.append(['debuff', fr(value), duration, actcond.get('_Rate')/100, mod])
@@ -399,15 +400,15 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
     signal_end = signal_end or set()
     motion_end = None
     for idx, part in enumerate(parts):
-        if part['commandType'] == 'SEND_SIGNAL':
+        if part['commandType'] == CommandType.SEND_SIGNAL:
             actid = part.get('_actionId', 0)
             if not (is_dragon and actid % 100 in (20, 21)) and not actid in DODGE_ACTIONS:
                 signals[actid] = -10
                 if part.get('_motionEnd'):
                     signal_end.add(actid)
-        elif ('HIT' in part['commandType'] or 'BULLET' in part['commandType']) and s is None:
+        elif ('HIT' in part['commandType'].name or 'BULLET' in part['commandType'].name) and s is None:
             s = fr(part['_seconds'])
-        elif part['commandType'] == 'ACTIVE_CANCEL':
+        elif part['commandType'] == CommandType.ACTIVE_CANCEL:
             # print(part)
             recovery = part['_seconds']
             actid = part.get('_actionId')
@@ -419,7 +420,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
                 followed_by.add((recovery, actid))
             # else:
             #     recovery = max(timestop, recovery)
-        elif part['commandType'] == 'TIMESTOP':
+        elif part['commandType'] == CommandType.TIMESTOP:
             # timestop = part.get('_seconds', 0) + part.get('_duration', 0)
             ts_second = part.get('_seconds', 0)
             ts_delay = part.get('_duration', 0)
@@ -431,7 +432,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
             #             # found_hit = found_hit or ('HIT' in npart['commandType'] or 'BULLET' in npart['commandType'])
             #             if 'HIT' in npart['commandType'] or 'BULLET' in npart['commandType']:
             #                 npart['_seconds'] += ts_delay
-        elif is_dragon and part['commandType'] == 'TIMECURVE' and not part.get('_isNormalizeCurve'):
+        elif is_dragon and part['commandType'] == CommandType.TIMECURVE and not part.get('_isNormalizeCurve'):
             timecurve = part.get('_duration')
         # if part['commandType'] == 'PARTS_MOTION' and part.get('_animation'):
         #     motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
@@ -446,7 +447,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
     # print(signals, motion_end, timecurve)
     if timecurve is not None:
         for part in sorted(parts, key=lambda p: -p['_seq']):
-            if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
+            if part['commandType'] == CommandType.ACTIVE_CANCEL and part['_seconds'] > 0:
                 r = part['_seconds']
                 break
         if r is None:
@@ -463,7 +464,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
             r = motion_end
         else:
             for part in reversed(parts):
-                if part['commandType'] == 'ACTIVE_CANCEL':
+                if part['commandType'] == CommandType.ACTIVE_CANCEL:
                     r = part['_seconds']
                     break
         if r is not None:
@@ -667,12 +668,12 @@ def convert_skill_common(skill, lv):
     timestop = 0
     followed_by = set()
     for part in action['_Parts']:
-        if part['commandType'] == 'ACTIVE_CANCEL' and actcancel is None:
+        if part['commandType'] == CommandType.ACTIVE_CANCEL and actcancel is None:
             if '_actionId' in part:
                 followed_by.add((part['_seconds'], part['_actionId']))
             else:
                 actcancel = part['_seconds']
-        if part['commandType'] == 'PARTS_MOTION' and mstate is None:
+        if part['commandType'] == CommandType.PARTS_MOTION and mstate is None:
             if (animation := part.get('_animation')):
                 if isinstance(animation, list):
                     mstate = sum(a['duration'] for a in animation)
@@ -680,7 +681,7 @@ def convert_skill_common(skill, lv):
                     mstate = animation['duration']
             if part.get('_motionState') in AdvConf.GENERIC_BUFF:
                 mstate = 1.0
-        if part['commandType'] == 'TIMESTOP':
+        if part['commandType'] == CommandType.TIMESTOP:
             timestop = part['_seconds'] + part['_duration']
         if actcancel and mstate:
             break
@@ -742,7 +743,7 @@ class SkillProcessHelper:
                 ab = self.index['AbilityData'].get(ab, exclude_falsy=True)
             for a in (1, 2, 3):
                 if ab.get('_AbilityType1') == 44: # alt skill
-                    s = int(ab['_TargetAction1'][-1])
+                    s = int(ab['_TargetAction1'].name[-1])
                     eid = next(self.eskill_counter)
                     group = 'enhanced' if eid == 1 else f'enhanced{eid}'
                     self.chara_skills[ab[f'_VariousId1a']['_Id']] = (f's{s}_{group}', s, ab[f'_VariousId1a'], skill['_Id'])
@@ -1026,6 +1027,19 @@ class AdvConf(CharaData, SkillProcessHelper):
             desc_out.close()
 
 
+HP_GEQ = (
+    AbilityCondition.HP_MORE,
+    AbilityCondition.HP_MORE_MOMENT,
+    AbilityCondition.HP_MORE_NOT_EQ_MOMENT,
+    AbilityCondition.HP_MORE_NO_SUPPORT_CHARA
+)
+HP_LEQ = (
+    AbilityCondition.HP_LESS,
+    AbilityCondition.HP_NOREACH,
+    AbilityCondition.HP_LESS_MOMENT,
+    AbilityCondition.HP_LESS_NOT_EQ_MOMENT,
+    AbilityCondition.HP_NOREACH_NO_SUPPORT_CHARA
+)
 def ab_cond(ab):
     cond = ab.get('_ConditionType')
     condval = ab.get('_ConditionValue')
@@ -1036,13 +1050,15 @@ def ab_cond(ab):
         cparts.append(ele.lower())
     if wep:
         cparts.append(wep.lower())
-    if condval:
+    try:
         condval = int(condval)
-    if cond == 'hp geq':
+    except TypeError:
+        condval = 0
+    if cond in HP_GEQ:
         cparts.append(f'hp{condval}')
-    elif cond == 'hp leq':
+    elif cond in HP_LEQ:
         cparts.append(f'hp≤{condval}')
-    elif cond == 'combo':
+    elif cond == AbilityCondition.TOTAL_HITCOUNT_MORE:
         cparts.append(f'hit{condval}')
     if cparts:
         return '_'.join(cparts)
@@ -1066,29 +1082,31 @@ def ab_stats(**kwargs):
 
 def ab_aff_edge(**kwargs):
     if (a_id := kwargs.get('var_a')):
-        return [f'edge_{AFFLICTION_TYPES.get(a_id, a_id).lower()}', kwargs.get('upval')]
+        return [f'edge_{AFFLICTION_TYPES.get(a_id, a_id)}', kwargs.get('upval')]
 
 def ab_damage(**kwargs):
     if upval := kwargs.get('upval'):
         res = None
         target = kwargs.get('target')
         astr = None
-        if target == 'skill':
+        condstr = None
+        if target == AbilityTargetAction.SKILL_ALL:
             astr = 's'
-        elif target == 'force strike':
+        elif target == AbilityTargetAction.BURST_ATTACK:
             astr = 'fs'
         if astr:
             res = [astr, upval/100]
         else:
             cond = kwargs.get('ab').get('_ConditionType')
-            if cond == 'bleed':
+            if cond == AbilityCondition.DEBUFF_SLIP_HP:
                 res = ['bleed', upval/100]
-            elif cond == 'overdrive':
+            elif cond == AbilityCondition.OVERDRIVE:
                 res = ['od', upval/100]
-            elif cond == 'break':
+            elif cond == AbilityCondition.BREAKDOWN:
                 res = ['bk', upval/100]
-            elif cond == 'enemy has def down':
-                res = ['k_debuff_def', upval/100]
+            elif cond == AbilityCondition.DEBUFF:
+                if kwargs.get('ab').get('_ConditionValue') == 3:
+                    res = ['k_debuff_def', upval/100]
         condstr = ab_cond(kwargs.get('ab'))
         if res:
             if condstr:
@@ -1105,42 +1123,42 @@ def ab_actcond(**kwargs):
     cond = ab.get('_ConditionType')
     astr = None
     extra_args = []
-    if cond == 'doublebuff':
+    if cond == AbilityCondition.GET_BUFF_DEF:
         if (cd := kwargs.get('_CoolTime')):
             astr = 'bcc'
         else:
             astr = 'bc'
-    elif cond == 'hp drop under':
+    elif cond == AbilityCondition.HP_LESS_MOMENT:
         if ab.get('_OccurenceNum'):
             astr = 'lo'
         elif ab.get('_MaxCount') == 5:
             astr = 'uo'
         else:
             astr = 'ro'
-    elif cond == 'every combo':
-        if ab.get('_TargetAction') == 'force strike':
+    elif cond == AbilityCondition.HITCOUNT_MOMENT:
+        if ab.get('_TargetAction') == AbilityTargetAction.BURST_ATTACK:
             return ['fsprep', ab.get('_OccurenceNum'), kwargs.get('var_str').get('_RecoverySpRatio')]
         if (val := actcond.get('_Tension')):
             return ['ecombo', int(ab.get('_ConditionValue'))]
-    elif cond == 'prep' and (val := actcond.get('_Tension')):
+    elif cond == AbilityCondition.QUEST_START and (val := actcond.get('_Tension')):
         return ['eprep', int(val)]
-    elif cond == 'claws':
+    elif cond == AbilityCondition.TRANSFORM_DRAGON:
         if val := actcond.get('_RateSkill'):
             return ['dcs', 3]
         elif val := actcond.get('_RateDefense'):
             return ['dcd', 3]
         else:
             return ['dc', 3]
-    elif cond == 'primed':
+    elif cond == AbilityCondition.SKILLCONNECT_SKILL1_MOMENT:
         astr = 'primed'
-    elif cond == 'slayer/striker':
-        if ab.get('_TargetAction') == 'force strike':
+    elif cond == AbilityCondition.KILL_ENEMY:
+        if ab.get('_TargetAction') == AbilityTargetAction.BURST_ATTACK:
             astr = 'sts'
         else:
             astr = 'sls'
-    elif cond == 'affliction proc':
-        affname = AFFLICTION_TYPES[ab.get('_ConditionValue')].lower()
-        if var_str.get('_TargetGroup') == 6:
+    elif cond == AbilityCondition.CAUSE_ABNORMAL_STATUS:
+        affname = AFFLICTION_TYPES[ab.get('_ConditionValue')]
+        if var_str.get('_TargetGroup') in (ActionTargetGroup.ALLY, ActionTargetGroup.MYPARTY):
             astr = f'affteam_{affname}'
         else:
             astr = f'affself_{affname}'
@@ -1150,9 +1168,6 @@ def ab_actcond(**kwargs):
             if not extra_args:
                 extra_args.append(fr(actcond.get('_DurationSec')))
             extra_args.append(fr(cooltime))
-    elif cond == 'chain hp geq':
-        astr = 'achain'
-        extra_args = [f'hp{ab.get("_ConditionValue")}']
     if astr:
         full_astr, value = None, None
         if (val := actcond.get('_Tension')):
@@ -1198,7 +1213,7 @@ def ab_generic(name, div=None):
 
 def ab_aff_k(**kwargs):
     if (a_id := kwargs.get('var_a')):
-        res = [f'k_{AFFLICTION_TYPES.get(a_id, a_id).lower()}', kwargs.get('upval')/100]
+        res = [f'k_{AFFLICTION_TYPES.get(a_id, a_id)}', kwargs.get('upval')/100]
         if (condstr := ab_cond(kwargs.get('ab'))):
             res.append(condstr)
         return res

@@ -76,7 +76,7 @@ def export_skill_share_json():
         skill_share_data[name] = res_data
 
     with open('../dl/conf/skillshare.json', 'w', newline='') as f:
-        json.dump(skill_share_data, f, indent=2)
+        json.dump(skill_share_data, f, indent=2, default=str)
 
 
 if __name__ == '__main__':
