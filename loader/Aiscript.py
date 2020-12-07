@@ -315,7 +315,7 @@ FMT_PYTHON = {
     Command.GM_SetSuddenEvent: fmt_gmsetsuddenevent,
     Command.GM_SetBanditEvent: fmt_gmsetbanditevent,
     Command.RecHpRate: fmt_rechprate,
-    Command.BerserkAction: fmt_actionset
+    Command.FromActionSetBoost: fmt_actionset
 }
 
 
