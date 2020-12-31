@@ -670,7 +670,7 @@ if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
         'jp': {
-            r'^images/icon/modechange': None
+            r'^images/icon/dragon/l': None,
         }
     }
 

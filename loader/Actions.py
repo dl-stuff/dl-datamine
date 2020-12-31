@@ -6,6 +6,7 @@ import re
 
 
 class CommandType(ShortEnum):
+    UNKNOWN = -1
     PARTS_MOTION = 2
     MOVEMENT = 5
     ROTATION = 7
@@ -330,7 +331,11 @@ def load_actions(db, path):
                             # if additional := actdata.get('_additionalCollision'):
                             #     action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
                         for seq, data in action:
-                            command_type = CommandType(data['commandType'])
+                            try:
+                                command_type = CommandType(data['commandType'])
+                            except TypeError:
+                                command_type = data['commandType']
+                                print(f'Unknown command type {command_type} in {file_name}')
                             log_schema_keys(schema_map, data, command_type)
                             if command_type in PROCESSORS.keys():
                                 builder = PROCESSORS[command_type]

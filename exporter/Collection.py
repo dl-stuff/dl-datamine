@@ -322,8 +322,9 @@ if __name__ == '__main__':
     imgdir = os.path.join(outdir, 'public')
     datadir = os.path.join(outdir, 'src', 'data')
     index = DBViewIndex()
-    make_json(datadir, 'chara.json', CharaData(index), make_bv_id, make_chara_json, chara_availability_data, where='_ElementalType != 99')
-    make_json(datadir, 'dragon.json', DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data)
+    playable = '_ElementalType != 99 AND _IsPlayable = 1'
+    make_json(datadir, 'chara.json', CharaData(index), make_bv_id, make_chara_json, chara_availability_data, where=playable)
+    make_json(datadir, 'dragon.json', DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data, where=playable)
     make_json(datadir, 'amulet.json', AbilityCrest(index), make_base_id, make_amulet_json, amulet_availability_data)
     with open(os.path.join(datadir, 'availabilities.json'), 'w') as f:
         json.dump({k: sorted(list(v)) for k, v in all_avail.items()}, f)

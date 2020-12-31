@@ -560,7 +560,8 @@ def convert_fs(burst, marker=None, cancel=None):
                 del fsconf['fs1']
         else:
             fsconf['fs'] = hit_attr_adj(burst, startup, fsconf['fs'], re.compile(r'.*H0\d_LV02$'))
-            fsconf['fs']['interrupt'], fsconf['fs']['cancel'] = convert_following_actions(startup, followed_by, ('s',))
+            if fsconf['fs']:
+                fsconf['fs']['interrupt'], fsconf['fs']['cancel'] = convert_following_actions(startup, followed_by, ('s',))
     if cancel is not None:
         fsconf['fsf'] = {
             'charge': fr(0.1+cancel['_Parts'][0]['_duration']),
