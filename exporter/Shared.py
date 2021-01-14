@@ -263,17 +263,17 @@ class AbilityData(DBView):
             if ac_enum in AbilityData.MAP_COND_VALUE2:
                 self.link(res, '_ConditionValue2', 'ActionCondition', exclude_falsy=exclude_falsy)
             res['_ConditionType'] = ac_enum
-        except KeyError:
+        except (KeyError, ValueError):
             pass
         try:
             res['_TargetAction'] = AbilityTargetAction(res['_TargetAction'])
-        except KeyError:
+        except (KeyError, ValueError):
             pass
         self.link(res, '_RequiredBuff', 'ActionCondition', exclude_falsy=exclude_falsy)
         for i in (1, 2, 3):
             try:
                 res[f'_TargetAction{i}'] = AbilityTargetAction(res[f'_TargetAction{i}'])
-            except KeyError:
+            except (KeyError, ValueError):
                 pass
             try:
                 res = ABILITY_TYPES[res[f'_AbilityType{i}']](self, res, i)
@@ -483,7 +483,22 @@ class ActionParts(DBView):
 
             self.link(r, '_actionConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
             self.link(r, '_buffCountConditionId', 'ActionCondition', exclude_falsy=exclude_falsy)
-            self.link(r, '_autoFireActionId', 'PlayerAction', exclude_falsy=exclude_falsy)
+            skip_autoFireActionId = False
+            try:
+                autofire_actions = []
+                for autofire_id in set(map(int, json.loads(r['_autoFireActionIdList']))):
+                    if not autofire_id:
+                        continue
+                    if autofire_id == r.get('_autoFireActionId'):
+                        skip_autoFireActionId = True
+                    if (autofire_action := self.index['PlayerAction'].get(autofire_id, exclude_falsy=exclude_falsy)):
+                        autofire_actions.append(autofire_action)
+                if autofire_actions:
+                    r['_autoFireActionIdList'] = autofire_actions
+            except (KeyError, ValueError, TypeError):
+                pass
+            if not skip_autoFireActionId:
+                self.link(r, '_autoFireActionId', 'PlayerAction', exclude_falsy=exclude_falsy)
 
             if '_motionState' in r and r['_motionState']:
                 ms = r['_motionState']

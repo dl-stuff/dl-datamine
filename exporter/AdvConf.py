@@ -357,6 +357,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                             if (value := actcond.get(k)):
                                 buffs.append(['affres', fr(value), duration, aff])
                     else:
+                        if addatk := actcond.get('_AdditionAttack'):
+                            buffs.append(['echo', fr(addatk['_DamageAdjustment']), duration])
                         for k, mod in AdvConf.BUFFARG_KEY.items():
                             if (value := actcond.get(k)):
                                 if (bele := actcond.get('_TargetElemental')) and btype != 'self':

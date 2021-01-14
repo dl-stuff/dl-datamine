@@ -45,6 +45,7 @@ class CommandType(ShortEnum):
     BUFF_FIELD_ATTACH = 125
     BUTTERFLY_BULLET = 127
     PART_CONDITION = 129 # helsa/fjoachim
+    SHIKIGAMI_BULLET = 138
 
 # seen_id = set()
 def build_db_data(meta, ref, seq, data):
@@ -251,6 +252,7 @@ ACTION_PART = DBTableMetadata(
         # AUTOFIRE
         '_autoFireInterval': DBTableMetadata.REAL,
         '_autoFireActionId': DBTableMetadata.INT,
+        '_autoFireActionIdList': DBTableMetadata.BLOB, 
         '_autoFireEffectTrigger': DBTableMetadata.INT,
         '_autoFireEffectTriggerResetTime': DBTableMetadata.REAL,
         '_autoFireAutoSearchEnemyRadius': DBTableMetadata.REAL
@@ -279,6 +281,7 @@ PROCESSORS[CommandType.ADD_HIT] = build_db_data
 PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
 PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
 PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
+PROCESSORS[CommandType.SHIKIGAMI_BULLET] = build_bullet
 
 def log_schema_keys(schema_map, data, command_type):
     schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}

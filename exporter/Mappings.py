@@ -194,3 +194,7 @@ class AbilityCondition(ShortEnum):
     GET_DP = 90
     GET_BUFF_FOR_PD_LINK = 91
     GET_HEAL = 92
+    BURST_CHARGE_TIME = 93
+    HITATTR_COUNT_MORE = 94
+    COMBO_COUNT_IV = 95
+    DODGE_MOMENT = 96

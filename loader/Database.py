@@ -21,7 +21,7 @@ def check_target_path(target):
 class ShortEnum(Enum):
     @classmethod
     def _missing_(cls, value):
-        return f'UNKNOWN.{value}'
+        return self.UNKNOWN
 
     def __str__(self):
         return self.name
