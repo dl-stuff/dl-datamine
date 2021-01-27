@@ -6,6 +6,9 @@ import re
 
 
 class CommandType(ShortEnum):
+    @classmethod
+    def _missing_(cls, value):
+        return CommandType.UNKNOWN
     UNKNOWN = -1
     PARTS_MOTION = 2
     MOVEMENT = 5

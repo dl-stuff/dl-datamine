@@ -829,7 +829,10 @@ class AdvConf(CharaData, SkillProcessHelper):
         '_RateSlowMove': 'bog',
         '_RateSleep': 'sleep',
         '_RateFrostbite': 'frostbite',
-        '_RateFlashheat': 'flashburn'
+        '_RateFlashheat': 'flashburn',
+        '_RateCrashWind': 'stormlash',
+        '_RateDarkAbs': 'shadowblight',
+        '_RateDestroyFire': 'scorchrend'
     }
     TENSION_KEY = {
         '_Tension': 'energy',
