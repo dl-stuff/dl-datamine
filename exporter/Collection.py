@@ -91,7 +91,7 @@ from urllib.parse import quote
 import requests
 
 MAX = 500
-BASE_URL = 'https://dragalialost.gamepedia.com/api.php?action=cargoquery&format=json&limit={}'.format(MAX)
+BASE_URL = 'https://dragalialost.wiki/api.php?action=cargoquery&format=json&limit={}'.format(MAX)
 
 def get_api_request(offset, **kwargs):
     q = '{}&offset={}'.format(BASE_URL, offset)

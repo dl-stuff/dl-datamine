@@ -186,6 +186,7 @@ ACTION_PART = DBTableMetadata(
         '_abHitInterval': DBTableMetadata.REAL,
         '_abDuration': DBTableMetadata.REAL,
         '_bulletNum': DBTableMetadata.INT,
+        '_fireMaxCount': DBTableMetadata.INT,
         '_generateNum': DBTableMetadata.INT,
         '_generateDelay': DBTableMetadata.REAL,
         '_generateNumDependOnBuffCount': DBTableMetadata.INT,

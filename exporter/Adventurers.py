@@ -61,26 +61,18 @@ class CharaModeData(DBView):
             return None
         if not full_query:
             return res
-        if '_ActionId' in res and res['_ActionId']:
-            res['_ActionId'] = self.index['PlayerAction'].get(
-                res['_ActionId'], exclude_falsy=exclude_falsy)
-        for s in ('_Skill1Id', '_Skill2Id'):
-            if s in res and res[s]:
-                res[s] = self.index['SkillData'].get(
-                    res[s], exclude_falsy=exclude_falsy)
-        if '_UniqueComboId' in res and res['_UniqueComboId']:
-            res['_UniqueComboId'] = self.index['CharaUniqueCombo'].get(
-                res['_UniqueComboId'], exclude_falsy=exclude_falsy)
-        if '_BurstAttackId' in res and res['_BurstAttackId']:
-            res['_BurstAttackId'] = self.index['PlayerAction'].get(
-                res['_BurstAttackId'], exclude_falsy=exclude_falsy)
+        self.link(res, '_ChargeBreakId', 'PlayerAction', exclude_falsy=exclude_falsy)
+        self.link(res, '_ActionId', 'PlayerAction', exclude_falsy=exclude_falsy)
+        self.link(res, '_Skill1Id', 'SkillData', exclude_falsy=exclude_falsy)
+        self.link(res, '_Skill2Id', 'SkillData', exclude_falsy=exclude_falsy)
+        self.link(res, '_UniqueComboId', 'CharaUniqueCombo', exclude_falsy=exclude_falsy)
+        self.link(res, '_BurstAttackId', 'PlayerAction', exclude_falsy=exclude_falsy)
         return res
 
 
 class CharaData(DBView):
     def __init__(self, index):
-        super().__init__(index, 'CharaData', labeled_fields=[
-            '_Name', '_SecondName', '_CvInfo', '_CvInfoEn', '_ProfileText'])
+        super().__init__(index, 'CharaData', labeled_fields=['_Name', '_SecondName', '_CvInfo', '_CvInfoEn', '_ProfileText'])
 
     @staticmethod
     def condense_stats(res):

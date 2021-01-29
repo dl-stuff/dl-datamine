@@ -198,3 +198,5 @@ class AbilityCondition(ShortEnum):
     HITATTR_COUNT_MORE = 94
     COMBO_COUNT_IV = 95
     DODGE_MOMENT = 96
+    BUFF_COUNT_CAPPED = 98
+    BUFF_COUNT_SPECIFIC = 99

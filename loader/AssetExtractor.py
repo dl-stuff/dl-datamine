@@ -169,6 +169,25 @@ class ParsedManifest(dict):
         targets = filter(lambda x: pattern.search(x[0]) and (x[0] not in other.keys() or x[1] != other[x[0]]), self.items())
         return ParsedManifest._get_by(targets, mode)
 
+    def report_diff(self, other):
+        added_keys = set()
+        changed_keys = set()
+        removed_keys = set()
+        for key, value in self.items():
+            if key not in other:
+                added_keys.add(key)
+            elif value != other[key]:
+                changed_keys.add(key)
+        for key in other.keys():
+            if key not in self:
+                removed_keys.add(key)
+        from pprint import pprint
+        print('===========ADDED===========')
+        pprint(added_keys)
+        print('==========CHANGED==========')
+        pprint(changed_keys)
+        print('==========REMOVED==========')
+        pprint(removed_keys)
 
 def check_target_path(target):
     if not os.path.exists(os.path.dirname(target)):
@@ -643,6 +662,9 @@ class Extractor:
         download_list = self.pm[region].get_by_diff(self.pm_old[region], mode=self.mf_mode)
         self.pool_download_and_extract(download_list, region=region)
 
+    def report_diff(self, region='jp'):
+        self.pm[region].report_diff(self.pm_old[region])
+
     def extract_target(self, dl_target, ex_target, texture_2d):
         am = AssetsManager(dl_target)
         for asset in am.assets.values():
@@ -669,8 +691,8 @@ class Extractor:
 if __name__ == '__main__':
     import sys
     IMAGE_PATTERNS = {
-        'jp': {
-            r'^images/icon/dragon/l': None,
+        'en': {
+            r'^ui/skilldetail': None,
         }
     }
 
@@ -687,6 +709,9 @@ if __name__ == '__main__':
         elif sys.argv[1] == 'apk':
             ex = Extractor(ex_dir='_ex_apk', ex_img_dir='_im_apk', stdout_log=False, overwrite=False, mf_mode=1)
             ex.local_extract('_apk')
+        elif sys.argv[1] == 'report':
+            ex = Extractor()
+            ex.report_diff()
         else:
             ex = Extractor(ex_dir='./_images', mf_mode=1)
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})

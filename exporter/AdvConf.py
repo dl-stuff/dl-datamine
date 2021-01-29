@@ -257,8 +257,11 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr['cp'] = cp
     # if hitattr.get('_RecoveryValue'):
     #     attr['heal'] = fr(hitattr.get('_RecoveryValue'))
-    if part.get('commandType') == CommandType.FIRE_STOCK_BULLET and (stock := action.get('_MaxStockBullet', 0)) > 1:
-        attr['extra'] = stock
+    if part.get('commandType') == CommandType.FIRE_STOCK_BULLET:
+        if (stock := part.get('_fireMaxCount', 0)) > 1:
+            attr['extra'] = stock
+        elif (stock := action.get('_MaxStockBullet', 0)) > 1:
+            attr['extra'] = stock
     if (bc := attr.get('_DamageUpRateByBuffCount')):
         attr['bufc'] = bc
     if 0 < (attenuation := part.get('_attenuationRate', 0)) < 1:
@@ -625,7 +628,7 @@ class BaseConf(WeaponType):
                         marker = self.index['PlayerAction'].get(burst['_Id']+4, exclude_falsy=True)
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f'{fs}_{mode_name}'] = fsc
-                if (xalt := mode.get('_UniqueComboId')):
+                if (xalt := mode.get('_UniqueComboId')) and isinstance(xalt, dict):
                     for prefix in ('', 'Ex'):
                         if xalt.get(f'_{prefix}ActionId'):
                             for n, xn in enumerate(xalt[f'_{prefix}ActionId']):
@@ -953,7 +956,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                         marker = self.index['PlayerAction'].get(burst['_Id']+4, exclude_falsy=True)
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f'{fs}_{mode_name}'] = fsc
-                if (xalt := mode.get('_UniqueComboId')):
+                if (xalt := mode.get('_UniqueComboId')) and isinstance(xalt, dict):
                     xalt_pattern = re.compile(r'.*H0\d_LV02$') if conf['c']['spiral'] else None
                     for prefix in ('', 'Ex'):
                         if xalt.get(f'_{prefix}ActionId'):
@@ -1793,6 +1796,8 @@ if __name__ == '__main__':
     elif args.x:
         view = CharaUniqueCombo(index)
         xalt = view.get(int(args.x), exclude_falsy=True)
+        if not isinstance(xalt, dict):
+            exit()
         conf = {}
         for prefix in ('', 'Ex'):
             if xalt.get(f'_{prefix}ActionId'):
