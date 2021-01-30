@@ -255,8 +255,10 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr['hp'] = fr(hp*100)
     if (cp := hitattr.get('_RecoveryCP')):
         attr['cp'] = cp
-    # if hitattr.get('_RecoveryValue'):
-    #     attr['heal'] = fr(hitattr.get('_RecoveryValue'))
+    if (heal := hitattr.get('_RecoveryValue')):
+        attr['heal'] = heal
+    if (od := hitattr.get('_ToBreakDmgRate')) and od != 1:
+        attr['odmg'] = fr(od)
     if part.get('commandType') == CommandType.FIRE_STOCK_BULLET:
         if (stock := part.get('_fireMaxCount', 0)) > 1:
             attr['extra'] = stock
@@ -808,10 +810,9 @@ class AdvConf(CharaData, SkillProcessHelper):
         '_RateHP': ('maxhp', 'buff'),
         '_RateCritical': ('crit', 'chance'),
         '_EnhancedCritical': ('crit', 'damage'),
-        # '_RegenePower': ('heal', 'buff'),
+        '_RegenePower': ('heal', 'buff'),
         '_SlipDamageRatio': ('regen', 'buff'),
         '_RateRecoverySp': ('sp', 'passive'),
-        # '_RateHP': ('hp', 'buff')
         '_RateAttackSpeed': ('spd', 'passive'),
         '_RateChargeSpeed': ('cspd', 'passive'),
         '_RateBurst': ('fs', 'buff'),
@@ -938,8 +939,8 @@ class AdvConf(CharaData, SkillProcessHelper):
                     continue
                 if (gunkind := mode.get('_GunMode')):
                     conf['c']['gun'].append(gunkind)
-                    if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
-                        continue
+                    # if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
+                    #     continue
                 try:
                     mode_name = unidecode(mode['_ActionId']['_Parts'][0]['_actionConditionId']['_Text'].split(' ')[0].lower())
                 except:
@@ -1233,6 +1234,7 @@ ABILITY_CONVERT = {
     3: ab_aff_edge,
     6: ab_damage,
     7: ab_generic('cc', 100),
+    9: ab_generic('odaccel', 100),
     11: ab_generic('spf', 100),
     14: ab_actcond,
     17: ab_prep,
