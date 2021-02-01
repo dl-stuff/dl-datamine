@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from loader.Actions import CommandType
-from exporter.Mappings import AFFLICTION_TYPES, KILLER_STATE, TRIBE_TYPES, ELEMENTS, WEAPON_TYPES, AbilityCondition, AbilityTargetAction, ActionTargetGroup
+from exporter.Mappings import AFFLICTION_TYPES, KILLER_STATE, TRIBE_TYPES, ELEMENTS, WEAPON_TYPES, AbilityCondition, AbilityTargetAction, ActionTargetGroup, AbilityType, AbilityStat
 
 
 def get_valid_filename(s):
@@ -143,7 +143,7 @@ class AbilityData(DBView):
     @staticmethod
     def stat_ability(ad, res, i):
         a_id = AbilityData.a_ids(res, i)[0]
-        res[f'_Description{i}'] = f'stat {AbilityData.STAT_ABILITIES.get(a_id, a_id)}'
+        res[f'_Description{i}'] = f'stat {AbilityStat(a_id)}'
         return res
 
     @staticmethod
@@ -279,6 +279,11 @@ class AbilityData(DBView):
                 res = ABILITY_TYPES[res[f'_AbilityType{i}']](self, res, i)
             except (KeyError, IndexError):
                 pass
+            try:
+                res[f'_AbilityType{i}'] = AbilityType(res[f'_AbilityType{i}'])
+            except (KeyError, ValueError):
+                pass
+
         if (ele := res.get('_ElementalType')):
             res['_ElementalType'] = ELEMENTS.get(ele, ele)
         if (wep := res.get('_WeaponType')):
@@ -303,69 +308,71 @@ ABILITY_TYPES = {
     3: AbilityData.affliction_proc_rate,
     4: AbilityData.tribe_resist,
     5: AbilityData.tribe_bane,
-    6: AbilityData.generic_description('damage'),
-    7: AbilityData.generic_description('critical rate'),
-    8: AbilityData.generic_description('recovery potency'),
-    9: AbilityData.generic_description('gauge accelerator'),
+    # 6: AbilityData.generic_description('damage'),
+    # 7: AbilityData.generic_description('critical rate'),
+    # 8: AbilityData.generic_description('recovery potency'),
+    # 9: AbilityData.generic_description('gauge accelerator'),
     # 10
-    11: AbilityData.generic_description('striking haste'),
+    # 11: AbilityData.generic_description('striking haste'),
     # 12 13
     14: AbilityData.action_condition,
     # 15
-    16: AbilityData.generic_description('debuff chance'),
-    17: AbilityData.generic_description('skill prep'),
-    18: AbilityData.generic_description('buff time'),
-    19: AbilityData.generic_description('debuff time'),
+    # 16: AbilityData.generic_description('debuff chance'),
+    # 17: AbilityData.generic_description('skill prep'),
+    # 18: AbilityData.generic_description('buff time'),
+    # 19: AbilityData.generic_description('debuff time'),
     20: AbilityData.affliction_punisher,
-    21: AbilityData.generic_description('player exp'),
-    22: AbilityData.generic_description('adv exp'),
-    23: AbilityData.generic_description('rupies'),
-    24: AbilityData.generic_description('mana'),
+    # 21: AbilityData.generic_description('player exp'),
+    # 22: AbilityData.generic_description('adv exp'),
+    # 23: AbilityData.generic_description('rupies'),
+    # 24: AbilityData.generic_description('mana'),
     25: AbilityData.conditional_action_grant,
-    26: AbilityData.generic_description('critical damage'),
-    27: AbilityData.generic_description('shapeshift prep'),
+    # 26: AbilityData.generic_description('critical damage'),
+    # 27: AbilityData.generic_description('shapeshift prep'),
     28: AbilityData.elemental_resist,
-    29: AbilityData.generic_description('specific enemy resist'),
-    30: AbilityData.generic_description('specific enemy bane'),
+    # 29: AbilityData.generic_description('specific enemy resist'),
+    # 30: AbilityData.generic_description('specific enemy bane'),
     # 31 32
-    33: AbilityData.generic_description('event points'),
-    34: AbilityData.generic_description('event drops'),
-    35: AbilityData.generic_description('gauge inhibitor'),
-    36: AbilityData.generic_description('dragon damage'),
-    37: AbilityData.generic_description('enemy ability resist'),
+    # 33: AbilityData.generic_description('event points'),
+    # 34: AbilityData.generic_description('event drops'),
+    # 35: AbilityData.generic_description('gauge inhibitor'),
+    # 36: AbilityData.generic_description('dragon damage'),
+    # 37: AbilityData.generic_description('enemy ability resist'),
     38: AbilityData.action_condition,
     39: AbilityData.action_grant,
-    40: AbilityData.generic_description('gauge defense & skill damage'),
-    41: AbilityData.generic_description('event points'),
-    42: AbilityData.generic_description('level up dragon auto'),
+    # 40: AbilityData.generic_description('gauge defense & skill damage'),
+    # 41: AbilityData.generic_description('event points'),
+    # 42: AbilityData.generic_description('level up dragon auto'),
     43: AbilityData.ability_reference,
     44: AbilityData.skill_reference,
     45: AbilityData.action_reference, # force strikes
-    46: AbilityData.generic_description('dragon gauge all team'),
+    # 46: AbilityData.generic_description('dragon gauge all team'),
     # 47 extend afflic time?
-    48: AbilityData.generic_description('dragon gauge decrease rate'),
-    49: AbilityData.generic_description('dragon gauge self'),
+    # 48: AbilityData.generic_description('dragon gauge decrease rate'),
+    # 49: AbilityData.generic_description('dragon gauge self'),
     # 50 do nothing
     51: AbilityData.random_1_action_condition,
-    52: AbilityData.generic_description('buff icon critical rate'),
+    # 52: AbilityData.generic_description('buff icon critical rate'),
     # 53
-    54: AbilityData.generic_description('combo damage boost'),
-    55: AbilityData.generic_description('combo time'),
-    56: AbilityData.generic_description('dragondrive'),
+    # 54: AbilityData.generic_description('combo damage boost'),
+    # 55: AbilityData.generic_description('combo time'),
+    # 56: AbilityData.generic_description('dragondrive'),
     57: AbilityData.elemental_damage,
-    58: AbilityData.generic_description('dragondrive charge'),
-    59: AbilityData.generic_description('debuff time'),
-    60: AbilityData.generic_description('stop autofire'),
-    61: AbilityData.generic_description('mode change'),
+    # 58: AbilityData.generic_description('dragondrive charge'),
+    # 59: AbilityData.generic_description('debuff time'),
+    # 60: AbilityData.generic_description('stop autofire'),
+    # 61: AbilityData.generic_description('mode change'),
     62: AbilityData.random_n_action_condition,
     63: AbilityData.action_condition_timer,
-    64: AbilityData.generic_description('cp gauge gain'),
+    # 64: AbilityData.generic_description('cp gauge gain'),
     65: AbilityData.action_reference, # dodge
-    66: AbilityData.generic_description('revive hp'),
-    67: AbilityData.generic_description('stamina strength'),
+    # 66: AbilityData.generic_description('revive hp'),
+    # 67: AbilityData.generic_description('stamina strength'),
     68: AbilityData.action_condition, # enemy
-    69: AbilityData.generic_description('cp gauge drain'),
-    70: AbilityData.generic_description('cp gauge cost'),
+    # 69: AbilityData.generic_description('cp gauge drain'),
+    # 70: AbilityData.generic_description('cp gauge cost'),
+    # 71: AbilityData.generic_description('follows when moving'),
+    # 72: AbilityData.generic_description('persona element')
 }
 
 

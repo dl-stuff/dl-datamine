@@ -80,10 +80,10 @@ def build_db_data(meta, ref, seq, data):
         db_data['_conditionValue'] = cond_data['_conditionValue']
     return db_data
 
-# def build_collision_data(meta, ref, seq, data):
-#     if not data.get('_abHitAttrLabel'):
-#         return None
-#     return build_db_data(meta, ref, seq, data)
+def build_collision_data(meta, ref, seq, data):
+    if not data.get('_abHitAttrLabel'):
+        return None
+    return build_db_data(meta, ref, seq, data)
 
 def build_bullet(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
@@ -259,7 +259,10 @@ ACTION_PART = DBTableMetadata(
         '_autoFireActionIdList': DBTableMetadata.BLOB, 
         '_autoFireEffectTrigger': DBTableMetadata.INT,
         '_autoFireEffectTriggerResetTime': DBTableMetadata.REAL,
-        '_autoFireAutoSearchEnemyRadius': DBTableMetadata.REAL
+        '_autoFireAutoSearchEnemyRadius': DBTableMetadata.REAL,
+
+        # servant
+        '_servantActionCommandId': DBTableMetadata.INT,
     }
 )
 
@@ -270,7 +273,7 @@ PROCESSORS[CommandType.BULLET] = build_bullet
 PROCESSORS[CommandType.HIT] = build_db_data
 PROCESSORS[CommandType.TIMESTOP] = build_db_data
 PROCESSORS[CommandType.TIMECURVE] = build_db_data
-# PROCESSORS[CommandType.COLLISION] = build_collision_data
+PROCESSORS[CommandType.COLLISION] = build_collision_data
 PROCESSORS[CommandType.SEND_SIGNAL] = build_db_data
 PROCESSORS[CommandType.ACTIVE_CANCEL] = build_db_data
 PROCESSORS[CommandType.MULTI_BULLET] = build_bullet
@@ -286,6 +289,7 @@ PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
 PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
 PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 PROCESSORS[CommandType.SHIKIGAMI_BULLET] = build_bullet
+PROCESSORS[CommandType.CONTROL] = build_db_data
 
 def log_schema_keys(schema_map, data, command_type):
     schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}
@@ -335,8 +339,8 @@ def load_actions(db, path):
                             if not actdata:
                                 continue
                             action.append((seq, actdata))
-                            # if additional := actdata.get('_additionalCollision'):
-                            #     action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
+                            if (additional := actdata.get('_additionalCollision')) and actdata['_addNum']:
+                                action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
                         for seq, data in action:
                             try:
                                 command_type = CommandType(data['commandType'])

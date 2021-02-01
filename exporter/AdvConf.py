@@ -4,6 +4,7 @@ import pathlib
 import json
 import re
 import itertools
+import math
 from collections import defaultdict
 from unidecode import unidecode
 from tqdm import tqdm
@@ -17,7 +18,7 @@ from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction, AbilityType
 
 ONCE_PER_ACT = ('sp', 'dp', 'utp', 'buff', 'afflic', 'bleed', 'extra', 'dispel')
 DODGE_ACTIONS = {6, 40}
@@ -133,26 +134,27 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     for part in actparts:
         if clear_once_per_action:
             once_per_action.clear()
-        part_hitattrs = []
+        part_hitattr_map = {}
         for label in ActionParts.HIT_LABELS:
             if (hitattr_lst := part.get(label)):
                 if len(hitattr_lst) == 1:
                     hitattr_lst = hitattr_lst[0]
                 if isinstance(hitattr_lst, dict):
                     if (attr := convert_hitattr(hitattr_lst, part, action, once_per_action, meta=meta, skill=skill)):
-                        part_hitattrs.append(attr)
+                        part_hitattr_map[label] = attr
                 elif isinstance(hitattr_lst, list):
                     for hitattr in hitattr_lst:
                         if (not pattern or pattern.match(hitattr['_Id'])) and \
                             (attr := convert_hitattr(hitattr, part, action, once_per_action, meta=meta, skill=skill)):
-                            part_hitattrs.append(attr)
+                            part_hitattr_map[label] = attr
                             if not pattern:
                                 break
-        if not part_hitattrs:
+        if not part_hitattr_map:
             continue
+        part_hitattrs = list(part_hitattr_map.values())
         is_msl = True
-        if (blt := part.get('_bulletNum', 0)) > 1 and not 'extra' in part_hitattrs[-1]:
-            last_copy, need_copy = clean_hitattr(part_hitattrs[-1].copy(), once_per_action)
+        if (blt := part.get('_bulletNum', 0)) > 1 and '_hitAttrLabel' in part_hitattr_map and not 'extra' in part_hitattr_map['_hitAttrLabel']:
+            last_copy, need_copy = clean_hitattr(part_hitattr_map['_hitAttrLabel'].copy(), once_per_action)
             if need_copy:
                 part_hitattrs.append(last_copy)
                 part_hitattrs.append(blt-1)
@@ -162,20 +164,22 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if (gen := part.get('_generateNum')):
             delay = part.get('_generateDelay')
             ref_attrs = part_hitattrs
-        elif (abd := part.get('_abDuration', 0)) > (abi := part.get('_abHitInterval', 0)):
+        elif (abd := part.get('_abDuration', 0)) > (abi := part.get('_abHitInterval', 0)) and '_abHitAttrLabel' in part_hitattr_map:
+            # weird rounding shenanigans can occur due to float bullshit
             gen = int(abd/abi)
             delay = abi
-            idx = -1
-            while isinstance(part_hitattrs[idx], int):
-                idx -= 1
-            ref_attrs = [part_hitattrs[idx]]
-        elif (bci := part.get('_collisionHitInterval', 0)) and ((bld := part.get('_bulletDuration', 0)) > bci or (bld := part.get('_duration', 0)) > bci):
+            ref_attrs = [part_hitattr_map['_abHitAttrLabel']]
+        elif (bci := part.get('_collisionHitInterval', 0)) and ((bld := part.get('_bulletDuration', 0)) > bci or (bld := part.get('_duration', 0)) > bci) and ('_hitLabel' in part_hitattr_map or '_hitAttrLabel' in part_hitattr_map):
                 gen = int(bld/bci) + 1
                 delay = bci
-                ref_attrs = [part_hitattrs[0]]
+                ref_attrs = []
+                if part_hitattr_map.get('_hitLabel'):
+                    ref_attrs.append(part_hitattr_map.get('_hitLabel'))
+                if part_hitattr_map.get('_hitAttrLabel'):
+                    ref_attrs.append(part_hitattr_map.get('_hitAttrLabel'))
             # if adv is not None:
             #     print(adv.name)
-        elif part.get('_loopFlag'):
+        elif part.get('_loopFlag') and '_hitAttrLabel' in part_hitattr_map:
             loopnum = part.get('_loopNum', 0)
             loopsec = part.get('_loopSec')
             delay = part.get('_seconds') + (part.get('_loopFrame', 0) / 60)
@@ -184,7 +188,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             else:
                 gen = loopnum
             gen += 1
-            ref_attrs = [part_hitattrs[0]] if len(part_hitattrs) == 1 else [part_hitattrs[1]]
+            ref_attrs = [part_hitattr_map['_hitAttrLabel']]
             is_msl = False
         gen_attrs = []
         timekey = 'msl' if is_msl else 'iv'
@@ -236,6 +240,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr['crisis'] = fr(crisis-1)
         if (bufc := hitattr.get('_DamageUpRateByBuffCount')):
             attr['bufc'] = fr(bufc)
+        if (od := hitattr.get('_ToBreakDmgRate')) and od != 1:
+            attr['odmg'] = fr(od)
     if 'sp' not in once_per_action:
         if (sp := hitattr.get('_AdditionRecoverySp')):
             attr['sp'] = fr(sp)
@@ -257,8 +263,6 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr['cp'] = cp
     if (heal := hitattr.get('_RecoveryValue')):
         attr['heal'] = heal
-    if (od := hitattr.get('_ToBreakDmgRate')) and od != 1:
-        attr['odmg'] = fr(od)
     if (crit := hitattr.get('_AdditionCritical')):
         attr['crit'] = fr(crit)
     if part.get('commandType') == CommandType.FIRE_STOCK_BULLET:
@@ -813,8 +817,8 @@ class AdvConf(CharaData, SkillProcessHelper):
         '_RegenePower': ('heal', 'buff'),
         '_SlipDamageRatio': ('regen', 'buff'),
         '_RateRecoverySp': ('sp', 'passive'),
-        '_RateAttackSpeed': ('spd', 'passive'),
-        '_RateChargeSpeed': ('cspd', 'passive'),
+        '_RateAttackSpeed': ('spd', 'buff'),
+        '_RateChargeSpeed': ('cspd', 'buff'),
         '_RateBurst': ('fs', 'buff'),
         '_RateSkill': ('s', 'buff'),
         # '_RateDamageShield': ('shield', 'buff')
@@ -1234,21 +1238,21 @@ def ab_aff_k(**kwargs):
 
 
 ABILITY_CONVERT = {
-    1: ab_stats,
-    3: ab_aff_edge,
-    6: ab_damage,
-    7: ab_generic('cc', 100),
-    9: ab_generic('odaccel', 100),
-    11: ab_generic('spf', 100),
-    14: ab_actcond,
-    17: ab_prep,
-    18: ab_generic('bt', 100),
-    19: ab_generic('dbt', 100),
-    20: ab_aff_k,
-    26: ab_generic('cd', 100),
-    27: ab_generic('dp'),
-    36: ab_generic('da', 100),
-    59: ab_generic('dbt', 100) # ?
+    AbilityType.StatusUp: ab_stats,
+    AbilityType.ActAddAbs: ab_aff_edge,
+    AbilityType.ActDamageUp: ab_damage,
+    AbilityType.ActCriticalUp: ab_generic('cc', 100),
+    AbilityType.ActBreakUp: ab_generic('odaccel', 100),
+    AbilityType.AddRecoverySp: ab_generic('spf', 100),
+    AbilityType.AddRecoveryDp: ab_actcond,
+    AbilityType.SpCharge: ab_prep,
+    AbilityType.BuffExtension: ab_generic('bt', 100),
+    AbilityType.DebuffExtension: ab_generic('dbt', 100),
+    AbilityType.AbnormalKiller: ab_aff_k,
+    AbilityType.CriticalDamageUp: ab_generic('cd', 100),
+    AbilityType.DpCharge: ab_generic('dp'),
+    AbilityType.DragonDamageUp: ab_generic('da', 100),
+    AbilityType.DebuffTimeExtensionForSpecificDebuffs: ab_generic('dbt', 100) # ?
 }
 SPECIAL = {
     448: ['spu', 0.08],
