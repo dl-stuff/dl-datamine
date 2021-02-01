@@ -608,6 +608,11 @@ class SkillChainData(DBView):
         return self.process_result(res)
 
 
+class SkillDetail(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'SkillDetail')
+
+
 class SkillData(DBView):
     TRANS_PREFIX = '_Trans'
 
@@ -671,6 +676,11 @@ class SkillData(DBView):
         # ChainGroupId
         if full_chainSkill:
             self.link(skill_data, '_ChainGroupId', 'SkillChainData', by='_GroupId', exclude_falsy=exclude_falsy)
+
+        skill_detail = self.index['SkillDetail'].get(skill_data['_Id'], by='_SkillId', exclude_falsy=exclude_falsy)
+        if skill_detail:
+            skill_data['_SkillDetail'] = skill_detail
+
         return skill_data
 
     def get(self, pk, fields=None, exclude_falsy=True,

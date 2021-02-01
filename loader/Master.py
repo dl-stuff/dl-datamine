@@ -64,4 +64,4 @@ if __name__ == '__main__':
     # table = 'InteractiveBGM'
     # with open(path) as f:
     #     load_table(db, json.load(f), table)
-    load_master(db, './extract/en/master')
+    load_master(db, './_ex_sim/jp/master')

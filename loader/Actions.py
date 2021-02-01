@@ -340,7 +340,12 @@ def load_actions(db, path):
                                 continue
                             action.append((seq, actdata))
                             if (additional := actdata.get('_additionalCollision')) and actdata['_addNum']:
-                                action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
+                                for i, act in enumerate(additional):
+                                    for j in range(actdata['_addNum']):
+                                        adjusted_seq = seq*100 + i*10 + j
+                                        act['_seconds'] += actdata['_seconds']
+                                        action.append((adjusted_seq, act))
+                                # action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
                         for seq, data in action:
                             try:
                                 command_type = CommandType(data['commandType'])
