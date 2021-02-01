@@ -283,7 +283,7 @@ def unpack_Sprite(data, dest, texture_2d, stdout_log=False):
         for triangle in get_triangles(m_Sprite):
             draw.polygon(triangle, fill=1)
 
-    s_tuple = (dest, rect, rotation, mask)
+    s_tuple = (dest, rect, rotation, mask, m_Sprite.path_id)
     try:
         texture_2d[sprite_atlas_data.texture.path_id]['sprites'].append(
             s_tuple)
@@ -442,7 +442,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
             if image is not None:
                 try:
                     flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
-                    for s_dest, s_box, flip, mask in sorted_images['sprites']:
+                    for s_dest, s_box, flip, mask, _ in sorted_images['sprites']:
                         s_img = flipped.crop(
                             (s_box.left, s_box.top, s_box.right, s_box.bottom))
                         if flip is not None:
@@ -535,6 +535,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
     for images in tqdm(image_list, desc='images'):
         if images is None:
             continue
+        sprite_path_id_map = defaultdict(lambda: {})
         for _, data in images.items():
             dest, img, tx_format = data['root']
             res = IMAGE_ALPHA_INDEX.match(dest)
@@ -556,11 +557,19 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
             all_categorized_images[dest]['color'] = img
             if 'sprites' in data:
                 all_categorized_images[dest]['sprites'] = data['sprites']
+                for sprite in data['sprites']:
+                    dest = sprite[0]
+                    path_id = sprite[4]
+                    sprite_path_id_map[os.path.dirname(dest)][path_id] = os.path.basename(dest)
 
     if all_categorized_images:
         merge_categorized(all_categorized_images, stdout_log=stdout_log)
     if do_indexed and all_indexed_images:
         merge_indexed(all_indexed_images, stdout_log=stdout_log)
+    if sprite_path_id_map:
+        for dest_dir, path_id_map in sprite_path_id_map.items():
+            with open(os.path.join(dest_dir, '_path_id.json'), 'w') as fp:
+                json.dump(path_id_map, fp, indent=4)
 
 ### multiprocessing ###
 def mp_download_extract(target, source_list, extract, region, dl_dir, overwrite, ex_dir, ex_img_dir, stdout_log):

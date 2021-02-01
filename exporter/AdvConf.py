@@ -224,7 +224,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
 def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
     attr = {}
     target = hitattr.get('_TargetGroup')
-    if target not in (ActionTargetGroup.DUNOBJ, ActionTargetGroup.HOSTILE_AND_DUNOBJ) and hitattr.get('_DamageAdjustment'):
+    if target in (ActionTargetGroup.HOSTILE, ActionTargetGroup.HIT_OR_GUARDED_RECORD) and hitattr.get('_DamageAdjustment'):
         attr['dmg'] = fr(hitattr.get('_DamageAdjustment'))
         killers = []
         for ks in ('_KillerState1', '_KillerState2', '_KillerState3'):
@@ -259,6 +259,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr['heal'] = heal
     if (od := hitattr.get('_ToBreakDmgRate')) and od != 1:
         attr['odmg'] = fr(od)
+    if (crit := hitattr.get('_AdditionCritical')):
+        attr['crit'] = fr(crit)
     if part.get('commandType') == CommandType.FIRE_STOCK_BULLET:
         if (stock := part.get('_fireMaxCount', 0)) > 1:
             attr['extra'] = stock
@@ -523,8 +525,6 @@ def convert_following_actions(startup, followed_by, default=None):
 
 def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=False):
     s, r, followed_by = hit_sr(xn['_Parts'], seq=aid, xlen=xlen, is_dragon=is_dragon)
-    if s is None:
-        pprint(xn)
     xconf = {
         'startup': s,
         'recovery': r
@@ -880,9 +880,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                 # 'skipped': skipped
             }
         }
-        # cykagames reeee
-        if res['_Id'] == 10750203:
-            conf['c']['name'] = 'Forager Cleo'
+        # hecc
+        if res['_Id'] == 10450404:
+            conf['c']['name'] = 'Sophie (Persona)'
         if conf['c']['wt'] == 'gun':
             conf['c']['gun'] = []
         self.name = conf['c']['name']
@@ -944,8 +944,12 @@ class AdvConf(CharaData, SkillProcessHelper):
                 try:
                     mode_name = unidecode(mode['_ActionId']['_Parts'][0]['_actionConditionId']['_Text'].split(' ')[0].lower())
                 except:
-                    if res.get('_ModeChangeType') == 3:
+                    if res.get('_ModeChangeType') == 3 and m == 2:
                         mode_name = 'ddrive'
+                        # if (udrg := res.get('_UniqueDragonId')):
+                        #     dragon = self.index['DragonData'].get(udrg, by='_Id', exclude_falsy=True)
+                        #     for s in (1, 2):
+                        #         mode[f'_Skill{s}Id']['_ActionId1'] = dragon[f'_Skill{s}']['_ActionId1']
                     else:
                         mode_name = f'mode{m}'
                 for s in (1, 2):
@@ -1355,7 +1359,7 @@ class WpConf(AbilityCrest):
         with open(output, 'w', newline='', encoding='utf-8') as fp:
             # json.dump(res, fp, indent=2, ensure_ascii=False)
             fmt_conf(outdata, f=fp)
-        print('Skipped:', skipped)
+        # print('Skipped:', skipped)
 
     def get(self, name):
         res = super().get(name, full_query=False)
@@ -1416,7 +1420,10 @@ class DrgConf(DragonData, SkillProcessHelper):
         #     conf['d']['skipped'] = skipped
 
         for act, key in (('dodge', '_AvoidActionFront'), ('dodgeb', '_AvoidActionBack'), ('dshift', '_Transform')):
-            s, r, _ = hit_sr(res[key]['_Parts'], is_dragon=True, signal_end={None})
+            try:
+                s, r, _ = hit_sr(res[key]['_Parts'], is_dragon=True, signal_end={None})
+            except KeyError:
+                continue
                     # try:
                     #     DrgConf.COMMON_ACTIONS[act][tuple(actconf['attr'][0].items())].add(conf['d']['name'])
                     # except KeyError:

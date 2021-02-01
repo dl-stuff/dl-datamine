@@ -5,7 +5,6 @@
 *.txt
 *.sqlite
 *.sh
-apktool*
 
 /manifest/parse.py
 /manifest/DL_DecryptManifest.exe
@@ -13,3 +12,5 @@ apktool*
 /manifest/*.json.old
 /manifest/*/*.manifest
 /manifest/*/*.manifest.decrypted
+
+/loader/InGameBuffUI.py

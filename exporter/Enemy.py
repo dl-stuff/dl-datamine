@@ -129,7 +129,7 @@ class EnemyParam(DBView):
         if full_actions:
             if '_ActionSet' in res and res['_ActionSet']:
                 res['_ActionSet'] = self.index['EnemyActionSet'].get(res['_ActionSet'], exclude_falsy=exclude_falsy)
-        for ab in ('_Ability01', '_Ability02'):
+        for ab in ('_Ability01', '_Ability02', '_BerserkAbility'):
             if ab in res and res[ab] and (data := self.index['EnemyAbility'].get(res[ab], exclude_falsy=exclude_falsy)):
                 res[ab] = data
         resists = {}
