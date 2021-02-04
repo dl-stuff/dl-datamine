@@ -226,6 +226,9 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     return hitattrs
 
 def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
+    if hitattr.get('_IgnoreFirstHitCheck'):
+        print('_IgnoreFirstHitCheck')
+        once_per_action = set()
     attr = {}
     target = hitattr.get('_TargetGroup')
     if target in (ActionTargetGroup.HOSTILE, ActionTargetGroup.HIT_OR_GUARDED_RECORD) and hitattr.get('_DamageAdjustment'):

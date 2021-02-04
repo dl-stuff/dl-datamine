@@ -722,8 +722,8 @@ if __name__ == '__main__':
             ex = Extractor()
             ex.report_diff()
         else:
-            ex = Extractor(ex_dir='./_images', mf_mode=1)
+            ex = Extractor(mf_mode=1)
             ex.download_and_extract_by_pattern({'jp': {sys.argv[1]: None}})
     else:
-        ex = Extractor(stdout_log=False, overwrite=False, mf_mode=1)
+        ex = Extractor(ex_dir='./_images', stdout_log=False, overwrite=False, mf_mode=1)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS)

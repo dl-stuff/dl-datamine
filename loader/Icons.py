@@ -32,7 +32,7 @@ def make_buff_icon_mapping():
                 continue
             ingame_ui[icon_type] = {idx: path_id_map.get(str(entry['m_PathID'])) for idx, entry in enumerate(data) if entry['m_FileID']}
 
-    missing_icons = set()
+    nosprite_icons = set()
     for icon_type, icon_map in ingame_ui.items():
         new_folder = f'./_icons/{icon_type}'
         os.makedirs(new_folder)
@@ -41,11 +41,19 @@ def make_buff_icon_mapping():
             if os.path.exists(src):
                 shutil.move(src, f'{new_folder}/{icon}.png')
             else:
-                missing_icons.add(icon)
+                nosprite_icons.add(icon)
+    ingame_ui['nospriteIcons'] = list(nosprite_icons)
+
+    noref_icons = set()
+    for root, _, files in os.walk('./_icons/jp/images_ingame'):
+        os.makedirs(os.path.join('_icons', 'noref'))
+        for fn in files:
+            if fn.startswith('Icon_Buff_') and not fn in ingame_ui['buffIcon'].values():
+                shutil.move(os.path.join(root, fn), os.path.join('_icons', 'noref', fn))
+                noref_icons.add(fn)
+    ingame_ui['norefIcons'] = list(noref_icons)
+
     shutil.rmtree('./_icons/jp')
-
-    ingame_ui['missingIcons'] = list(missing_icons)
-
     try:
         from loader.InGameBuffUI import BuffIconType, UniqueBuffIconType
         unique_icons = {}

@@ -6,13 +6,17 @@ import re
 
 
 class CommandType(ShortEnum):
-    @classmethod
-    def _missing_(cls, value):
-        return CommandType.UNKNOWN
+    # @classmethod
+    # def _missing_(cls, value):
+    #     return CommandType.UNKNOWN
     UNKNOWN = -1
+    POSSIBE_NEXT_ACTION = 1
     PARTS_MOTION = 2
-    MOVEMENT = 5
-    ROTATION = 7
+    BLEND_MOTION = 3
+    STOP_MOTION = 4
+    MOVE = 5
+    MOVE_TO_TARGET = 6
+    ROTATE = 7
     MARKER = 8
     BULLET = 9
     HIT = 10
@@ -21,33 +25,45 @@ class CommandType(ShortEnum):
     CAMERA_MOTION = 13
     SEND_SIGNAL = 14
     ACTIVE_CANCEL = 15
-    TARGETING = 17 # spin cancel ?
-    ACTION_END = 23
+    LOITERING = 16
+    ROTATE_TO_TARGET = 17
+    MOVE_TO_TELEPORT = 18
+    EFFECT_TO_TARGET = 19
+    EVENT_ACTION = 20
+    FALL = 21
+    BREAK_FINISH = 22
+    FREEZE_POSITION = 23
     MULTI_BULLET = 24
-    ANIMATION = 25 # or maybe effects ?
+    VISIBLE_OBJECT = 25
+    BULLET_CANE_COMBO_005 = 26 # ?
+    BREAK_CHANCE = 27
+    APPEAR_ENEMY = 28
+    DROP_BULLET = 29
     CONTROL = 30 # some kinda control related thing
-    POINT_EFFECT = 35 # nidhogg jaw effect
-    COLLISION = 37 # seen in arrange bullet
+    EFFECT_STRETCH = 35 # nidhogg jaw effect
+    ARRANGE_BULLET = 37
     PARABOLA_BULLET = 41
     TIMESTOP = 48 # control animation playback ?
     TIMECURVE = 49 # control animation playback ?
     PIVOT_BULLET = 53
-    MOVEMENT_IN_SKILL = 54
-    ROTATION_IN_SKILL = 55
-    SATALITE = 58
+    MOVE_INPUT = 54
+    ROTATE_INPUT = 55
+    ROUND_STOCK_BULLET = 58
     FIRE_STOCK_BULLET = 59
-    CONDITION_TEXT = 63 # unsure where text is sourced, not in TextLabel
+    OPERATE_PARAMETER = 60
+    HEAD_TEXT = 63 # unsure where text is sourced, not in TextLabel
     SETTING_HIT = 66
-    TEXTURE = 73 # megaman texture change
+    SWITCH_TEXTURE = 73 # megaman texture change
     FORMATION_BULLET = 100
     SHADER_EFFECT = 101 # megaman stuff
-    CHANGE_MODE = 108
+    RESIST_CLEAR = 108
     SHADER = 101
     ADD_HIT = 105
     ACTION_CONDITON = 111
-    BUFF_FIELD_ATTACH = 125
+    BUFFFIELD_ATTACH = 125
     BUTTERFLY_BULLET = 127
-    PART_CONDITION = 129 # helsa/fjoachim
+    TERMINATE_OTHER = 129 # helsa/fjoachim
+    TARGET_EFFECT = 137
     SHIKIGAMI_BULLET = 138
 
 # seen_id = set()
@@ -80,7 +96,7 @@ def build_db_data(meta, ref, seq, data):
         db_data['_conditionValue'] = cond_data['_conditionValue']
     return db_data
 
-def build_collision_data(meta, ref, seq, data):
+def build_arrange_data(meta, ref, seq, data):
     if not data.get('_abHitAttrLabel'):
         return None
     return build_db_data(meta, ref, seq, data)
@@ -273,20 +289,19 @@ PROCESSORS[CommandType.BULLET] = build_bullet
 PROCESSORS[CommandType.HIT] = build_db_data
 PROCESSORS[CommandType.TIMESTOP] = build_db_data
 PROCESSORS[CommandType.TIMECURVE] = build_db_data
-PROCESSORS[CommandType.COLLISION] = build_collision_data
+PROCESSORS[CommandType.ARRANGE_BULLET] = build_arrange_data
 PROCESSORS[CommandType.SEND_SIGNAL] = build_db_data
 PROCESSORS[CommandType.ACTIVE_CANCEL] = build_db_data
 PROCESSORS[CommandType.MULTI_BULLET] = build_bullet
-PROCESSORS[CommandType.ANIMATION] = build_animation
 PROCESSORS[CommandType.PARABOLA_BULLET] = build_bullet
 PROCESSORS[CommandType.PIVOT_BULLET] = build_bullet
-PROCESSORS[CommandType.SATALITE] = build_db_data
+PROCESSORS[CommandType.ROUND_STOCK_BULLET] = build_db_data
 PROCESSORS[CommandType.FIRE_STOCK_BULLET] = build_bullet
 PROCESSORS[CommandType.FORMATION_BULLET] = build_formation_bullet
 PROCESSORS[CommandType.SETTING_HIT] = build_db_data
 PROCESSORS[CommandType.ADD_HIT] = build_db_data
 PROCESSORS[CommandType.ACTION_CONDITON] = build_db_data
-PROCESSORS[CommandType.BUFF_FIELD_ATTACH] = build_db_data
+PROCESSORS[CommandType.BUFFFIELD_ATTACH] = build_db_data
 PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 PROCESSORS[CommandType.SHIKIGAMI_BULLET] = build_bullet
 PROCESSORS[CommandType.CONTROL] = build_db_data
