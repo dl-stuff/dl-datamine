@@ -227,7 +227,6 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
 
 def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
     if hitattr.get('_IgnoreFirstHitCheck'):
-        print('_IgnoreFirstHitCheck')
         once_per_action = set()
     attr = {}
     target = hitattr.get('_TargetGroup')
@@ -824,6 +823,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         '_RateChargeSpeed': ('cspd', 'buff'),
         '_RateBurst': ('fs', 'buff'),
         '_RateSkill': ('s', 'buff'),
+        '_EnhancedFire2': ('flame', 'ele'),
         # '_RateDamageShield': ('shield', 'buff')
     }
     DEBUFFARG_KEY = {
@@ -953,10 +953,13 @@ class AdvConf(CharaData, SkillProcessHelper):
                 except:
                     if res.get('_ModeChangeType') == 3 and m == 2:
                         mode_name = 'ddrive'
-                        # if (udrg := res.get('_UniqueDragonId')):
-                        #     dragon = self.index['DragonData'].get(udrg, by='_Id', exclude_falsy=True)
-                        #     for s in (1, 2):
-                        #         mode[f'_Skill{s}Id']['_ActionId1'] = dragon[f'_Skill{s}']['_ActionId1']
+                        if (udrg := res.get('_UniqueDragonId')):
+                            dragon = self.index['DragonData'].get(udrg, by='_Id', exclude_falsy=True)
+                            for s in (1, 2):
+                                try:
+                                    mode[f'_Skill{s}Id']['_ActionId1']['_Parts'].extend(dragon[f'_Skill{s}']['_ActionId1']['_Parts'])
+                                except KeyError:
+                                    mode[f'_Skill{s}Id']['_ActionId1'] = dragon[f'_Skill{s}']['_ActionId1']['_Parts']
                     else:
                         mode_name = f'mode{m}'
                 for s in (1, 2):

@@ -63,6 +63,15 @@ class ActionCondition(DBView):
             with open(output, 'w', newline='', encoding='utf-8') as fp:
                 json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
 
+    def check_overwrite_groups(self):
+        all_res = self.get_all(exclude_falsy=True, where='_OverwriteGroupId != 0')
+        sorted_actconds = defaultdict(lambda: [])
+        for res in all_res:
+            sorted_actconds[res['_OverwriteGroupId']].append(
+                {k: v for k, v in res.items() if not k.startswith('_Text') and k != '_Text'}
+            )
+        from pprint import pprint
+        pprint(dict(sorted_actconds))
 
 class ActionGrant(DBView):
     def __init__(self, index):
@@ -690,13 +699,10 @@ class SkillData(DBView):
                                    full_query=full_query, full_abilities=full_abilities, full_transSkill=full_transSkill, full_chainSkill=full_chainSkill)
 
 
-class MaterialData(DBView):
-    def __init__(self, index):
-        super().__init__(index, 'MaterialData', labeled_fields=['_Name', '_Detail', '_Description'])
-
-
 if __name__ == '__main__':
     index = DBViewIndex()
-    view = SkillData(index)
-    test = view.get(106505012)
-    print(test)
+    view = ActionCondition(index)
+    view.check_overwrite_groups()
+    # view = SkillData(index)
+    # test = view.get(106505012)
+    # print(test)

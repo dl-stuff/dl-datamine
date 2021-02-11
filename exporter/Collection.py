@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.AssetExtractor import Extractor
-from exporter.Shared import MaterialData, AbilityData
+from exporter.Shared import AbilityData
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Wyrmprints import AbilityCrest
@@ -29,11 +29,69 @@ def download_all_icons(out):
 
 ability_icons = set()
 material_icons = set()
-# images/icon/ability/l/
+fort_icons = set()
 def download_set_icons(out, icon_set, prefix, dest):
     patterns = {'jp': {f'{prefix}{ic}': dest for ic in icon_set}}
     ex = Extractor(ex_dir=None, ex_img_dir=out, stdout_log=False)
     ex.download_and_extract_by_pattern(patterns)
+
+
+class MaterialData(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'MaterialData', labeled_fields=['_Name', '_Detail', '_Description'])
+
+
+class FortPlantData(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'FortPlantData', labeled_fields=['_Name', '_Description', '_EventDescription', '_EventMenuDescription'])
+
+    def process_result(self, res, exclude_falsy=True):
+        self.link(res, '_DetailId', 'FortPlantDetail', exclude_falsy=exclude_falsy)
+        return res
+
+
+# class FortPlantEffect(Enum):
+#     NULL = 0
+#     BOOST_CHARA_WEAPON = 1
+#     BOOST_CHARA_ELEMENT = 2
+#     BOOST_CHARA_ALL = 3
+#     BOOST_DRAGON_DAMAGE = 4
+#     BOOST_DRAGON_TIME = 5
+#     BOOST_DRAGON_ELEMENT = 6
+#     BOOST_CHARA_WEAPON_BY_WEAPON = 7
+
+
+# class FortPlantType(Enum):
+#     NONE = 0
+#     BASE = 1
+#     PRODUCE_GOLD = 2
+#     PRODUCE_FRUIT = 3
+#     BOOST_CHARA_WEAPON = 4
+#     BOOST_CHARA_ELEMENT = 5
+#     BOOST_CHARA_ALL = 6
+#     BOOST_DRAGON_DAMAGE = 7
+#     BOOST_DRAGON_TIME = 8
+#     DECORATION = 9
+#     BOOST_DRAGON_ELEMENT = 10
+#     CRAFT_WEAPON = 11
+
+
+class FortPlantDetail(DBView):
+    def __init__(self, index):
+        super().__init__(index, 'FortPlantDetail', labeled_fields=['_Name', '_Description'])
+
+    def process_result(self, res, exclude_falsy=True):
+        self.link(res, '_NextAssetGroup', 'FortPlantDetail', exclude_falsy=exclude_falsy)
+        # for i in (1, 2, 3, 4, 5):
+        #     self.link(res, f'_MaterialsId{i}', 'MaterialData', exclude_falsy=exclude_falsy)
+        return res
+
+    def get(self, *args, **kargs):
+        res = super().get(*args, **kargs)
+        if not res:
+            return None
+        return self.process_result(res, exclude_falsy=kargs.get('exclude_falsy'))
+
 
 def make_bv_id(res, view):
     return f'{res["_BaseId"]}_{res["_VariationId"]:02}'
@@ -311,6 +369,50 @@ def make_weapon_jsons(out, index):
         json.dump(processed, f)
 
 
+def make_fort_jsons(out, index):
+    view = FortPlantData(index)
+    all_res = view.get_all(exclude_falsy=True)
+    processed = {}
+    for res in all_res:
+        res = view.process_result(res, exclude_falsy=True)
+        flattened_detail = []
+        detail = res.get('_DetailId')
+        while isinstance(detail, dict):
+            if not detail.get('_Level'):
+                break
+            mats = {}
+            for i in range(1, 6):
+                k1 = f'_MaterialsId{i}'
+                k2 = f'_MaterialsNum{i}'
+                try:
+                    mats[detail[k1]] = detail[k2]
+                    material_icons.add(detail[k1])
+                except KeyError:
+                    continue
+            flattened_detail.append({
+                'Icon': detail['_ImageUiName'],
+                'Level': detail['_Level'],
+                'Time': detail.get('_Time', 0),
+                'Cost': detail.get('_Cost', 0),
+                'Mats': mats
+            })
+            fort_icons.add(detail['_ImageUiName'].lower())
+            detail = detail.get('_NextAssetGroup')
+        if not flattened_detail:
+            continue
+        processed[res['_Id']] = {
+            'NameEN': res['_Name'],
+            'NameJP': res['_NameJP'],
+            'NameCN': res['_NameCN'],
+            'Type': res['_Type'],
+            'Detail': flattened_detail
+        }
+    outfile = 'fort.json'
+    check_target_path(out)
+    with open(os.path.join(out, outfile), 'w') as f:
+        json.dump(processed, f)
+
+
 if __name__ == '__main__':
     all_avail = {
         'Chara': set(),
@@ -331,7 +433,9 @@ if __name__ == '__main__':
     make_json(datadir, 'material.json', MaterialData(index), make_id, make_material_json)
     make_json(datadir, 'weaponseries.json', WeaponBodyGroupSeries(index), make_id, make_weapon_series_json, name_key='_GroupSeriesName')
     make_weapon_jsons(datadir, index)
+    make_fort_jsons(datadir, index)
 
     download_all_icons(imgdir)
     download_set_icons(imgdir, ability_icons, 'images/icon/ability/l/', '../ability')
     download_set_icons(imgdir, material_icons, 'images/icon/item/materialdata/l/', '../material')
+    download_set_icons(imgdir, fort_icons, 'images/fort/', '../fort')
