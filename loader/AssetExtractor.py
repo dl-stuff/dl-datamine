@@ -404,7 +404,7 @@ UNPACK = {
     "TextAsset": unpack_TextAsset,
     "GameObject": unpack_GameObject,
     "AnimationClip": unpack_MonoBehaviour,
-    "AnimatorOverrideController": unpack_MonoBehaviour
+    "AnimatorOverrideController": unpack_MonoBehaviour,
 }
 
 wyrmprint_alpha = Image.new("RGBA", (1024, 1024), color=(0, 0, 0, 255))

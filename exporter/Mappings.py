@@ -1,70 +1,60 @@
 from loader.Database import ShortEnum
 
 WEAPON_TYPES = {
-    1: 'Sword',
-    2: 'Blade',
-    3: 'Dagger',
-    4: 'Axe',
-    5: 'Lance',
-    6: 'Bow',
-    7: 'Wand',
-    8: 'Staff',
-    9: 'Gun'
+    1: "Sword",
+    2: "Blade",
+    3: "Dagger",
+    4: "Axe",
+    5: "Lance",
+    6: "Bow",
+    7: "Wand",
+    8: "Staff",
+    9: "Gun",
 }
 
-ELEMENTS = {
-    1: 'Flame',
-    2: 'Water',
-    3: 'Wind',
-    4: 'Light',
-    5: 'Shadow'
-}
+ELEMENTS = {1: "Flame", 2: "Water", 3: "Wind", 4: "Light", 5: "Shadow"}
 
-CLASS_TYPES = {
-    1: 'Attack', 
-    2: 'Defense',
-    3: 'Support',
-    4: 'Healing'
-}
+CLASS_TYPES = {1: "Attack", 2: "Defense", 3: "Support", 4: "Healing"}
 
 
 AFFLICTION_TYPES = {
-    1: 'poison',
-    2: 'burn',
-    3: 'freeze',
-    4: 'paralysis',
-    5: 'blind',
-    6: 'stun',
-    7: 'curse',
-    8: 'UNKNOWN08', # revive?
-    9: 'bog',
-    10: 'sleep',
-    11: 'frostbite',
-    12: 'flashburn',
-    13: 'stormlash',
-    14: 'shadowblight',
-    15: 'scorchrend'
+    1: "poison",
+    2: "burn",
+    3: "freeze",
+    4: "paralysis",
+    5: "blind",
+    6: "stun",
+    7: "curse",
+    8: "UNKNOWN08",  # revive?
+    9: "bog",
+    10: "sleep",
+    11: "frostbite",
+    12: "flashburn",
+    13: "stormlash",
+    14: "shadowblight",
+    15: "scorchrend",
 }
 
 KILLER_STATE = {
     **AFFLICTION_TYPES,
-    99: 'afflicted',
-    103: 'debuff_def',
-    198: 'buffed',
-    199: 'debuff',
-    201: 'break'
+    99: "afflicted",
+    103: "debuff_def",
+    198: "buffed",
+    199: "debuff",
+    201: "break",
 }
 
 TRIBE_TYPES = {
-    1: 'Thaumian',
-    2: 'Physian',
-    3: 'Demihuman',
-    4: 'Therion',
-    5: 'Undead',
-    6: 'Demon',
-    7: 'Human',
-    8: 'Dragon'
+    1: "thaumian",
+    2: "physian",
+    3: "demihuman",
+    4: "therion",
+    5: "undead",
+    6: "demon",
+    7: "human",
+    8: "dragon",
 }
+
 
 class ActionTargetGroup(ShortEnum):
     NONE = 0
@@ -85,6 +75,7 @@ class ActionTargetGroup(ShortEnum):
     HIT_OR_GUARDED_RECORD_MYSELF = 15
     FIXED_OBJECT = 16
 
+
 class AbilityTargetAction(ShortEnum):
     NONE = 0
     COMBO = 1
@@ -99,6 +90,7 @@ class AbilityTargetAction(ShortEnum):
     SKILL_4 = 10
     HUMAN_SKILL_3 = 11
     HUMAN_SKILL_4 = 12
+
 
 class AbilityCondition(ShortEnum):
     NONE = 0
@@ -203,6 +195,7 @@ class AbilityCondition(ShortEnum):
     BUFFED_SPECIFIC_ID_COUNT_MORE_ALWAYS_CHECK = 99
     GET_BUFF_FROM_SKILL = 100
 
+
 class AbilityType(ShortEnum):
     NONE = 0
     StatusUp = 1
@@ -278,6 +271,7 @@ class AbilityType(ShortEnum):
     RunOptionAction = 71
     SecondElements = 72
     KickAuraEffectTritter = 73
+
 
 class AbilityStat(ShortEnum):
     NONE = 0

@@ -35,36 +35,37 @@ class CommandType(ShortEnum):
     FREEZE_POSITION = 23
     MULTI_BULLET = 24
     VISIBLE_OBJECT = 25
-    BULLET_CANE_COMBO_005 = 26 # ?
+    BULLET_CANE_COMBO_005 = 26  # ?
     BREAK_CHANCE = 27
     APPEAR_ENEMY = 28
     DROP_BULLET = 29
-    CONTROL = 30 # some kinda control related thing
-    EFFECT_STRETCH = 35 # nidhogg jaw effect
+    CONTROL = 30  # some kinda control related thing
+    EFFECT_STRETCH = 35  # nidhogg jaw effect
     ARRANGE_BULLET = 37
     PARABOLA_BULLET = 41
-    TIMESTOP = 48 # control animation playback ?
-    TIMECURVE = 49 # control animation playback ?
+    TIMESTOP = 48  # control animation playback ?
+    TIMECURVE = 49  # control animation playback ?
     PIVOT_BULLET = 53
     MOVE_INPUT = 54
     ROTATE_INPUT = 55
     ROUND_STOCK_BULLET = 58
     FIRE_STOCK_BULLET = 59
     OPERATE_PARAMETER = 60
-    HEAD_TEXT = 63 # unsure where text is sourced, not in TextLabel
+    HEAD_TEXT = 63  # unsure where text is sourced, not in TextLabel
     SETTING_HIT = 66
-    SWITCH_TEXTURE = 73 # megaman texture change
+    SWITCH_TEXTURE = 73  # megaman texture change
     FORMATION_BULLET = 100
-    SHADER_EFFECT = 101 # megaman stuff
+    SHADER_EFFECT = 101  # megaman stuff
     RESIST_CLEAR = 108
     SHADER = 101
     ADD_HIT = 105
     ACTION_CONDITON = 111
     BUFFFIELD_ATTACH = 125
     BUTTERFLY_BULLET = 127
-    TERMINATE_OTHER = 129 # helsa/fjoachim
+    TERMINATE_OTHER = 129  # helsa/fjoachim
     TARGET_EFFECT = 137
     SHIKIGAMI_BULLET = 138
+
 
 # seen_id = set()
 def build_db_data(meta, ref, seq, data):
@@ -79,95 +80,100 @@ def build_db_data(meta, ref, seq, data):
                 db_data[k] = data[k]
         else:
             db_data[k] = None
-    if (loop := data.get('_loopData')):
-        db_data['_loopFlag'] = loop['flag']
-        db_data['_loopNum'] = loop['loopNum']
-        db_data['_loopFrame'] = loop['restartFrame']
-        db_data['_loopSec'] = loop['restartSec']
-    db_data['_Id'] = f'{ref}{seq:05}'
+    if (loop := data.get("_loopData")) :
+        db_data["_loopFlag"] = loop["flag"]
+        db_data["_loopNum"] = loop["loopNum"]
+        db_data["_loopFrame"] = loop["restartFrame"]
+        db_data["_loopSec"] = loop["restartSec"]
+    db_data["_Id"] = f"{ref}{seq:05}"
     # if db_data['_Id'] in seen_id:
     #     print(db_data['_Id'])
     # seen_id.add(db_data['_Id'])
-    db_data['_ref'] = int(ref)
-    db_data['_seq'] = seq
-    cond_data = data['_conditionData']
-    if cond_data['_conditionType'] and any(cond_data['_conditionValue']):
-        db_data['_conditionType'] = cond_data['_conditionType']
-        db_data['_conditionValue'] = cond_data['_conditionValue']
+    db_data["_ref"] = int(ref)
+    db_data["_seq"] = seq
+    cond_data = data["_conditionData"]
+    if cond_data["_conditionType"] and any(cond_data["_conditionValue"]):
+        db_data["_conditionType"] = cond_data["_conditionType"]
+        db_data["_conditionValue"] = cond_data["_conditionValue"]
     return db_data
 
+
 def build_arrange_data(meta, ref, seq, data):
-    if not data.get('_abHitAttrLabel'):
+    if not data.get("_abHitAttrLabel"):
         return None
     return build_db_data(meta, ref, seq, data)
 
+
 def build_bullet(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
-    if (ab_label := data['_arrangeBullet']['_abHitAttrLabel']):
-        db_data['_abHitAttrLabel'] = ab_label
-    if (ab_duration := data['_arrangeBullet']['_abDuration']):
-        db_data['_abDuration'] = ab_duration
-    if (ab_interval := data['_arrangeBullet']['_abHitInterval']):
-        db_data['_abHitInterval'] = ab_interval
+    if (ab_label := data["_arrangeBullet"]["_abHitAttrLabel"]) :
+        db_data["_abHitAttrLabel"] = ab_label
+    if (ab_duration := data["_arrangeBullet"]["_abDuration"]) :
+        db_data["_abDuration"] = ab_duration
+    if (ab_interval := data["_arrangeBullet"]["_abHitInterval"]) :
+        db_data["_abHitInterval"] = ab_interval
     return db_data
+
 
 def build_formation_bullet(meta, ref, seq, data):
     bullet_num = 0
     bullet_data = None
-    for c in data['_child']:
+    for c in data["_child"]:
         try:
-            if c['bulletData']['_hitAttrLabel']:
+            if c["bulletData"]["_hitAttrLabel"]:
                 bullet_num += 1
-                bullet_data = c['bulletData']
+                bullet_data = c["bulletData"]
         except:
             pass
     if bullet_data:
         db_data = build_db_data(meta, ref, seq, bullet_data)
-        db_data['commandType'] = 100
-        db_data['_bulletNum'] = bullet_num
+        db_data["commandType"] = 100
+        db_data["_bulletNum"] = bullet_num
         return db_data
     else:
         return None
 
+
 def build_marker(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
-    if charge_lvl_sec := db_data.get('_chargeLvSec'):
-        if '_nextLevelMarkerCount' in data and data['_nextLevelMarkerCount']:
-            for lvl in data['_nextLevelMarkerData']:
-                charge_lvl_sec.extend(lvl['_chargeLvSec'])
+    if charge_lvl_sec := db_data.get("_chargeLvSec"):
+        if "_nextLevelMarkerCount" in data and data["_nextLevelMarkerCount"]:
+            for lvl in data["_nextLevelMarkerData"]:
+                charge_lvl_sec.extend(lvl["_chargeLvSec"])
         if not any(charge_lvl_sec):
-            db_data['_chargeLvSec'] = None
+            db_data["_chargeLvSec"] = None
         else:
-            db_data['_chargeLvSec'] = charge_lvl_sec
+            db_data["_chargeLvSec"] = charge_lvl_sec
     return db_data
+
 
 def build_animation(meta, ref, seq, data):
     db_data = build_db_data(meta, ref, seq, data)
-    if '_name' in data and data['_name']:
-        db_data['_animationName'] = data['_name']
+    if "_name" in data and data["_name"]:
+        db_data["_animationName"] = data["_name"]
     return db_data
 
+
 ACTION_PART = DBTableMetadata(
-    'ActionParts', pk='_Id', field_type={
-        '_Id': DBTableMetadata.INT+DBTableMetadata.PK,
-        '_ref': DBTableMetadata.INT,
-        '_seq': DBTableMetadata.INT,
-        '_seconds': DBTableMetadata.REAL,
-        '_speed': DBTableMetadata.REAL,
-        '_duration': DBTableMetadata.REAL,
-        '_activateId': DBTableMetadata.INT,
-
-        'commandType': DBTableMetadata.INT,
-
+    "ActionParts",
+    pk="_Id",
+    field_type={
+        "_Id": DBTableMetadata.INT + DBTableMetadata.PK,
+        "_ref": DBTableMetadata.INT,
+        "_seq": DBTableMetadata.INT,
+        "_seconds": DBTableMetadata.REAL,
+        "_speed": DBTableMetadata.REAL,
+        "_duration": DBTableMetadata.REAL,
+        "_activateId": DBTableMetadata.INT,
+        "commandType": DBTableMetadata.INT,
         # PARTS_MOTION
-        '_motionState': DBTableMetadata.TEXT,
-        '_motionFrame': DBTableMetadata.INT,
-        '_blendDuration': DBTableMetadata.REAL,
-        '_isBlend': DBTableMetadata.INT,
-        '_isEndSyncMotion': DBTableMetadata.INT,
-        '_isIgnoreFinishCondition': DBTableMetadata.INT,
-        '_isIdleAfterCancel': DBTableMetadata.INT,
-
+        "_motionState": DBTableMetadata.TEXT,
+        "_motionFrame": DBTableMetadata.INT,
+        "_blendDuration": DBTableMetadata.REAL,
+        "_isBlend": DBTableMetadata.INT,
+        "_isEndSyncMotion": DBTableMetadata.INT,
+        "_isIgnoreFinishCondition": DBTableMetadata.INT,
+        "_isIdleAfterCancel": DBTableMetadata.INT,
         # MOVEMENT
         # '_position': DBTableMetadata.BLOB,
         # '_pushOut': DBTableMetadata.INT,
@@ -178,108 +184,93 @@ ACTION_PART = DBTableMetadata(
         # '_teleportPosition': DBTableMetadata.INT,
         # '_teleportDirection': DBTableMetadata.INT,
         # '_distance': DBTableMetadata.INT,
-
         # ROTATION
         # '_rotation': DBTableMetadata.BLOB,
-
         # MARKER
-        '_chargeSec': DBTableMetadata.REAL,
-        '_chargeLvSec': DBTableMetadata.BLOB,
+        "_chargeSec": DBTableMetadata.REAL,
+        "_chargeLvSec": DBTableMetadata.BLOB,
         # '_chargeAfterSec': DBTableMetadata.REAL,
         # '_ignoredByPlayerAI': DBTableMetadata.INT,
         # '_invisibleForPlayerAI': DBTableMetadata.INT,
         # '_playerAIEscapeDir': DBTableMetadata.INT,
         # '_ignoredImpactWaitForPlayerColor': DBTableMetadata.INT,
-
         # HIT/BULLET
-        '_bulletSpeed': DBTableMetadata.REAL,
-        '_bulletDuration': DBTableMetadata.REAL,
-        '_delayTime': DBTableMetadata.REAL,
-        '_isHitDelete': DBTableMetadata.INT,
-        '_hitLabel': DBTableMetadata.TEXT,
-        '_hitAttrLabel': DBTableMetadata.TEXT,
-        '_abHitAttrLabel': DBTableMetadata.TEXT,
-        '_abHitInterval': DBTableMetadata.REAL,
-        '_abDuration': DBTableMetadata.REAL,
-        '_bulletNum': DBTableMetadata.INT,
-        '_fireMaxCount': DBTableMetadata.INT,
-        '_generateNum': DBTableMetadata.INT,
-        '_generateDelay': DBTableMetadata.REAL,
-        '_generateNumDependOnBuffCount': DBTableMetadata.INT,
-        '_buffCountConditionId': DBTableMetadata.INT,
-        '_setBulletDelayOneByOne': DBTableMetadata.INT,
-        '_bulletDelayTime': DBTableMetadata.BLOB,
-        '_lifetime': DBTableMetadata.REAL,
-        '_conditionType': DBTableMetadata.INT,
-        '_conditionValue': DBTableMetadata.BLOB,
-        '_attenuationRate': DBTableMetadata.REAL,
-
+        "_bulletSpeed": DBTableMetadata.REAL,
+        "_bulletDuration": DBTableMetadata.REAL,
+        "_delayTime": DBTableMetadata.REAL,
+        "_isHitDelete": DBTableMetadata.INT,
+        "_hitLabel": DBTableMetadata.TEXT,
+        "_hitAttrLabel": DBTableMetadata.TEXT,
+        "_abHitAttrLabel": DBTableMetadata.TEXT,
+        "_abHitInterval": DBTableMetadata.REAL,
+        "_abDuration": DBTableMetadata.REAL,
+        "_bulletNum": DBTableMetadata.INT,
+        "_fireMaxCount": DBTableMetadata.INT,
+        "_generateNum": DBTableMetadata.INT,
+        "_generateDelay": DBTableMetadata.REAL,
+        "_generateNumDependOnBuffCount": DBTableMetadata.INT,
+        "_buffCountConditionId": DBTableMetadata.INT,
+        "_setBulletDelayOneByOne": DBTableMetadata.INT,
+        "_bulletDelayTime": DBTableMetadata.BLOB,
+        "_lifetime": DBTableMetadata.REAL,
+        "_conditionType": DBTableMetadata.INT,
+        "_conditionValue": DBTableMetadata.BLOB,
+        "_attenuationRate": DBTableMetadata.REAL,
         # COLLISION
-        '_collision': DBTableMetadata.INT,
-        '_collisionPosId': DBTableMetadata.INT,
-        '_collisionParams_01': DBTableMetadata.REAL, # Length
-        '_collisionParams_02': DBTableMetadata.REAL, # Width
-        '_collisionParams_03': DBTableMetadata.REAL, # Height
-        '_collisionParams_05': DBTableMetadata.REAL, # Angle
-        '_collisionParams_06': DBTableMetadata.REAL,
-        '_collisionHitInterval': DBTableMetadata.REAL,
-
+        "_collision": DBTableMetadata.INT,
+        "_collisionPosId": DBTableMetadata.INT,
+        "_collisionParams_01": DBTableMetadata.REAL,  # Length
+        "_collisionParams_02": DBTableMetadata.REAL,  # Width
+        "_collisionParams_03": DBTableMetadata.REAL,  # Height
+        "_collisionParams_05": DBTableMetadata.REAL,  # Angle
+        "_collisionParams_06": DBTableMetadata.REAL,
+        "_collisionHitInterval": DBTableMetadata.REAL,
         # SEND_SIGNAL
-        '_signalType': DBTableMetadata.INT,
-        '_decoId': DBTableMetadata.INT,
-        '_actionId': DBTableMetadata.INT,
-        '_keepActionEnd': DBTableMetadata.INT,
-        '_keepActionId1': DBTableMetadata.INT,
-        '_keepActionId2': DBTableMetadata.INT,
-
+        "_signalType": DBTableMetadata.INT,
+        "_decoId": DBTableMetadata.INT,
+        "_actionId": DBTableMetadata.INT,
+        "_keepActionEnd": DBTableMetadata.INT,
+        "_keepActionId1": DBTableMetadata.INT,
+        "_keepActionId2": DBTableMetadata.INT,
         # ACTIVE_CANCEL
-        '_actionType': DBTableMetadata.INT,
-        '_motionEnd': DBTableMetadata.INT,
-
+        "_actionType": DBTableMetadata.INT,
+        "_motionEnd": DBTableMetadata.INT,
         # BULLETS - contains marker data, unsure if it does anything
         # '_useMarker': DBTableMetadata.INT,
         # '_marker': DBTableMetadata.BOLB (?)
-
         # ANIMATION
-        '_animationName': DBTableMetadata.TEXT, 
-        '_isVisible': DBTableMetadata.INT, 
-        '_isActionClear': DBTableMetadata.INT,
-
+        "_animationName": DBTableMetadata.TEXT,
+        "_isVisible": DBTableMetadata.INT,
+        "_isActionClear": DBTableMetadata.INT,
         # ACTION_CONDITON
-        '_actionConditionId': DBTableMetadata.INT,
-
+        "_actionConditionId": DBTableMetadata.INT,
         # BUFF_FIELD_ATTACH
-        '_isAttachToBuffField': DBTableMetadata.INT,
-        '_isAttachToSelfBuffField': DBTableMetadata.INT,
-        '_hitDelaySec': DBTableMetadata.REAL,
-
+        "_isAttachToBuffField": DBTableMetadata.INT,
+        "_isAttachToSelfBuffField": DBTableMetadata.INT,
+        "_hitDelaySec": DBTableMetadata.REAL,
         # LOOP DATA
-        '_loopFlag': DBTableMetadata.INT,
-        '_loopNum': DBTableMetadata.INT,
-        '_loopFrame': DBTableMetadata.INT,
-        '_loopSec': DBTableMetadata.REAL,
-
+        "_loopFlag": DBTableMetadata.INT,
+        "_loopNum": DBTableMetadata.INT,
+        "_loopFrame": DBTableMetadata.INT,
+        "_loopSec": DBTableMetadata.REAL,
         # TIMESTOP
-        '_stopMotionPositionSec': DBTableMetadata.REAL,
-        '_stopTimeSpanSec': DBTableMetadata.REAL,
-        '_isRepeat': DBTableMetadata.INT,
-        '_isOverridePlaySpeed': DBTableMetadata.INT,
-        '_playSpeed': DBTableMetadata.REAL,
-
+        "_stopMotionPositionSec": DBTableMetadata.REAL,
+        "_stopTimeSpanSec": DBTableMetadata.REAL,
+        "_isRepeat": DBTableMetadata.INT,
+        "_isOverridePlaySpeed": DBTableMetadata.INT,
+        "_playSpeed": DBTableMetadata.REAL,
         # TIMECURVE
-        '_isNormalizeCurve': DBTableMetadata.INT,
-
+        "_isNormalizeCurve": DBTableMetadata.INT,
         # AUTOFIRE
-        '_autoFireInterval': DBTableMetadata.REAL,
-        '_autoFireActionId': DBTableMetadata.INT,
-        '_autoFireActionIdList': DBTableMetadata.BLOB, 
-        '_autoFireEffectTrigger': DBTableMetadata.INT,
-        '_autoFireEffectTriggerResetTime': DBTableMetadata.REAL,
-        '_autoFireAutoSearchEnemyRadius': DBTableMetadata.REAL,
-
+        "_autoFireInterval": DBTableMetadata.REAL,
+        "_autoFireActionId": DBTableMetadata.INT,
+        "_autoFireActionIdList": DBTableMetadata.BLOB,
+        "_autoFireEffectTrigger": DBTableMetadata.INT,
+        "_autoFireEffectTriggerResetTime": DBTableMetadata.REAL,
+        "_autoFireAutoSearchEnemyRadius": DBTableMetadata.REAL,
         # servant
-        '_servantActionCommandId': DBTableMetadata.INT,
-    }
+        "_servantActionCommandId": DBTableMetadata.INT,
+    },
 )
 
 PROCESSORS = {}
@@ -306,37 +297,41 @@ PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 PROCESSORS[CommandType.SHIKIGAMI_BULLET] = build_bullet
 PROCESSORS[CommandType.CONTROL] = build_db_data
 
+
 def log_schema_keys(schema_map, data, command_type):
-    schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}
+    schema_map[f'{data["commandType"]:03}-{command_type}'] = {
+        key: type(value).__name__ for key, value in data.items()
+    }
     for subdata in data.values():
         try:
-            if (command_type := subdata.get('commandType')):
+            if (command_type := subdata.get("commandType")) :
                 log_schema_keys(schema_map, subdata, CommandType(command_type))
         except:
             pass
 
+
 def load_actions(db, path):
     schema_map = {}
-    file_filter = re.compile(r'PlayerAction_([0-9]+)\.json')
+    file_filter = re.compile(r"PlayerAction_([0-9]+)\.json")
     db.drop_table(ACTION_PART.name)
     db.create_table(ACTION_PART)
     sorted_data = []
     for root, _, files in os.walk(path):
-        for file_name in tqdm(files, desc='action'):
-            if file_name == 'ActionPartsList.json':
-                table = 'ActionPartsList'
+        for file_name in tqdm(files, desc="action"):
+            if file_name == "ActionPartsList.json":
+                table = "ActionPartsList"
                 db.drop_table(table)
                 with open(os.path.join(root, file_name)) as f:
                     raw = json.load(f)
                     for r in raw:
-                        resource_fn = os.path.basename(r['_resourcePath'])
+                        resource_fn = os.path.basename(r["_resourcePath"])
                         try:
-                            r['_host'], r['_Id'] = resource_fn.split('_')
-                            r['_Id'] = int(r['_Id'])
+                            r["_host"], r["_Id"] = resource_fn.split("_")
+                            r["_Id"] = int(r["_Id"])
                         except:
-                            r['_host'], r['_Id'] = None, 0
+                            r["_host"], r["_Id"] = None, 0
                     row = next(iter(raw))
-                    pk = '_resourcePath'
+                    pk = "_resourcePath"
                     meta = DBTableMetadata(table, pk=pk)
                     meta.init_from_row(row)
                     db.create_table(meta)
@@ -350,23 +345,27 @@ def load_actions(db, path):
                         # action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
                         action = []
                         for seq, gameObject in enumerate(raw):
-                            actdata = gameObject.get('_data')
+                            actdata = gameObject.get("_data")
                             if not actdata:
                                 continue
                             action.append((seq, actdata))
-                            if (additional := actdata.get('_additionalCollision')) and actdata['_addNum']:
+                            if (
+                                additional := actdata.get("_additionalCollision")
+                            ) and actdata["_addNum"]:
                                 for i, act in enumerate(additional):
-                                    for j in range(actdata['_addNum']):
-                                        adjusted_seq = seq*100 + i*10 + j
-                                        act['_seconds'] += actdata['_seconds']
+                                    for j in range(actdata["_addNum"]):
+                                        adjusted_seq = seq * 100 + i * 10 + j
+                                        act["_seconds"] += actdata["_seconds"]
                                         action.append((adjusted_seq, act))
                                 # action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
                         for seq, data in action:
                             try:
-                                command_type = CommandType(data['commandType'])
+                                command_type = CommandType(data["commandType"])
                             except TypeError:
-                                command_type = data['commandType']
-                                print(f'Unknown command type {command_type} in {file_name}')
+                                command_type = data["commandType"]
+                                print(
+                                    f"Unknown command type {command_type} in {file_name}"
+                                )
                             log_schema_keys(schema_map, data, command_type)
                             if command_type in PROCESSORS.keys():
                                 builder = PROCESSORS[command_type]
@@ -376,9 +375,11 @@ def load_actions(db, path):
     db.insert_many(ACTION_PART.name, sorted_data)
     return schema_map
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     from loader.Database import DBManager
+
     db = DBManager()
-    schema_map = load_actions(db, './_ex_sim/jp/actions')
-    with open('./out/_action_schema.json', 'w') as f:
+    schema_map = load_actions(db, "./_ex_sim/jp/actions")
+    with open("./out/_action_schema.json", "w") as f:
         json.dump(schema_map, f, indent=4, sort_keys=True, default=str)
