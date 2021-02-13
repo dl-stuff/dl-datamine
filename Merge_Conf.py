@@ -42,8 +42,6 @@ def merge_conf_recurse(simconf, genconf, kind, mapdict, depth):
         simconf.update(add_to_simconf)
     else:
         for key, subconf in simconf.items():
-            if key != "c":
-                continue
             gkey = key
             if mapdict:
                 try:
