@@ -199,10 +199,14 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if (gen := part.get("_generateNum")) :
             delay = part.get("_generateDelay")
             ref_attrs = part_hitattrs
-        elif (abd := part.get("_abDuration", 0)) > (abi := part.get("_abHitInterval", 0)) and "_abHitAttrLabel" in part_hitattr_map:
+        elif (abd := part.get("_abDuration", 0)) >= (abi := part.get("_abHitInterval", 0)) and "_abHitAttrLabel" in part_hitattr_map:
             # weird rounding shenanigans can occur due to float bullshit
             gen = int(abd / abi)
             delay = abi
+            try:
+                part_hitattr_map["_abHitAttrLabel"]["msl"] += fr(abi)
+            except KeyError:
+                part_hitattr_map["_abHitAttrLabel"]["msl"] = fr(abi)
             ref_attrs = [part_hitattr_map["_abHitAttrLabel"]]
         elif (
             (bci := part.get("_collisionHitInterval", 0))
@@ -1791,11 +1795,7 @@ if __name__ == "__main__":
         view = AdvConf(index)
         if args.a:
             view.get(args.a)
-        view.eskill_counter = itertools.count(start=1)
-        view.efs_counter = itertools.count(start=1)
-        view.chara_skills = {}
-        view.enhanced_fs = []
-        view.chara_skill_loop = set()
+        view.reset_meta()
         sconf, k = view.convert_skill(
             "s1",
             0,
