@@ -74,6 +74,10 @@ class ActionTargetGroup(ShortEnum):
     HIT_OR_GUARDED_RECORD_ALLY = 14
     HIT_OR_GUARDED_RECORD_MYSELF = 15
     FIXED_OBJECT = 16
+    MYSELF_CHECK_COLLISION = 17
+    RESERVE_11 = 18
+    RESERVE_12 = 19
+    RESERVE_13 = 20
 
 
 class AbilityTargetAction(ShortEnum):
@@ -194,6 +198,8 @@ class AbilityCondition(ShortEnum):
     DUP_BUFF_ALWAYS_TIMESRATE = 98
     BUFFED_SPECIFIC_ID_COUNT_MORE_ALWAYS_CHECK = 99
     GET_BUFF_FROM_SKILL = 100
+    HP_RECOVERED_BETWEEN = 101
+    RELEASE_DIVINEDRAGONSHIFT = 102
 
 
 class AbilityType(ShortEnum):
@@ -271,6 +277,11 @@ class AbilityType(ShortEnum):
     RunOptionAction = 71
     SecondElements = 72
     KickAuraEffectTritter = 73
+    ConsumeSpToRecoverHp = 74
+    CrestGroupScoreUp = 75
+    ModifyBuffDebuffDurationTimeByRecoveryHp = 76
+    CrisisRate = 77
+    ActDamageDown = 78
 
 
 class AbilityStat(ShortEnum):

@@ -569,6 +569,8 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
             r = max(signals.values())
         except:
             pass
+    if s is None:
+        return 0, 0, {}
     if r is None or r < s:
         if motion_end:
             r = motion_end
@@ -625,8 +627,17 @@ def convert_following_actions(startup, followed_by, default=None):
 
 
 def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=False):
+    DEBUG_CHECK_NEXTACT = False
+    currentaction = xn
+    while (nextaction := currentaction.get("_NextAction")) :
+        xn["_Parts"].extend(nextaction["_Parts"])
+        currentaction = nextaction
+        DEBUG_CHECK_NEXTACT = True
+
     s, r, followed_by = hit_sr(xn["_Parts"], seq=aid, xlen=xlen, is_dragon=is_dragon)
     xconf = {"startup": s, "recovery": r}
+    if DEBUG_CHECK_NEXTACT:
+        xconf["DEBUG_CHECK_NEXTACT"] = True
     xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
 
     if convert_follow:
@@ -828,10 +839,10 @@ def convert_skill_common(skill, lv):
     if cancel:
         sconf["cancel"] = cancel
 
-    if nextaction := action.get("_NextAction"):
-        for part in nextaction["_Parts"]:
-            part["_seconds"] += sconf["recovery"] or 0
+    currentaction = action
+    while (nextaction := currentaction.get("_NextAction")) :
         action["_Parts"].extend(nextaction["_Parts"])
+        currentaction = nextaction
         sconf["DEBUG_CHECK_NEXTACT"] = True
 
     return sconf, action

@@ -43,11 +43,7 @@ class ParsedManifestFlat(dict):
         return list(filter(lambda x: pattern.search(x[0]), self.items()))
 
     def get_by_diff(self, other):
-        return list(
-            filter(
-                lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items()
-            )
-        )
+        return list(filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items()))
 
 
 class AssetEntry:
@@ -171,17 +167,14 @@ class ParsedManifest(dict):
         return ParsedManifest._get_by(targets, mode)
 
     def get_by_diff(self, other, mode=0):
-        targets = filter(
-            lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items()
-        )
+        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
         return ParsedManifest._get_by(targets, mode)
 
     def get_by_pattern_diff(self, pattern, other, mode=0):
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(
-            lambda x: pattern.search(x[0])
-            and (x[0] not in other.keys() or x[1] != other[x[0]]),
+            lambda x: pattern.search(x[0]) and (x[0] not in other.keys() or x[1] != other[x[0]]),
             self.items(),
         )
         return ParsedManifest._get_by(targets, mode)
@@ -229,10 +222,7 @@ def process_json(tree):
         elif "list" in tree:
             tree = tree["list"]
         elif "entriesValue" in tree and "entriesKey" in tree:
-            return {
-                k: process_json(v)
-                for k, v in zip(tree["entriesKey"], tree["entriesValue"])
-            }
+            return {k: process_json(v) for k, v in zip(tree["entriesKey"], tree["entriesValue"])}
         else:
             return tree
     return tree
@@ -372,9 +362,7 @@ IMAGE_TYPES = {"Texture2D", "Sprite"}
 
 def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
     obj_type_str = str(obj.type)
-    if (ex_dir is None and obj_type_str not in IMAGE_TYPES) or (
-        ex_img_dir is None and obj_type_str in IMAGE_TYPES
-    ):
+    if (ex_dir is None and obj_type_str not in IMAGE_TYPES) or (ex_img_dir is None and obj_type_str in IMAGE_TYPES):
         if stdout_log:
             print(f"Skipped {ex_target}")
         return None
@@ -408,9 +396,7 @@ UNPACK = {
 }
 
 wyrmprint_alpha = Image.new("RGBA", (1024, 1024), color=(0, 0, 0, 255))
-ImageDraw.Draw(wyrmprint_alpha).rectangle(
-    [212, 26, 811, 997], fill=(255, 255, 255, 255), outline=None
-)
+ImageDraw.Draw(wyrmprint_alpha).rectangle([212, 26, 811, 997], fill=(255, 255, 255, 255), outline=None)
 wyrmprint_alpha = wyrmprint_alpha.convert("L")
 
 
@@ -422,9 +408,7 @@ def merge_YCbCr(Y_img, Cb_img, Cr_img):
 
 
 def merge_categorized(all_categorized_images, stdout_log=False):
-    for dest, sorted_images in tqdm(
-        all_categorized_images.items(), desc="merge_categorized"
-    ):
+    for dest, sorted_images in tqdm(all_categorized_images.items(), desc="merge_categorized"):
         try:
             image = None
             if "color" in sorted_images:
@@ -433,10 +417,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                 for alpha in ("alpha", "A", "alphaA8"):
                     try:
                         alpha_img = sorted_images[alpha]
-                        if (
-                            alpha_img.mode == "RGB"
-                            or alpha_img.getextrema()[3][0] == 255
-                        ):
+                        if alpha_img.mode == "RGB" or alpha_img.getextrema()[3][0] == 255:
                             a = alpha_img.convert("L")
                         else:
                             _, _, _, a = alpha_img.split()
@@ -451,9 +432,7 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                     print(f"Merged RGBA {dest}")
 
             if "Y" in sorted_images:
-                image = merge_YCbCr(
-                    sorted_images["Y"], sorted_images["Cb"], sorted_images["Cr"]
-                )
+                image = merge_YCbCr(sorted_images["Y"], sorted_images["Cb"], sorted_images["Cr"])
                 if "alpha" in sorted_images:
                     a = sorted_images["alpha"].convert("L")
                 # elif sorted_images['Y'].size == (1024, 1024):
@@ -471,16 +450,12 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                 try:
                     flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
                     for s_dest, s_box, flip, mask, _ in sorted_images["sprites"]:
-                        s_img = flipped.crop(
-                            (s_box.left, s_box.top, s_box.right, s_box.bottom)
-                        )
+                        s_img = flipped.crop((s_box.left, s_box.top, s_box.right, s_box.bottom))
                         if flip is not None:
                             s_img = s_img.transpose(flip)
                         s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
                         if mask is not None:
-                            s_img = Image.composite(
-                                s_img, Image.new(s_img.mode, s_img.size, color=0), mask
-                            )
+                            s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
                         s_dest = os.path.splitext(s_dest)[0] + ".png"
                         check_target_path(s_dest)
                         s_img.save(s_dest)
@@ -561,16 +536,12 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
 
 
 IMAGE_CATEGORY = re.compile(r"(.+?)_(sprite|C|alpha|alphaA8|A|Y|Cb|Cr)$")
-IMAGE_ALPHA_INDEX = re.compile(
-    r"(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$"
-)
+IMAGE_ALPHA_INDEX = re.compile(r"(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$")
 
 
 def merge_images(image_list, stdout_log=False, do_indexed=True):
     all_categorized_images = defaultdict(lambda: {})
-    all_indexed_images = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(lambda: {}))
-    )
+    all_indexed_images = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {})))
     for images in tqdm(image_list, desc="images"):
         if images is None:
             continue
@@ -602,9 +573,7 @@ def merge_images(image_list, stdout_log=False, do_indexed=True):
                 for sprite in data["sprites"]:
                     dest = sprite[0]
                     path_id = sprite[4]
-                    sprite_path_id_map[os.path.dirname(dest)][
-                        path_id
-                    ] = os.path.basename(dest)
+                    sprite_path_id_map[os.path.dirname(dest)][path_id] = os.path.basename(dest)
 
     if all_categorized_images:
         merge_categorized(all_categorized_images, stdout_log=stdout_log)
@@ -641,15 +610,18 @@ def mp_download_extract(
             try:
                 urllib.request.urlretrieve(source.url, dl_target)
             except Exception as e:
-                print(str(e))
+                print(f"\n{e}")
                 continue
         downloaded.append(dl_target)
         print(".", end="", flush=True)
 
+    if not downloaded:
+        return None
+
     if extract is None:
         extract = os.path.dirname(target).replace("/", "_")
     ex_target = os.path.join(region, extract)
-    if source.raw:
+    if ex_dir and source.raw:
         ex_target = os.path.join(ex_dir, ex_target)
         os.makedirs(ex_target, exist_ok=True)
         for dl_target in downloaded:
@@ -753,12 +725,7 @@ class Extractor:
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
                 download_list.extend(
-                    [
-                        (*ts, extract, region)
-                        for ts in self.pm[region].get_by_pattern_diff(
-                            pat, self.pm_old[region], mode=self.mf_mode
-                        )
-                    ]
+                    [(*ts, extract, region) for ts in self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)]
                 )
         self.pool_download_and_extract(download_list)
 
@@ -766,18 +733,11 @@ class Extractor:
         download_list = []
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
-                download_list.extend(
-                    [
-                        (*ts, extract, region)
-                        for ts in self.pm[region].get_by_pattern(pat, mode=self.mf_mode)
-                    ]
-                )
+                download_list.extend([(*ts, extract, region) for ts in self.pm[region].get_by_pattern(pat, mode=self.mf_mode)])
         self.pool_download_and_extract(download_list)
 
     def download_and_extract_by_diff(self, region="jp"):
-        download_list = self.pm[region].get_by_diff(
-            self.pm_old[region], mode=self.mf_mode
-        )
+        download_list = self.pm[region].get_by_diff(self.pm_old[region], mode=self.mf_mode)
         self.pool_download_and_extract(download_list, region=region)
 
     def report_diff(self, region="jp"):
