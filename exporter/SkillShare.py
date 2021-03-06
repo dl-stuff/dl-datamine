@@ -7,11 +7,7 @@ from unidecode import unidecode
 
 
 def snakey(name):
-    return (
-        re.sub(r"[^0-9a-zA-Z ]", "", unidecode(name))
-        .replace(" ", "_")
-        .replace("_amp", "_and")
-    )
+    return re.sub(r"[^0-9a-zA-Z ]", "", unidecode(name)).replace(" ", "_").replace("_amp", "_and")
 
 
 KEEP_LOWER_SP = {101502021}
@@ -26,7 +22,7 @@ def same(lst, idx):
         return lst[-1]
 
 
-SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1}
+SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1, 109501023: 1}
 
 
 def export_skill_share_json():
@@ -39,9 +35,7 @@ def export_skill_share_json():
         if res["_HoldEditSkillCost"] != 10:
             res_data["limit"] = res["_HoldEditSkillCost"]
         if res["_EditSkillRelationId"] > 1:
-            modifiers = index["EditSkillCharaOffset"].get(
-                res["_EditSkillRelationId"], by="_EditSkillRelationId"
-            )[0]
+            modifiers = index["EditSkillCharaOffset"].get(res["_EditSkillRelationId"], by="_EditSkillRelationId")[0]
             if modifiers["_SpOffset"] > 1:
                 res_data["mod_sp"] = modifiers["_SpOffset"]
             if modifiers["_StrengthOffset"] != 0.699999988079071:
@@ -49,11 +43,7 @@ def export_skill_share_json():
             if modifiers["_BuffDebuffOffset"] != 1:
                 res_data["mod_buff"] = modifiers["_BuffDebuffOffset"]
         try:
-            name = (
-                snakey(res["_Name"])
-                if not res["_SecondName"]
-                else snakey(res["_SecondName"])
-            )
+            name = snakey(res["_Name"]) if not res["_SecondName"] else snakey(res["_SecondName"])
         except:
             continue
         if res["_EditSkillId"] > 0 and res["_EditSkillCost"] > 0:

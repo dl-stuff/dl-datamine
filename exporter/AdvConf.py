@@ -1439,6 +1439,11 @@ def ab_aff_res(**kwargs):
         return res
 
 
+def ab_psalm(**kwargs):
+    ab = kwargs.get("ab")
+    return ["psalm", ab["_BaseCrestGroupId"], ab["_TriggerBaseCrestGroupCount"], int(kwargs.get("upval"))]
+
+
 ABILITY_CONVERT = {
     AbilityType.StatusUp: ab_stats,
     AbilityType.ActAddAbs: ab_aff_edge,
@@ -1459,8 +1464,9 @@ ABILITY_CONVERT = {
     AbilityType.ChangeState: ab_actcond,
     AbilityType.ChainTimeExtension: ab_generic("ctime"),
     AbilityType.ResistAbs: ab_aff_res,
+    AbilityType.CrestGroupScoreUp: ab_psalm,
 }
-SPECIAL = {448: ["spu", 0.08], 1402: ["au", 0.08]}
+SPECIAL = {448: ["spu", 0.08], 1402: ["au", 0.08], 1776: ["corrosion", 3]}
 
 
 def convert_ability(ab, debug=False, skip_abtype=tuple()):
@@ -1538,9 +1544,13 @@ class WpConf(AbilityCrest):
             if converted[0][0].startswith("sts") or converted[0][0].startswith("sls"):
                 return
 
+        if res.get("_IsHideChangeImage"):
+            icon = f'{res["_BaseId"]}_01'
+        else:
+            icon = f'{res["_BaseId"]}_02'
         conf = {
             "name": res["_Name"].strip(),
-            "icon": f'{res["_BaseId"]}_02',
+            "icon": icon,
             "att": res["_MaxAtk"],
             "hp": res["_MaxHp"],
             "rarity": res["_Rarity"],
