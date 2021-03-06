@@ -1529,6 +1529,10 @@ class WpConf(AbilityCrest):
     SKIP_AB = (AbilityType.ResistAbs,)
     SKIP_BOON = (0, 7, 8, 9, 10)
 
+    def __init__(self, index):
+        super().__init__(index)
+        self.boon_names = {res["_Id"]: res["_Name"].replace("'s Boon", "") for res in self.index["UnionAbility"].get_all(exclude_falsy=True)}
+
     def process_result(self, res, exclude_falsy=True):
         ab_lst = []
         for i in (1, 2, 3):
@@ -1565,14 +1569,28 @@ class WpConf(AbilityCrest):
         check_target_path(out_dir)
         outdata = {}
         skipped = []
+        collisions = defaultdict(list)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             conf = self.process_result(res, exclude_falsy=True)
             if conf:
-                outdata[snakey(res["_Name"])] = conf
+                qual_name = snakey(res["_Name"])
+                if qual_name in outdata:
+                    collisions[qual_name].append(outdata[qual_name])
+                    collisions[qual_name].append(conf)
+                else:
+                    outdata[qual_name] = conf
             else:
                 skipped.append((res["_BaseId"], res["_Name"]))
                 # skipped.append(res["_Name"])
         outdata["High_Dragon_Print"] = WpConf.HDT_PRINT
+        for qual_name, duplicates in collisions.items():
+            if len({dupe["union"] for dupe in duplicates}) == len(duplicates):
+                for dupe in duplicates:
+                    dupe["name"] = f"{dupe['name']} ({self.boon_names[dupe['union']]})"
+                    outdata[snakey(dupe["name"])] = dupe
+                del outdata[qual_name]
+            else:
+                print(f"Check dupe {qual_name}")
         output = os.path.join(out_dir, "wyrmprints.json")
         with open(output, "w", newline="", encoding="utf-8") as fp:
             # json.dump(res, fp, indent=2, ensure_ascii=False)
