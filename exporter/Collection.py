@@ -47,9 +47,7 @@ def download_set_icons(out, icon_set, prefix, dest):
 
 class MaterialData(DBView):
     def __init__(self, index):
-        super().__init__(
-            index, "MaterialData", labeled_fields=["_Name", "_Detail", "_Description"]
-        )
+        super().__init__(index, "MaterialData", labeled_fields=["_Name", "_Detail", "_Description"])
 
 
 class FortPlantData(DBView):
@@ -98,14 +96,10 @@ class FortPlantData(DBView):
 
 class FortPlantDetail(DBView):
     def __init__(self, index):
-        super().__init__(
-            index, "FortPlantDetail", labeled_fields=["_Name", "_Description"]
-        )
+        super().__init__(index, "FortPlantDetail", labeled_fields=["_Name", "_Description"])
 
     def process_result(self, res, exclude_falsy=True):
-        self.link(
-            res, "_NextAssetGroup", "FortPlantDetail", exclude_falsy=exclude_falsy
-        )
+        self.link(res, "_NextAssetGroup", "FortPlantDetail", exclude_falsy=exclude_falsy)
         # for i in (1, 2, 3, 4, 5):
         #     self.link(res, f'_MaterialsId{i}', 'MaterialData', exclude_falsy=exclude_falsy)
         return res
@@ -181,11 +175,7 @@ from urllib.parse import quote
 import requests
 
 MAX = 500
-BASE_URL = (
-    "https://dragalialost.wiki/api.php?action=cargoquery&format=json&limit={}".format(
-        MAX
-    )
-)
+BASE_URL = "https://dragalialost.wiki/api.php?action=cargoquery&format=json&limit={}".format(MAX)
 
 
 def get_api_request(offset, **kwargs):
@@ -230,9 +220,9 @@ def chara_availability_data(data):
         where="IsPlayable",
         order_by="Id ASC, VariationId ASC",
     ):
-        data[f'{d["title"]["Id"]}_{int(d["title"]["VariationId"]):02}'][
-            "Availability"
-        ] = list(map(process_avail("Chara"), d["title"]["Availability"].split(",")))
+        data[f'{d["title"]["Id"]}_{int(d["title"]["VariationId"]):02}']["Availability"] = list(
+            map(process_avail("Chara"), d["title"]["Availability"].split(","))
+        )
 
 
 GACHA_DEW = {3: "150", 4: "2200", 5: "8500"}
@@ -246,9 +236,7 @@ def dragon_availability_data(data):
         order_by="Id ASC, VariationId ASC",
     ):
         bv_id = f'{d["title"]["BaseId"]}_{int(d["title"]["VariationId"]):02}'
-        avail = list(
-            map(process_avail("Dragon"), d["title"]["Availability"].split(","))
-        )
+        avail = list(map(process_avail("Dragon"), d["title"]["Availability"].split(",")))
         if d["title"]["SellDewPoint"] == GACHA_DEW[data[bv_id]["Rarity"]]:
             avail.append("Gacha")
         data[bv_id]["Availability"] = avail
@@ -261,9 +249,7 @@ def amulet_availability_data(data):
         where="IsPlayable",
         order_by="Id ASC, VariationId ASC",
     ):
-        data[d["title"]["BaseId"]]["Availability"] = list(
-            map(process_avail("Amulet"), d["title"]["Availability"].split(","))
-        )
+        data[d["title"]["BaseId"]]["Availability"] = list(map(process_avail("Amulet"), d["title"]["Availability"].split(",")))
 
 
 def make_json(
@@ -319,6 +305,10 @@ def make_weapon_jsons(out, index):
                 material_icons.add(res[k1])
             except KeyError:
                 continue
+        # a hack
+        if res["_BuildupPieceType"] == 9:
+            res["_BuildupPieceType"] = 3
+            res["_Step"] += 1
         processed[res["_WeaponBodyBuildupGroupId"]][res["_BuildupPieceType"]].append(
             {
                 "Step": res["_Step"],
@@ -338,10 +328,7 @@ def make_weapon_jsons(out, index):
     all_res = view.get_all(exclude_falsy=True)
     processed = {}
     for res in all_res:
-        if not res.get("_Name") or (
-            not res.get("_WeaponBodyBuildupGroupId")
-            and not res.get("_WeaponPassiveAbilityGroupId")
-        ):
+        if not res.get("_Name") or (not res.get("_WeaponBodyBuildupGroupId") and not res.get("_WeaponPassiveAbilityGroupId")):
             continue
 
         skins = {}
@@ -351,11 +338,7 @@ def make_weapon_jsons(out, index):
                 skins[i] = make_wpn_id(skin)
             except (KeyError, TypeError):
                 continue
-        prereqcreate = [
-            res.get(need)
-            for need in ("_NeedCreateWeaponBodyId1", "_NeedCreateWeaponBodyId2")
-            if res.get(need)
-        ]
+        prereqcreate = [res.get(need) for need in ("_NeedCreateWeaponBodyId1", "_NeedCreateWeaponBodyId2") if res.get(need)]
         prereqfull = res.get("_NeedAllUnlockWeaponBodyId1")
         mats = {}
         for i in range(1, 6):
@@ -480,9 +463,7 @@ def make_fort_jsons(out, index):
 
 if __name__ == "__main__":
     all_avail = {"Chara": set(), "Dragon": {"Gacha"}, "Amulet": set(), "Weapon": set()}
-    outdir = os.path.join(
-        pathlib.Path(__file__).parent.absolute(), "..", "..", "dl-collection"
-    )
+    outdir = os.path.join(pathlib.Path(__file__).parent.absolute(), "..", "..", "dl-collection")
     imgdir = os.path.join(outdir, "public")
     datadir = os.path.join(outdir, "src", "data")
     index = DBViewIndex()
@@ -515,9 +496,7 @@ if __name__ == "__main__":
     )
     with open(os.path.join(datadir, "availabilities.json"), "w") as f:
         json.dump({k: sorted(list(v)) for k, v in all_avail.items()}, f)
-    make_json(
-        datadir, "material.json", MaterialData(index), make_id, make_material_json
-    )
+    make_json(datadir, "material.json", MaterialData(index), make_id, make_material_json)
     make_json(
         datadir,
         "weaponseries.json",
@@ -531,7 +510,5 @@ if __name__ == "__main__":
 
     download_all_icons(imgdir)
     download_set_icons(imgdir, ability_icons, "images/icon/ability/l/", "../ability")
-    download_set_icons(
-        imgdir, material_icons, "images/icon/item/materialdata/l/", "../material"
-    )
+    download_set_icons(imgdir, material_icons, "images/icon/item/materialdata/l/", "../material")
     download_set_icons(imgdir, fort_icons, "images/fort/", "../fort")

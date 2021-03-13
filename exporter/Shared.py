@@ -754,7 +754,7 @@ class SkillChainData(DBView):
             order=order,
             mode=mode,
             exclude_falsy=exclude_falsy,
-            expand_one=expand_one,
+            expand_one=False,
         )
         return self.process_result(res)
 

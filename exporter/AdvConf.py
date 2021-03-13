@@ -885,6 +885,18 @@ class SkillProcessHelper:
                         skill.get("_Id"),
                     )
 
+        if isinstance((chainskills := skill.get("_ChainGroupId")), list):
+            for idx, cs in enumerate(chainskills):
+                cskill = cs["_Skill"]
+                activate = cs.get("_ActivateCondition")
+                if activate and cskill["_Id"] not in self.all_chara_skills:
+                    self.chara_skills[cskill["_Id"]] = (
+                        f"s{seq}_chain{activate}",
+                        seq,
+                        cskill,
+                        skill.get("_Id"),
+                    )
+
         if (ab := skill.get(f"_Ability{lv}")) :
             if isinstance(ab, int):
                 ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
@@ -963,6 +975,18 @@ class AdvConf(CharaData, SkillProcessHelper):
         "_RateSkill": ("s", "buff"),
         "_EnhancedFire2": ("flame", "ele"),
         # '_RateDamageShield': ('shield', 'buff')
+        "_RatePoisonKiller": ("poison_killer", "passive"),
+        "_RateBurnKiller": ("burn_killer", "passive"),
+        "_RateFreezeKiller": ("freeze_killer", "passive"),
+        "_RateDarknessKiller": ("blind_killer", "passive"),
+        "_RateSwoonKiller": ("stun_killer", "passive"),
+        "_RateSlowMoveKiller": ("bog_killer", "passive"),
+        "_RateSleepKiller": ("sleep_killer", "passive"),
+        "_RateFrostbiteKiller": ("frostbite_killer", "passive"),
+        "_RateFlashheatKiller": ("flashburn_killer", "passive"),
+        "_RateCrashWindKiller": ("stormlash_killer", "passive"),
+        "_RateDarkAbsKiller": ("shadowblight_killer", "passive"),
+        "_RateDestroyFireKiller": ("scorchrend_killer", "passive"),
     }
     DEBUFFARG_KEY = {
         "_RateDefense": "def",
@@ -996,6 +1020,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         10350302,  # summer norwin
         10650101,  # gala sarisse
     )
+    SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1, 109501023: 1}
 
     def process_result(self, res, exclude_falsy=True, condense=True, all_levels=False):
         self.index["ActionParts"].animation_reference = (
@@ -1158,6 +1183,12 @@ class AdvConf(CharaData, SkillProcessHelper):
         else:
             mlvl = {1: 3, 2: 2}
         self.process_skill(res, conf, mlvl, all_levels=all_levels)
+        self.edit_skill_idx = 0
+        if (edit := res.get("_EditSkillId")) :
+            try:
+                self.edit_skill_idx = self.SPECIAL_EDIT_SKILL[edit]
+            except KeyError:
+                self.edit_skill_idx = self.all_chara_skills[edit][1]
 
         return conf
 
@@ -1171,19 +1202,56 @@ class AdvConf(CharaData, SkillProcessHelper):
     def outfile_name(conf, ext):
         return snakey(conf["c"]["name"]) + ext
 
+    def skillshare_data(self, res):
+        res_data = {}
+        if res["_HoldEditSkillCost"] != 10:
+            res_data["limit"] = res["_HoldEditSkillCost"]
+        if res["_EditSkillRelationId"] > 1:
+            modifiers = index["EditSkillCharaOffset"].get(res["_EditSkillRelationId"], by="_EditSkillRelationId")[0]
+            if modifiers["_SpOffset"] > 1:
+                res_data["mod_sp"] = modifiers["_SpOffset"]
+            if modifiers["_StrengthOffset"] != 0.699999988079071:
+                res_data["mod_att"] = modifiers["_StrengthOffset"]
+            if modifiers["_BuffDebuffOffset"] != 1:
+                res_data["mod_buff"] = modifiers["_BuffDebuffOffset"]
+        if res.get("_EditSkillId", 0) > 0 and res.get("_EditSkillCost", 0) > 0:
+            skill = index["SkillData"].get(res["_EditSkillId"], exclude_falsy=False)
+            res_data["s"] = self.edit_skill_idx
+            if res["_MaxLimitBreakCount"] >= 5:
+                sp_lv = 4
+            else:
+                sp_lv = 3
+            if res["_EditSkillLevelNum"] == 2:
+                sp_lv -= 1
+            # res_data['name'] = snakey(skill['_Name'])
+            res_data["cost"] = res["_EditSkillCost"]
+            res_data["type"] = skill["_SkillType"]
+            # sp_s_list = [
+            #     skill['_SpEdit'],
+            #     skill['_SpLv2Edit'],
+            #     skill['_SpLv3Edit'],
+            #     skill['_SpLv4Edit'],
+            # ]
+            res_data["sp"] = skill[f"_SpLv{sp_lv}Edit"]
+        return res_data
+
     def export_all_to_folder(self, out_dir="./out", ext=".json", desc=False):
         all_res = self.get_all(exclude_falsy=True, where="_ElementalType != 99 AND _IsPlayable = 1")
         # ref_dir = os.path.join(out_dir, '..', 'adv')
+        skillshare_out = os.path.join(out_dir, "skillshare.json")
         if desc:
             desc_out = open(os.path.join(out_dir, "desc.txt"), "w")
             out_dir = os.path.join(out_dir, "advdesc")
         else:
             out_dir = os.path.join(out_dir, "adv")
         check_target_path(out_dir)
+        skillshare_data = {}
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             try:
                 outconf = self.process_result(res, exclude_falsy=True, all_levels=desc)
                 out_name = self.outfile_name(outconf, ext)
+                if (ss_res := self.skillshare_data(res)) :
+                    skillshare_data[snakey(outconf["c"]["name"])] = ss_res
                 output = os.path.join(out_dir, out_name)
                 # ref = os.path.join(ref_dir, out_name)
                 # if os.path.exists(ref):
@@ -1201,6 +1269,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                 pprint(outconf)
                 raise e
         print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
+        with open(skillshare_out, "w", newline="") as fp:
+            # json.dump(skillshare_data, fp, indent=2, default=str)
+            fmt_conf(skillshare_data, f=fp)
         if desc:
             desc_out.close()
 
@@ -1531,7 +1602,7 @@ class WpConf(AbilityCrest):
 
     def __init__(self, index):
         super().__init__(index)
-        self.boon_names = {res["_Id"]: res["_Name"].replace("'s Boon", "") for res in self.index["UnionAbility"].get_all(exclude_falsy=True)}
+        self.boon_names = {res["_Id"]: res["_Name"] for res in self.index["UnionAbility"].get_all(exclude_falsy=True)}
 
     def process_result(self, res, exclude_falsy=True):
         ab_lst = []
@@ -1587,7 +1658,7 @@ class WpConf(AbilityCrest):
             if len({dupe["union"] for dupe in duplicates}) == len(duplicates):
                 for dupe in duplicates:
                     dupe["name"] = f"{dupe['name']} ({self.boon_names[dupe['union']]})"
-                    outdata[snakey(dupe["name"])] = dupe
+                    outdata[snakey(dupe["name"].replace("'s Boon", ""))] = dupe
                 del outdata[qual_name]
             else:
                 print(f"Check dupe {qual_name}")
