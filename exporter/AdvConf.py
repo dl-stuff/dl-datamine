@@ -308,7 +308,12 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
     if (cp := hitattr.get("_RecoveryCP")) :
         attr["cp"] = cp
     if (heal := hitattr.get("_RecoveryValue")) :
-        attr["heal"] = heal
+        if target in (ActionTargetGroup.MYPARTY, ActionTargetGroup.ALLY):
+            attr["heal"] = [heal, "team"]
+        elif target == ActionTargetGroup.ALLY_HP_LOWEST:
+            attr["heal"] = [heal, "lowest"]
+        else:
+            attr["heal"] = heal
     if (crit := hitattr.get("_AdditionCritical")) :
         attr["crit"] = fr(crit)
     if part.get("commandType") == CommandType.FIRE_STOCK_BULLET:
@@ -443,6 +448,9 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                     else:
                         if addatk := actcond.get("_AdditionAttack"):
                             buffs.append(["echo", fr(addatk["_DamageAdjustment"]), duration])
+                        if drain := actcond.get("_RateHpDrain"):
+                            # FIXME: distinction between self vs team?
+                            buffs.append(["drain", fr(drain), duration])
                         for k, mod in AdvConf.BUFFARG_KEY.items():
                             if (value := actcond.get(k)) :
                                 if (bele := actcond.get("_TargetElemental")) and btype != "self":
@@ -974,6 +982,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         "_RateBurst": ("fs", "buff"),
         "_RateSkill": ("s", "buff"),
         "_EnhancedFire2": ("flame", "ele"),
+        "_RateRecovery": ("recovery", "buff"),
         # '_RateDamageShield': ('shield', 'buff')
         "_RatePoisonKiller": ("poison_killer", "passive"),
         "_RateBurnKiller": ("burn_killer", "passive"),
@@ -1536,6 +1545,7 @@ ABILITY_CONVERT = {
     AbilityType.ChainTimeExtension: ab_generic("ctime"),
     AbilityType.ResistAbs: ab_aff_res,
     AbilityType.CrestGroupScoreUp: ab_psalm,
+    AbilityType.ActRecoveryUp: ab_generic("rcv", 100),
 }
 SPECIAL = {448: ["spu", 0.08], 1402: ["au", 0.08], 1776: ["corrosion", 3]}
 
