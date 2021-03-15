@@ -22,10 +22,6 @@ CLASSES = [
     WeaponBody,
     AbilityCrest,
     WeaponType,
-    # PlayerActionHitAttribute,
-    # PlayerAction,
-    # AbilityData,
-    # UnionAbility,
 ]
 
 if __name__ == "__main__":

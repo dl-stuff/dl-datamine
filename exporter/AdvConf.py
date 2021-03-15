@@ -4,7 +4,6 @@ import pathlib
 import json
 import re
 import itertools
-import math
 from collections import defaultdict
 from unidecode import unidecode
 from tqdm import tqdm
@@ -909,7 +908,7 @@ class SkillProcessHelper:
             if isinstance(ab, int):
                 ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
             for a in (1, 2, 3):
-                if ab.get("_AbilityType1") == 44:  # alt skill
+                if ab.get("_AbilityType1") == AbilityType.EnhancedSkill:  # alt skill
                     s = int(ab["_TargetAction1"].name[-1])
                     eid = next(self.eskill_counter)
                     group = "enhanced" if eid == 1 else f"enhanced{eid}"
@@ -1070,7 +1069,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             for i in (1, 2, 3):
                 # enhanced s/fs buff
                 group = None
-                if ab.get(f"_AbilityType{i}") == 14:
+                if ab.get(f"_AbilityType{i}") == AbilityType.ChangeState:
                     unique_name = snakey(self.name.lower()).replace("_", "")
                     actcond = ab.get(f"_VariousId{i}a")
                     if not actcond:

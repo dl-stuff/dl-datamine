@@ -302,3 +302,27 @@ class AbilityStat(ShortEnum):
     FinalDragonTimeRate = 14
     Utpr = 15
     DamageCutB = 16
+
+
+class PartConditionType(ShortEnum):
+    NONE = 0
+    OwnerBuffCount = 1
+    CPValue = 2
+    Random = 3
+    NearestEnemyDistance = 4
+    SingleOrMultiPlay = 5
+    SpecificTaggedBulletValid = 6
+    ShikigamiLevel = 7
+    SettingHitObjTagContains = 8
+    ActionContainerHitCount = 9
+    ActionCriticalStatus = 10
+    HumanOrDragon = 11
+
+
+class PartConditionComparisonType(ShortEnum):
+    Equality = 0
+    Inequality = 1
+    GreaterThan = 2
+    GreaterThanOrEqual = 3
+    LessThan = 4
+    LessThanOrEqual = 5

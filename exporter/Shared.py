@@ -19,6 +19,8 @@ from exporter.Mappings import (
     ActionTargetGroup,
     AbilityType,
     AbilityStat,
+    PartConditionType,
+    PartConditionComparisonType,
 )
 
 
@@ -34,9 +36,7 @@ class ActionCondition(DBView):
     def process_result(self, res, exclude_falsy=True):
         if "_Type" in res:
             res["_Type"] = AFFLICTION_TYPES.get(res["_Type"], res["_Type"])
-        self.link(
-            res, "_EnhancedBurstAttack", "PlayerAction", exclude_falsy=exclude_falsy
-        )
+        self.link(res, "_EnhancedBurstAttack", "PlayerAction", exclude_falsy=exclude_falsy)
         self.link(
             res,
             "_AdditionAttack",
@@ -48,15 +48,9 @@ class ActionCondition(DBView):
             self.seen_skills.add(res["_Id"])
             for s in ("_EnhancedSkill1", "_EnhancedSkill2", "_EnhancedSkillWeapon"):
                 if (sid := res.get(s)) not in self.seen_skills:
-                    if (
-                        skill := self.index["SkillData"].get(
-                            sid, exclude_falsy=exclude_falsy
-                        )
-                    ) :
+                    if (skill := self.index["SkillData"].get(sid, exclude_falsy=exclude_falsy)) :
                         res[s] = skill
-        self.link(
-            res, "_DamageLink", "PlayerActionHitAttribute", exclude_falsy=exclude_falsy
-        )
+        self.link(res, "_DamageLink", "PlayerActionHitAttribute", exclude_falsy=exclude_falsy)
         self.link(res, "_LevelUpId", "ActionCondition", exclude_falsy=exclude_falsy)
         if reset_seen_skills:
             self.seen_skills = set()
@@ -90,13 +84,7 @@ class ActionCondition(DBView):
         all_res = self.get_all(exclude_falsy=True, where="_OverwriteGroupId != 0")
         sorted_actconds = defaultdict(lambda: [])
         for res in all_res:
-            sorted_actconds[res["_OverwriteGroupId"]].append(
-                {
-                    k: v
-                    for k, v in res.items()
-                    if not k.startswith("_Text") and k != "_Text"
-                }
-            )
+            sorted_actconds[res["_OverwriteGroupId"]].append({k: v for k, v in res.items() if not k.startswith("_Text") and k != "_Text"})
         from pprint import pprint
 
         pprint(dict(sorted_actconds))
@@ -108,15 +96,11 @@ class ActionGrant(DBView):
 
     def process_result(self, res, exclude_falsy=True):
         res["_TargetAction"] = AbilityTargetAction(res["_TargetAction"])
-        self.link(
-            res, "_GrantCondition", "ActionCondition", exclude_falsy=exclude_falsy
-        )
+        self.link(res, "_GrantCondition", "ActionCondition", exclude_falsy=exclude_falsy)
         return res
 
     def get(self, pk, by=None, fields=None, order=None, exclude_falsy=False):
-        res = super().get(
-            pk, by=by, fields=fields, order=order, exclude_falsy=exclude_falsy
-        )
+        res = super().get(pk, by=by, fields=fields, order=order, exclude_falsy=exclude_falsy)
         return self.process_result(res, exclude_falsy=exclude_falsy)
 
 
@@ -143,11 +127,7 @@ class AbilityData(DBView):
 
     @staticmethod
     def a_ids(res, i):
-        a_ids = [
-            res[f"_VariousId{i}{a}"]
-            for a in ("a", "b", "c", "")
-            if f"_VariousId{i}{a}" in res and res[f"_VariousId{i}{a}"]
-        ]
+        a_ids = [res[f"_VariousId{i}{a}"] for a in ("a", "b", "c", "") if f"_VariousId{i}{a}" in res and res[f"_VariousId{i}{a}"]]
         return a_ids
 
     @staticmethod
@@ -195,17 +175,13 @@ class AbilityData(DBView):
     @staticmethod
     def affliction_resist(ad, res, i):
         a_id = AbilityData.a_ids(res, i)[0]
-        res[
-            f"_Description{i}"
-        ] = f"affliction resist {AFFLICTION_TYPES.get(a_id, a_id)}"
+        res[f"_Description{i}"] = f"affliction resist {AFFLICTION_TYPES.get(a_id, a_id)}"
         return res
 
     @staticmethod
     def affliction_proc_rate(ad, res, i):
         a_id = AbilityData.a_ids(res, i)[0]
-        res[
-            f"_Description{i}"
-        ] = f"affliction proc rate {AFFLICTION_TYPES.get(a_id, a_id)}"
+        res[f"_Description{i}"] = f"affliction proc rate {AFFLICTION_TYPES.get(a_id, a_id)}"
         return res
 
     @staticmethod
@@ -230,9 +206,7 @@ class AbilityData(DBView):
     @staticmethod
     def affliction_punisher(ad, res, i):
         a_id = AbilityData.a_ids(res, i)[0]
-        res[
-            f"_Description{i}"
-        ] = f"affliction punisher {AFFLICTION_TYPES.get(a_id, a_id)}"
+        res[f"_Description{i}"] = f"affliction punisher {AFFLICTION_TYPES.get(a_id, a_id)}"
         return res
 
     @staticmethod
@@ -298,11 +272,9 @@ class AbilityData(DBView):
         return res
 
     def __init__(self, index):
-        super().__init__(
-            index, "AbilityData", labeled_fields=["_Name", "_Details", "_HeadText"]
-        )
+        super().__init__(index, "AbilityData", labeled_fields=["_Name", "_Details", "_HeadText"])
 
-    def process_result(self, res, full_query=True, exclude_falsy=True):
+    def process_result(self, res, exclude_falsy=True):
         try:
             ac_enum = AbilityCondition(res["_ConditionType"])
             if ac_enum in AbilityData.MAP_COND_VALUE:
@@ -351,16 +323,11 @@ class AbilityData(DBView):
         res = super().get(key, fields=fields, exclude_falsy=exclude_falsy)
         if not full_query:
             return res
-        return self.process_result(res, full_query, exclude_falsy)
+        return self.process_result(res, exclude_falsy)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
-        processed_res = [
-            self.process_result(res, exclude_falsy=exclude_falsy)
-            for res in self.get_all(exclude_falsy=exclude_falsy)
-        ]
-        with open(
-            os.path.join(out_dir, f"_abilities{ext}"), "w", newline="", encoding="utf-8"
-        ) as fp:
+        processed_res = [self.process_result(res, exclude_falsy=exclude_falsy) for res in self.get_all(exclude_falsy=exclude_falsy)]
+        with open(os.path.join(out_dir, f"_abilities{ext}"), "w", newline="", encoding="utf-8") as fp:
             json.dump(processed_res, fp, indent=2, ensure_ascii=False, default=str)
 
 
@@ -454,9 +421,7 @@ class PlayerActionHitAttribute(DBView):
                 r["_TargetGroup"] = ActionTargetGroup(r["_TargetGroup"])
             except KeyError:
                 pass
-            self.link(
-                r, "_ActionCondition1", "ActionCondition", exclude_falsy=exclude_falsy
-            )
+            self.link(r, "_ActionCondition1", "ActionCondition", exclude_falsy=exclude_falsy)
             self.link(
                 r,
                 "_DamageUpDataByBuffCount",
@@ -530,8 +495,8 @@ class ActionParts(DBView):
     #     # return self.process_result(sub_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 
     def process_result(self, action_parts, exclude_falsy=True, hide_ref=True):
-        if isinstance(action_parts, dict):
-            action_parts = [action_parts]
+        # if isinstance(action_parts, dict):
+        #     action_parts = [action_parts]
         for r in action_parts:
             if "commandType" in r:
                 r["commandType"] = CommandType(r["commandType"])
@@ -566,15 +531,11 @@ class ActionParts(DBView):
                     if hit_attrs:
                         r[label] = hit_attrs
                 else:
-                    hit_attr = self.index["PlayerActionHitAttribute"].get(
-                        r[label], by="_Id", exclude_falsy=exclude_falsy
-                    )
+                    hit_attr = self.index["PlayerActionHitAttribute"].get(r[label], by="_Id", exclude_falsy=exclude_falsy)
                     if hit_attr:
                         r[label] = hit_attr
 
-            self.link(
-                r, "_actionConditionId", "ActionCondition", exclude_falsy=exclude_falsy
-            )
+            self.link(r, "_actionConditionId", "ActionCondition", exclude_falsy=exclude_falsy)
             self.link(
                 r,
                 "_buffCountConditionId",
@@ -584,76 +545,62 @@ class ActionParts(DBView):
             skip_autoFireActionId = False
             try:
                 autofire_actions = []
-                for autofire_id in set(
-                    map(int, json.loads(r["_autoFireActionIdList"]))
-                ):
+                for autofire_id in set(map(int, json.loads(r["_autoFireActionIdList"]))):
                     if not autofire_id:
                         continue
                     if autofire_id == r.get("_autoFireActionId"):
                         skip_autoFireActionId = True
-                    if (
-                        autofire_action := self.index["PlayerAction"].get(
-                            autofire_id, exclude_falsy=exclude_falsy
-                        )
-                    ) :
+                    if (autofire_action := self.index["PlayerAction"].get(autofire_id, exclude_falsy=exclude_falsy)) :
                         autofire_actions.append(autofire_action)
                 if autofire_actions:
                     r["_autoFireActionIdList"] = autofire_actions
             except (KeyError, ValueError, TypeError):
                 pass
             if not skip_autoFireActionId:
-                self.link(
-                    r, "_autoFireActionId", "PlayerAction", exclude_falsy=exclude_falsy
-                )
+                self.link(r, "_autoFireActionId", "PlayerAction", exclude_falsy=exclude_falsy)
 
             if "_motionState" in r and r["_motionState"]:
                 ms = r["_motionState"]
                 animation = []
                 if self.animation_reference is not None:
-                    animation = self.index[
-                        self.animation_reference[0]
-                    ].get_by_state_ref(
-                        ms, self.animation_reference[1], exclude_falsy=exclude_falsy
-                    )
+                    animation = self.index[self.animation_reference[0]].get_by_state_ref(ms, self.animation_reference[1], exclude_falsy=exclude_falsy)
                 if not animation:
-                    animation = self.index["CharacterMotion"].get(
-                        ms, exclude_falsy=exclude_falsy
-                    )
+                    animation = self.index["CharacterMotion"].get(ms, exclude_falsy=exclude_falsy)
                 if animation:
                     if len(animation) == 1:
                         r["_animation"] = animation[0]
                     else:
                         r["_animation"] = animation
 
+            if r.get("_conditionType"):
+                condtype = PartConditionType(r["_conditionType"])
+                r["_conditionType"] = condtype
+                if condtype == PartConditionType.OwnerBuffCount:
+                    buff, comp, count, padding4 = json.loads(r["_conditionValue"])
+                    r["_conditionValue"] = {
+                        "_actionCondition": self.index["ActionCondition"].get(buff),
+                        "_compare": PartConditionComparisonType(comp),
+                        "_count": int(count),
+                        "_padding4": padding4,
+                    }
+                elif condtype in (PartConditionType.ShikigamiLevel, PartConditionType.ActionContainerHitCount):
+                    comp, count, padding3, padding4 = json.loads(r["_conditionValue"])
+                    r["_conditionValue"] = {
+                        "_compare": PartConditionComparisonType(comp),
+                        "_count": int(count),
+                        "_padding3": padding3,
+                        "_padding4": padding4,
+                    }
+
         return action_parts
 
-    def get(
-        self,
-        pk,
-        by=None,
-        fields=None,
-        order=None,
-        mode=DBManager.EXACT,
-        exclude_falsy=True,
-        hide_ref=True,
-    ):
-        action_parts = super().get(
-            pk,
-            by=by,
-            fields=fields,
-            order=order,
-            mode=mode,
-            exclude_falsy=exclude_falsy,
-        )
-        return self.process_result(
-            action_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref
-        )
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=True, hide_ref=True):
+        action_parts = super().get(pk, by=by, fields=fields, order=order, mode=mode, exclude_falsy=exclude_falsy, expand_one=False)
+        return self.process_result(action_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 
     @staticmethod
     def remove_falsy_fields(res):
-        return DBDict(
-            filter(lambda x: bool(x[1]) or x[0] in ("_seconds", "_seq"), res.items())
-        )
+        return DBDict(filter(lambda x: bool(x[1]) or x[0] in ("_seconds", "_seq"), res.items()))
 
 
 class PlayerAction(DBView):
@@ -665,34 +612,22 @@ class PlayerAction(DBView):
 
     def process_result(self, player_action, exclude_falsy=True, full_query=True):
         pa_id = player_action["_Id"]
-        if action_parts := self.index["ActionParts"].get(
-            pa_id, by="_ref", order="_seconds ASC", exclude_falsy=exclude_falsy
-        ):
+        if action_parts := self.index["ActionParts"].get(pa_id, by="_ref", order="_seconds ASC", exclude_falsy=exclude_falsy):
             player_action["_Parts"] = action_parts
-        if (mid := player_action.get("_BurstMarkerId")) and (
-            marker := self.get(mid, exclude_falsy=exclude_falsy)
-        ):
+        if (mid := player_action.get("_BurstMarkerId")) and (marker := self.get(mid, exclude_falsy=exclude_falsy)):
             player_action["_BurstMarkerId"] = marker
         else:
             try:
                 if action_parts[0]["_motionState"] == "charge_13":
-                    player_action["_BurstMarkerId"] = (
-                        pa_id + PlayerAction.BURST_MARKER_DISPLACEMENT
-                    )
-                    if marker := self.get(
-                        player_action["_BurstMarkerId"], exclude_falsy=exclude_falsy
-                    ):
+                    player_action["_BurstMarkerId"] = pa_id + PlayerAction.BURST_MARKER_DISPLACEMENT
+                    if marker := self.get(player_action["_BurstMarkerId"], exclude_falsy=exclude_falsy):
                         player_action["_BurstMarkerId"] = marker
             except:
                 pass
         if (nextact := player_action.get("_NextAction")) :
-            player_action["_NextAction"] = self.get(
-                nextact, exclude_falsy=exclude_falsy
-            )
+            player_action["_NextAction"] = self.get(nextact, exclude_falsy=exclude_falsy)
         if (casting := player_action.get("_CastingAction")) :
-            player_action["_CastingAction"] = self.get(
-                casting, exclude_falsy=exclude_falsy
-            )
+            player_action["_CastingAction"] = self.get(casting, exclude_falsy=exclude_falsy)
         return player_action
 
     def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
@@ -700,9 +635,7 @@ class PlayerAction(DBView):
         if not full_query or not player_action:
             return player_action
         # PlayerAction.REF.add(pk)
-        return self.process_result(
-            player_action, exclude_falsy=exclude_falsy, full_query=full_query
-        )
+        return self.process_result(player_action, exclude_falsy=exclude_falsy, full_query=full_query)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
@@ -823,11 +756,7 @@ class SkillData(DBView):
         if (
             "_AdvancedSkillLv1" in skill_data
             and skill_data["_AdvancedSkillLv1"]
-            and (
-                adv_act := self.index["PlayerAction"].get(
-                    skill_data["_AdvancedActionId1"], exclude_falsy=exclude_falsy
-                )
-            )
+            and (adv_act := self.index["PlayerAction"].get(skill_data["_AdvancedActionId1"], exclude_falsy=exclude_falsy))
         ):
             skill_data["_AdvancedActionId1"] = adv_act
 
@@ -846,11 +775,7 @@ class SkillData(DBView):
                 skill_data,
                 exclude_falsy=exclude_falsy,
             )
-        if (
-            full_transSkill
-            and "_TransSkill" in skill_data
-            and skill_data["_TransSkill"]
-        ):
+        if full_transSkill and "_TransSkill" in skill_data and skill_data["_TransSkill"]:
             next_trans_skill = self.get(
                 skill_data["_TransSkill"],
                 exclude_falsy=exclude_falsy,
@@ -886,9 +811,7 @@ class SkillData(DBView):
                 exclude_falsy=exclude_falsy,
             )
 
-        skill_detail = self.index["SkillDetail"].get(
-            skill_data["_Id"], by="_SkillId", exclude_falsy=exclude_falsy
-        )
+        skill_detail = self.index["SkillDetail"].get(skill_data["_Id"], by="_SkillId", exclude_falsy=exclude_falsy)
         if skill_detail:
             skill_data["_SkillDetail"] = skill_detail
 
