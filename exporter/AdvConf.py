@@ -71,7 +71,7 @@ def ele_bitmap(n):
 
 
 def confsort(a):
-    k, v = a
+    k, _ = a
     if k[0] == "x":
         try:
             return "x" + k.split("_")[1]
@@ -83,7 +83,7 @@ def confsort(a):
 INDENT = "    "
 
 
-def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
+def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
     if depth >= lim:
         if k == "attr":
             r_str_lst = []
@@ -103,7 +103,7 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
         f.write("{\n")
         # f.write(INDENT*depth)
         end = len(data) - 1
-        if depth == 0:
+        if depth < sortlim:
             items = enumerate(sorted(data.items(), key=confsort))
         else:
             items = enumerate(data.items())
@@ -113,7 +113,7 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2):
             f.write('"')
             f.write(k)
             f.write('": ')
-            res = fmt_conf(v, k, depth + 1, f, lim)
+            res = fmt_conf(v, k, depth + 1, f, lim, sortlim)
             if res is not None:
                 f.write(res)
             if idx < end:
@@ -1029,6 +1029,30 @@ class AdvConf(CharaData, SkillProcessHelper):
         10650101,  # gala sarisse
     )
     SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1, 109501023: 1}
+    EX_CATEGORY_NAMES = {
+        1: "Lance",
+        2: "Blade",
+        3: "Axe",
+        4: "Bow",
+        5: "Sword",
+        6: "Wand",
+        7: "Dagger",
+        8: "Staff",
+        # 9: "Gala_Prince",
+        10: "Wand2",
+        12: "Axe2",
+        # 13: "Tobias",
+        16: "Light",
+        # 17: "Grace",
+        # 18: "Chrom",
+        # 19: "Sharena",
+        20: "Dagger2",
+        22: "Gun",
+        # 23: "Kimono_Elisanne",
+        # 24: "Panther",
+        # 25: "Joker",
+        26: "Wind",
+    }
 
     def process_result(self, res, exclude_falsy=True, condense=True, all_levels=False):
         self.index["ActionParts"].animation_reference = (
@@ -1215,7 +1239,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         if res["_HoldEditSkillCost"] != 10:
             res_data["limit"] = res["_HoldEditSkillCost"]
         if res["_EditSkillRelationId"] > 1:
-            modifiers = index["EditSkillCharaOffset"].get(res["_EditSkillRelationId"], by="_EditSkillRelationId")[0]
+            modifiers = self.index["EditSkillCharaOffset"].get(res["_EditSkillRelationId"], by="_EditSkillRelationId")[0]
             if modifiers["_SpOffset"] > 1:
                 res_data["mod_sp"] = modifiers["_SpOffset"]
             if modifiers["_StrengthOffset"] != 0.699999988079071:
@@ -1223,7 +1247,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             if modifiers["_BuffDebuffOffset"] != 1:
                 res_data["mod_buff"] = modifiers["_BuffDebuffOffset"]
         if res.get("_EditSkillId", 0) > 0 and res.get("_EditSkillCost", 0) > 0:
-            skill = index["SkillData"].get(res["_EditSkillId"], exclude_falsy=False)
+            skill = self.index["SkillData"].get(res["_EditSkillId"], exclude_falsy=False)
             res_data["s"] = self.edit_skill_idx
             if res["_MaxLimitBreakCount"] >= 5:
                 sp_lv = 4
@@ -1243,45 +1267,110 @@ class AdvConf(CharaData, SkillProcessHelper):
             res_data["sp"] = skill[f"_SpLv{sp_lv}Edit"]
         return res_data
 
-    def export_all_to_folder(self, out_dir="./out", ext=".json", desc=False):
+    def exability_data(self, res):
+        ex_res = self.index["ExAbilityData"].get(res["_ExAbilityData5"], exclude_falsy=True)
+        ex_ab, ex_skipped = convert_exability(ex_res)
+        chain_res = self.index["AbilityData"].get(res.get("_ExAbility2Data5"), full_query=True, exclude_falsy=True)
+        chain_ab, chain_skipped = convert_ability(chain_res, chains=True)
+        if len(chain_ab) > 1:
+            print(res)
+        entry = {
+            "category": ex_res.get("_Category"),
+            "ex": ex_ab,
+            "chain": chain_ab,
+            # "skipped": ex_skipped + chain_skipped,
+        }
+        if not chain_res.get("_ElementalType") and chain_ab:
+            entry["ALL_ELE_CHAIN"] = True
+        return entry
+
+    def sort_exability_data(self, exability_data):
+        ex_by_ele = defaultdict(set)
+        ex_by_category = {}
+        catagorized_names = defaultdict(set)
+        all_ele_chains = {}
+        for ele, exabs in exability_data.items():
+            for name, entry in exabs.items():
+                cat = entry["category"]
+                ex_by_ele[ele].add(cat)
+                if cat not in ex_by_category or (entry["ex"] and ex_by_category[cat]["ex"][0][1] < entry["ex"][0][1]):
+                    ex_by_category[cat] = {
+                        "category": cat,
+                        "ex": entry["ex"],
+                        "chain": [],
+                    }
+                catagorized_names[cat].add(name)
+                if entry.get("ALL_ELE_CHAIN"):
+                    del entry["ALL_ELE_CHAIN"]
+                    all_ele_chains[name] = entry
+        extra_data = {}
+        extra_data["generic"] = {}
+        extra_data["any"] = {}
+        for cat, entry in ex_by_category.items():
+            try:
+                catname = AdvConf.EX_CATEGORY_NAMES[cat]
+            except KeyError:
+                if cat not in catagorized_names:
+                    continue
+                catname = sorted(catagorized_names[cat])[0]
+                if len(catagorized_names[cat]) > 1:
+                    print(f"More than 1 name for EX category {cat}: {catagorized_names[cat]}, picked {catname}")
+            entry["category"] = catname
+            if all((cat in eleset for eleset in ex_by_ele.values())):
+                if entry["ex"]:
+                    extra_data["generic"][catname] = entry
+                for name in catagorized_names[cat]:
+                    for exabs in exability_data.values():
+                        try:
+                            if not exabs[name]["chain"]:
+                                del exabs[name]
+                            else:
+                                exabs[name]["category"] = catname
+                        except KeyError:
+                            pass
+            else:
+                if entry["ex"] and not entry["ex"][0][0].startswith("ele_"):
+                    extra_data["any"][catname] = entry
+                for name in catagorized_names[cat]:
+                    for exabs in exability_data.values():
+                        try:
+                            exabs[name]["category"] = catname
+                        except KeyError:
+                            pass
+        extra_data["any"].update(all_ele_chains)
+        exability_data.update(extra_data)
+
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
         all_res = self.get_all(exclude_falsy=True, where="_ElementalType != 99 AND _IsPlayable = 1")
         # ref_dir = os.path.join(out_dir, '..', 'adv')
-        skillshare_out = os.path.join(out_dir, "skillshare.json")
-        if desc:
-            desc_out = open(os.path.join(out_dir, "desc.txt"), "w")
-            out_dir = os.path.join(out_dir, "advdesc")
-        else:
-            out_dir = os.path.join(out_dir, "adv")
-        check_target_path(out_dir)
+        skillshare_out = os.path.join(out_dir, f"skillshare{ext}")
+        exability_out = os.path.join(out_dir, f"exability{ext}")
+        advout_dir = os.path.join(out_dir, "adv")
+        check_target_path(advout_dir)
         skillshare_data = {}
-        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+        exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
+        for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
             try:
-                outconf = self.process_result(res, exclude_falsy=True, all_levels=desc)
+                outconf = self.process_result(res, exclude_falsy=True)
                 out_name = self.outfile_name(outconf, ext)
                 if (ss_res := self.skillshare_data(res)) :
                     skillshare_data[snakey(outconf["c"]["name"])] = ss_res
-                output = os.path.join(out_dir, out_name)
-                # ref = os.path.join(ref_dir, out_name)
-                # if os.path.exists(ref):
-                #     with open(ref, 'r', newline='', encoding='utf-8') as fp:
-                #         refconf = json.load(fp)
-                #         try:
-                #             outconf['c']['a'] = refconf['c']['a']
-                #         except:
-                #             outconf['c']['a'] = []
+                if (ex_res := self.exability_data(res)) :
+                    exability_data[snakey(outconf["c"]["ele"])][snakey(outconf["c"]["name"])] = ex_res
+                output = os.path.join(advout_dir, out_name)
                 with open(output, "w", newline="", encoding="utf-8") as fp:
-                    # json.dump(res, fp, indent=2, ensure_ascii=False)
                     fmt_conf(outconf, f=fp)
             except Exception as e:
                 print(res["_Id"])
                 pprint(outconf)
                 raise e
-        print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
+        if AdvConf.MISSING_ENDLAG:
+            print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
         with open(skillshare_out, "w", newline="") as fp:
-            # json.dump(skillshare_data, fp, indent=2, default=str)
             fmt_conf(skillshare_data, f=fp)
-        if desc:
-            desc_out.close()
+        self.sort_exability_data(exability_data)
+        with open(exability_out, "w", newline="") as fp:
+            fmt_conf(exability_data, f=fp, lim=3, sortlim=2)
 
 
 HP_GEQ = (
@@ -1299,13 +1388,13 @@ HP_LEQ = (
 )
 
 
-def ab_cond(ab):
+def ab_cond(ab, chains=False):
     cond = ab.get("_ConditionType")
     condval = ab.get("_ConditionValue")
     ele = ab.get("_ElementalType")
     wep = ab.get("_WeaponType")
     cparts = []
-    if ele:
+    if ele and not chains:
         cparts.append(ele.lower())
     if wep:
         cparts.append(wep.lower())
@@ -1328,8 +1417,10 @@ AB_STATS = {1: "hp", 2: "a", 4: "sp", 5: "dh", 8: "dt", 10: "spd", 12: "cspd"}
 
 def ab_stats(**kwargs):
     if (stat := AB_STATS.get(kwargs.get("var_a"))) and (upval := kwargs.get("upval")):
+        if kwargs.get("ex") and stat == "a":
+            return [stat, upval / 100, "ex"]
         res = [stat, upval / 100]
-        if (condstr := ab_cond(kwargs.get("ab"))) :
+        if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
             res.append(condstr)
         return res
 
@@ -1349,7 +1440,11 @@ def ab_damage(**kwargs):
             astr = "s"
         elif target == AbilityTargetAction.BURST_ATTACK:
             astr = "fs"
+        elif target == AbilityTargetAction.COMBO:
+            astr = "x"
         if astr:
+            if kwargs.get("ex"):
+                return [astr, upval / 100, "ex"]
             res = [astr, upval / 100]
         else:
             cond = kwargs.get("ab").get("_ConditionType")
@@ -1360,13 +1455,37 @@ def ab_damage(**kwargs):
             elif cond == AbilityCondition.BREAKDOWN:
                 res = ["bk", upval / 100]
             elif cond == AbilityCondition.DEBUFF:
-                if kwargs.get("ab").get("_ConditionValue") == 3:
+                condval = kwargs.get("ab").get("_ConditionValue")
+                if condval == 3:
                     res = ["k_debuff_def", upval / 100]
-        condstr = ab_cond(kwargs.get("ab"))
+                elif condval == 21:
+                    res = ["k_debuff", upval / 100]
+        condstr = ab_cond(kwargs.get("ab"), kwargs.get("chains"))
         if res:
             if condstr:
                 res.append(condstr)
             return res
+
+
+VALUE_CONDS = {
+    AbilityCondition.TOTAL_HITCOUNT_MORE: "hitcount",
+    AbilityCondition.HP_MORE_MOMENT: "hpmore",
+    AbilityCondition.HP_LESS: "hpless",
+}
+OTHER_CONDS = {
+    AbilityCondition.SKILLCONNECT_SKILL1_MOMENT: "primed",
+    AbilityCondition.ON_BUFF_FIELD: "poised",
+    AbilityCondition.GET_BUFF_TENSION: "energy",
+}
+
+
+def check_duration_and_cooltime(ab, actcond, extra_args, default_duration=15, default_cooltime=10):
+    if (duration := actcond.get("_DurationSec")) != default_duration:
+        extra_args.append(fr(duration or -1))
+    if (cooltime := ab.get("_CoolTime")) and cooltime != default_cooltime:
+        if not extra_args:
+            extra_args.append(fr(duration or -1))
+        extra_args.append(fr(cooltime))
 
 
 def ab_actcond(**kwargs):
@@ -1379,19 +1498,21 @@ def ab_actcond(**kwargs):
     astr = None
     extra_args = []
     if cond == AbilityCondition.GET_BUFF_DEF:
-        if (cd := kwargs.get("_CoolTime")) :
-            astr = "bcc"
-        else:
-            astr = "bc"
-        if (duration := actcond.get("_DurationSec")) and duration != 15:
-            extra_args.append(duration)
+        astr = "bc"
+        check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=None)
     elif cond == AbilityCondition.HP_LESS_MOMENT:
         if ab.get("_OccurenceNum"):
             astr = "lo"
         elif ab.get("_MaxCount") == 5:
             astr = "uo"
-        else:
+        elif ab.get("_MaxCount") == 3:
             astr = "ro"
+        else:
+            condval = ab.get("_ConditionValue")
+            if condval == int(condval):
+                condval = int(condval)
+            astr = f"hpless_{condval}"
+            check_duration_and_cooltime(ab, actcond, extra_args)
     elif cond == AbilityCondition.HITCOUNT_MOMENT:
         if ab.get("_TargetAction") == AbilityTargetAction.BURST_ATTACK:
             return [
@@ -1404,14 +1525,28 @@ def ab_actcond(**kwargs):
     elif cond == AbilityCondition.QUEST_START and (val := actcond.get("_Tension")):
         return ["eprep", int(val)]
     elif cond == AbilityCondition.TRANSFORM_DRAGON:
-        if val := actcond.get("_RateSkill"):
-            return ["dcs", 3]
-        elif val := actcond.get("_RateDefense"):
-            return ["dcd", 3]
-        else:
-            return ["dc", 3]
-    elif cond == AbilityCondition.SKILLCONNECT_SKILL1_MOMENT:
-        astr = "primed"
+        astr = "dshift"
+        modtype = None
+        shift_values = []
+        for actcond in (kwargs.get("var_a"), kwargs.get("var_b"), kwargs.get("var_c")):
+            if not actcond:
+                continue
+            if actcond.get("_DurationSec"):
+                return None
+            if val := actcond.get("_RateSkill"):
+                c_modtype = "s"
+            elif val := actcond.get("_RateDefense"):
+                c_modtype = "defense"
+            elif val := actcond.get("_RateAttack"):
+                c_modtype = "att"
+            if modtype is not None and c_modtype != modtype:
+                # not generic dshift
+                return None
+            modtype = c_modtype
+            shift_values.append(fr(val))
+        if modtype is None:
+            return None
+        return [f"{astr}_{modtype}", *shift_values]
     elif cond == AbilityCondition.KILL_ENEMY:
         if ab.get("_TargetAction") == AbilityTargetAction.BURST_ATTACK:
             astr = "sts"
@@ -1433,21 +1568,40 @@ def ab_actcond(**kwargs):
             astr = f"{affstr}team_{affname}"
         else:
             astr = f"{affstr}self_{affname}"
-        if (duration := actcond.get("_DurationSec")) != 15:
-            extra_args.append(duration)
-        if (cooltime := ab.get("_CoolTime")) != 10:
-            if not extra_args:
-                extra_args.append(fr(actcond.get("_DurationSec")))
-            extra_args.append(fr(cooltime))
+        check_duration_and_cooltime(ab, actcond, extra_args)
     elif cond == AbilityCondition.TENSION_MAX_MOMENT:
         astr = "energized"
-        if (duration := actcond.get("_DurationSec")) != 15:
-            extra_args.append(duration)
+        check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=None)
+    elif cond == AbilityCondition.GET_HEAL:
+        astr = "healed"
+        check_duration_and_cooltime(ab, actcond, extra_args)
+    elif cond == AbilityCondition.DAMAGED:
+        astr = "damaged"
+        if (count := actcond.get("_DurationNum")) :
+            extra_args.append(count)
+        else:
+            check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=5)
+    elif cond == AbilityCondition.JUST_AVOID:
+        astr = "dodge"
+        check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=15)
+    elif cond in VALUE_CONDS:
+        condval = ab.get("_ConditionValue")
+        if condval == int(condval):
+            condval = int(condval)
+        astr = f"{VALUE_CONDS[cond]}_{condval}"
+    elif cond in OTHER_CONDS:
+        astr = OTHER_CONDS[cond]
     if astr:
         full_astr, value = None, None
         if (val := actcond.get("_Tension")) :
-            full_astr = f"{astr}_energy"
-            value = int(val)
+            if astr == "energy":
+                full_astr = "eextra"
+                value = ab.get("_Probability") / 100
+            else:
+                full_astr = f"{astr}_energy"
+                value = int(val)
+                if astr == "bc" and len(extra_args) == 1:
+                    extra_args = tuple()
         elif (att := actcond.get("_RateAttack")) :
             full_astr = f"{astr}_att"
             value = fr(att)
@@ -1463,6 +1617,12 @@ def ab_actcond(**kwargs):
         elif (regen := actcond.get("_SlipDamageRatio")) :
             full_astr = f"{astr}_regen"
             value = fr(regen * -100)
+        elif (heal := actcond.get("_RegenePower")) :
+            full_astr = f"{astr}_heal"
+            value = fr(heal)
+        elif (fsdmg := actcond.get("_RateBurst")) :
+            full_astr = f"{astr}_fs_buff"
+            value = fr(fsdmg)
         if full_astr and value:
             return [full_astr, value, *extra_args]
 
@@ -1474,16 +1634,16 @@ def ab_prep(**kwargs):
     if ab.get("_OnSkill") == 99:
         astr = "scharge_all"
         upval /= 100
-    if (condstr := ab_cond(ab)) :
+    if (condstr := ab_cond(ab, kwargs.get("chains"))) :
         return [astr, upval, condstr]
     return [astr, upval]
 
 
-def ab_generic(name, div=None):
+def ab_generic(name, div=100):
     def ab_whatever(**kwargs):
         if (upval := kwargs.get("upval")) :
-            res = [name, upval if not div else upval / div]
-            if (condstr := ab_cond(kwargs.get("ab"))) :
+            res = [name, fr(upval / div)]
+            if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
                 res.append(condstr)
             return res
 
@@ -1493,7 +1653,7 @@ def ab_generic(name, div=None):
 def ab_aff_k(**kwargs):
     if (a_id := kwargs.get("var_a")) :
         res = [f"k_{AFFLICTION_TYPES.get(a_id, a_id)}", kwargs.get("upval") / 100]
-        if (condstr := ab_cond(kwargs.get("ab"))) :
+        if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
             res.append(condstr)
         return res
 
@@ -1501,7 +1661,7 @@ def ab_aff_k(**kwargs):
 def ab_tribe_k(**kwargs):
     if (a_id := kwargs.get("var_a")) :
         res = [f"k_{TRIBE_TYPES.get(a_id, a_id)}", kwargs.get("upval") / 100]
-        if (condstr := ab_cond(kwargs.get("ab"))) :
+        if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
             res.append(condstr)
         return res
 
@@ -1513,7 +1673,7 @@ def ab_aff_res(**kwargs):
             res = ["affshield", kwargs.get("ab").get("_OccurenceNum")]
         else:
             res = [f"affres_{aff}", kwargs.get("upval")]
-        if (condstr := ab_cond(kwargs.get("ab"))) :
+        if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
             res.append(condstr)
         return res
 
@@ -1523,33 +1683,51 @@ def ab_psalm(**kwargs):
     return ["psalm", ab["_BaseCrestGroupId"], ab["_TriggerBaseCrestGroupCount"], int(kwargs.get("upval"))]
 
 
+def ab_eledmg(**kwargs):
+    return [f"ele_{ELEMENTS.get(kwargs.get('var_a'))}", kwargs.get("upval") / 100]
+
+
+def ab_dpcharge(**kwargs):
+    ab = kwargs.get("ab")
+    if ab.get("_ConditionType") == AbilityCondition.HITCOUNT_MOMENT:
+        return [f"dpcombo", int(ab.get("_ConditionValue"))]
+
+
 ABILITY_CONVERT = {
     AbilityType.StatusUp: ab_stats,
     AbilityType.ActAddAbs: ab_aff_edge,
     AbilityType.ActDamageUp: ab_damage,
-    AbilityType.ActCriticalUp: ab_generic("cc", 100),
-    AbilityType.ActBreakUp: ab_generic("odaccel", 100),
-    AbilityType.AddRecoverySp: ab_generic("spf", 100),
+    AbilityType.ActCriticalUp: ab_generic("cc"),
+    AbilityType.ActBreakUp: ab_generic("odaccel"),
+    AbilityType.AddRecoverySp: ab_generic("spf"),
     AbilityType.AddRecoveryDp: ab_actcond,
     AbilityType.SpCharge: ab_prep,
-    AbilityType.BuffExtension: ab_generic("bt", 100),
-    AbilityType.DebuffExtension: ab_generic("dbt", 100),
+    AbilityType.BuffExtension: ab_generic("bt"),
+    AbilityType.DebuffExtension: ab_generic("dbt"),
     AbilityType.AbnormalKiller: ab_aff_k,
-    AbilityType.CriticalDamageUp: ab_generic("cd", 100),
-    AbilityType.DpCharge: ab_generic("dp"),
-    AbilityType.DragonDamageUp: ab_generic("da", 100),
-    AbilityType.DebuffTimeExtensionForSpecificDebuffs: ab_generic("dbt", 100),
+    AbilityType.CriticalDamageUp: ab_generic("cd"),
+    AbilityType.DpCharge: ab_generic("dp", 1),
+    AbilityType.DragonDamageUp: ab_generic("da"),
+    AbilityType.DebuffTimeExtensionForSpecificDebuffs: ab_generic("dbt"),
     AbilityType.ActKillerTribe: ab_tribe_k,
     AbilityType.ChangeState: ab_actcond,
-    AbilityType.ChainTimeExtension: ab_generic("ctime"),
+    AbilityType.ChainTimeExtension: ab_generic("ctime", 1),
     AbilityType.ResistAbs: ab_aff_res,
     AbilityType.CrestGroupScoreUp: ab_psalm,
-    AbilityType.ActRecoveryUp: ab_generic("rcv", 100),
+    AbilityType.ActRecoveryUp: ab_generic("rcv"),
+    AbilityType.EnhancedElementDamage: ab_eledmg,
+    AbilityType.DpChargeMyParty: ab_dpcharge,
 }
-SPECIAL = {448: ["spu", 0.08], 1402: ["au", 0.08], 1776: ["corrosion", 3]}
+SPECIAL = {
+    448: ["spu", 0.08],
+    1402: ["au", 0.08],
+    1776: ["corrosion", 3],
+    400000838: ["critcombo", 10],
+    400000858: ["poised_shadowblight-killer_passive", 0.08],
+}
 
 
-def convert_ability(ab, debug=False, skip_abtype=tuple()):
+def convert_ability(ab, skip_abtype=tuple(), chains=False):
     if special_ab := SPECIAL.get(ab.get("_Id")):
         return [special_ab], []
     converted = []
@@ -1570,6 +1748,7 @@ def convert_ability(ab, debug=False, skip_abtype=tuple()):
                     var_b=ab.get(f"_VariousId{i}b"),
                     var_c=ab.get(f"_VariousId{i}c"),
                     var_str=ab.get(f"_VariousId{i}str"),
+                    chains=chains,
                 )
             except:
                 res = None
@@ -1578,18 +1757,45 @@ def convert_ability(ab, debug=False, skip_abtype=tuple()):
         elif atype == AbilityType.ReferenceOther:
             for a in ("a", "b", "c"):
                 if (subab := ab.get(f"_VariousId{i}{a}")) :
-                    sub_c, sub_s = convert_ability(subab, debug=debug, skip_abtype=skip_abtype)
+                    sub_c, sub_s = convert_ability(subab, skip_abtype=skip_abtype)
                     converted.extend(sub_c)
                     skipped.extend(sub_s)
-    if debug or not converted:
+    if not converted:
         skipped.append((ab.get("_Id"), ab.get("_Name")))
     return converted, skipped
 
 
-def convert_all_ability(ab_lst, debug=False, skip_abtype=tuple()):
+def convert_exability(ab):
+    converted = []
+    skipped = []
+    for i in (1, 2, 3):
+        if not f"_AbilityType{i}" in ab:
+            continue
+        atype = ab[f"_AbilityType{i}"]
+        if (convert_a := ABILITY_CONVERT.get(atype)) :
+            try:
+                res = convert_a(
+                    ab=ab, target=ab.get(f"_TargetAction{i}"), upval=ab.get(f"_AbilityType{i}UpValue0"), var_a=ab.get(f"_VariousId{i}"), ex=True
+                )
+            except:
+                res = None
+            if res:
+                converted.append(res)
+        elif atype == AbilityType.ReferenceOther:
+            for a in ("a", "b", "c"):
+                if (subab := ab.get(f"_VariousId{i}{a}")) :
+                    sub_c, sub_s = convert_exability(subab)
+                    converted.extend(sub_c)
+                    skipped.extend(sub_s)
+    if not converted:
+        skipped.append((ab.get("_Id"), ab.get("_Name")))
+    return converted, skipped
+
+
+def convert_all_ability(ab_lst, skip_abtype=tuple()):
     all_c, all_s = [], []
     for ab in ab_lst:
-        converted, skipped = convert_ability(ab, debug=debug, skip_abtype=skip_abtype)
+        converted, skipped = convert_ability(ab, skip_abtype=skip_abtype)
         all_c.extend(converted)
         all_s.extend(skipped)
     return all_c, all_s
@@ -1602,7 +1808,7 @@ class WpConf(AbilityCrest):
         "icon": "HDT",
         "hp": 83,
         "att": 20,
-        "rarity": 5,
+        "rarity": 1,
         "union": 0,
         "a": [["res_hdt", 0.25]],
     }
@@ -1637,7 +1843,7 @@ class WpConf(AbilityCrest):
             "icon": icon,
             "att": res["_MaxAtk"],
             "hp": res["_MaxHp"],
-            "rarity": res["_Rarity"],
+            "rarity": res["_CrestSlotType"],
             "union": boon,
             "a": converted,
             # 'skipped': skipped

@@ -1,19 +1,19 @@
 import argparse
 from time import monotonic
-from tqdm import tqdm
 
-from loader.Database import DBManager, DBViewIndex
+from loader.Database import DBViewIndex
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Enemy import EnemyParam
 from exporter.Weapons import WeaponBody, WeaponType
-from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Shared import (
-    ActionCondition,
-    PlayerActionHitAttribute,
-    PlayerAction,
-    AbilityData,
-)
+from exporter.Wyrmprints import AbilityCrest
+
+# from exporter.Shared import (
+#     ActionCondition,
+#     PlayerActionHitAttribute,
+#     PlayerAction,
+#     AbilityData,
+# )
 
 CLASSES = [
     CharaData,
