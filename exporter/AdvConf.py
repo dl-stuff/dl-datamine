@@ -937,12 +937,12 @@ class SkillProcessHelper:
                     conf[k][f"lv{s_lv}"] = s_cskill
             if (ab_alt_buffs := self.ab_alt_buffs.get(seq)) :
                 if len(ab_alt_buffs) == 1:
-                    ab_alt_buffs = [ab_alt_buffs[0], "-refresh"]
+                    new_ab_alt_buffs = [*ab_alt_buffs[0], "-refresh"]
                 else:
-                    ab_alt_buffs = [*ab_alt_buffs, "-refresh"]
+                    new_ab_alt_buffs = [*ab_alt_buffs, "-refresh"]
                 if "attr" not in conf[k]:
                     conf[k]["attr"] = []
-                conf[k]["attr"].append({"buff": ab_alt_buffs})
+                conf[k]["attr"].append({"buff": new_ab_alt_buffs})
             del self.chara_skills[skill.get("_Id")]
 
         for efs, eba, emk in self.enhanced_fs:
@@ -1042,7 +1042,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         10: "Wand2",
         12: "Axe2",
         # 13: "Tobias",
-        16: "Light",
+        16: "Peony",
         # 17: "Grace",
         # 18: "Chrom",
         # 19: "Sharena",
@@ -1051,7 +1051,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         # 23: "Kimono_Elisanne",
         # 24: "Panther",
         # 25: "Joker",
-        26: "Wind",
+        26: "Mona",
     }
 
     def process_result(self, res, exclude_falsy=True, condense=True, all_levels=False):
@@ -1317,8 +1317,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     print(f"More than 1 name for EX category {cat}: {catagorized_names[cat]}, picked {catname}")
             entry["category"] = catname
             if all((cat in eleset for eleset in ex_by_ele.values())):
-                if entry["ex"]:
-                    extra_data["generic"][catname] = entry
+                extra_data["generic"][catname] = entry
                 for name in catagorized_names[cat]:
                     for exabs in exability_data.values():
                         try:
@@ -1602,6 +1601,9 @@ def ab_actcond(**kwargs):
                 value = int(val)
                 if astr == "bc" and len(extra_args) == 1:
                     extra_args = tuple()
+        elif (val := actcond.get("_Inspiration")) :
+            full_astr = f"{astr}_inspiration"
+            value = int(val)
         elif (att := actcond.get("_RateAttack")) :
             full_astr = f"{astr}_att"
             value = fr(att)
@@ -1684,7 +1686,7 @@ def ab_psalm(**kwargs):
 
 
 def ab_eledmg(**kwargs):
-    return [f"ele_{ELEMENTS.get(kwargs.get('var_a'))}", kwargs.get("upval") / 100]
+    return [f"ele_{ELEMENTS.get(kwargs.get('var_a')).lower()}", kwargs.get("upval") / 100]
 
 
 def ab_dpcharge(**kwargs):

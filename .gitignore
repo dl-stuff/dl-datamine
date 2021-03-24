@@ -14,3 +14,4 @@
 /manifest/*/*.manifest.decrypted
 
 /loader/InGameBuffUI.py
+/loader/MergeBg.py
