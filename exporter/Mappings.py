@@ -200,6 +200,11 @@ class AbilityCondition(ShortEnum):
     GET_BUFF_FROM_SKILL = 100
     HP_RECOVERED_BETWEEN = 101
     RELEASE_DIVINEDRAGONSHIFT = 102
+    HAS_AURA_TYPE = 103
+    SELF_AURA_LEVEL_MORE = 104
+    PARTY_AURA_LEVEL_MORE = 105
+    DRAGONSHIFT = 106
+    DRAGON_MODE_STRICTLY = 107
 
 
 class AbilityType(ShortEnum):
@@ -282,6 +287,8 @@ class AbilityType(ShortEnum):
     ModifyBuffDebuffDurationTimeByRecoveryHp = 76
     CrisisRate = 77
     ActDamageDown = 78
+    AutoAvoidProbability = 79
+    LimitCriticalAddRate = 80
 
 
 class AbilityStat(ShortEnum):
@@ -326,3 +333,11 @@ class PartConditionComparisonType(ShortEnum):
     GreaterThanOrEqual = 3
     LessThan = 4
     LessThanOrEqual = 5
+
+
+class ActionCancelType(ShortEnum):
+    NONE = 0
+    BurstAttack = 1
+    Avoid = 2
+    AvoidFront = 3
+    AvoidBack = 4

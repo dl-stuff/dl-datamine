@@ -48,9 +48,7 @@ class DBTableMetadata:
         self.field_type = {}
         if auto_pk:
             self.pk = self.DBID
-            self.field_type[self.DBID] = (
-                DBTableMetadata.INT + DBTableMetadata.PK + DBTableMetadata.AUTO
-            )
+            self.field_type[self.DBID] = DBTableMetadata.INT + DBTableMetadata.PK + DBTableMetadata.AUTO
         for k, v in row.items():
             if isinstance(v, int):
                 self.field_type[k] = DBTableMetadata.INT
@@ -79,9 +77,7 @@ class DBTableMetadata:
 
     @property
     def named_fields(self):
-        return ",".join(
-            [f"{self.name}.{k}" for k in self.field_type.keys() if k != self.DBID]
-        )
+        return ",".join([f"{self.name}.{k}" for k in self.field_type.keys() if k != self.DBID])
 
     @property
     def field_types(self):
@@ -93,25 +89,18 @@ class DBTableMetadata:
 
     @property
     def blob_fields(self):
-        return dict(
-            filter(lambda x: x[1] == DBTableMetadata.BLOB, self.field_type.items())
-        ).keys()
+        return dict(filter(lambda x: x[1] == DBTableMetadata.BLOB, self.field_type.items())).keys()
 
     def __eq__(self, other):
-        return (
-            self.name == other.name
-            and self.pk == other.pk
-            and self.field_type == other.field_type
-        )
+        return self.name == other.name and self.pk == other.pk and self.field_type == other.field_type
 
 
 class DBManager:
-    def __init__(self, db_file=DB_FILE, drop_on_reload=False):
+    def __init__(self, db_file=DB_FILE):
         self.conn = None
         if db_file is not None:
             self.open(db_file)
         self.tables = {}
-        self.drop_on_reload = True
 
     def open(self, db_file):
         self.conn = sqlite3.connect(db_file)
@@ -206,6 +195,7 @@ class DBManager:
     EXACT = "exact"
     LIKE = "like"
     RANGE = "range"
+    GLOB = "glob"
 
     def select(
         self,
@@ -224,9 +214,9 @@ class DBManager:
         else:
             named_fields = tbl.named_fields
         if mode == self.LIKE:
-            query = (
-                f"SELECT {named_fields} FROM {table} WHERE {table}.{by} LIKE ? || '%'"
-            )
+            query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by} LIKE ? || '%'"
+        elif mode == self.GLOB:
+            query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by} GLOB ?"
         elif mode == self.RANGE:
             query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by} >= ? AND {table}.{by} < ?"
         else:  # mode == self.EXACT
@@ -254,17 +244,11 @@ class DBManager:
                 else:
                     for v in rv:
                         fields.append(f"{rtbl.name}{k}.{v} AS {k}{v}")
-                joins.append(
-                    f"{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}"
-                )
-                if rtbl.name == "TextLabel" and not k.endswith(
-                    "En"
-                ):  # special case bolb
+                joins.append(f"{join_mode} JOIN {rtbl.name} AS {rtbl.name}{k} ON {tbl.name}.{k}={rtbl.name}{k}.{rk}")
+                if rtbl.name == "TextLabel" and not k.endswith("En"):  # special case bolb
                     for region in TEXT_REGIONS:
                         fields.append(f"{rtbl.name}{region}{k}.{rv[0]} AS {k}{region}")
-                        joins.append(
-                            f"{join_mode} JOIN {rtbl.name}{region} AS {rtbl.name}{region}{k} ON {tbl.name}.{k}={rtbl.name}{region}{k}.{rk}"
-                        )
+                        joins.append(f"{join_mode} JOIN {rtbl.name}{region} AS {rtbl.name}{region}{k} ON {tbl.name}.{k}={rtbl.name}{region}{k}.{rk}")
             else:
                 fields.append(f"{tbl.name}.{k}")
         field_str = ",".join(fields)
@@ -352,9 +336,7 @@ class DBView:
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 json.dump(res, fp, indent=2, ensure_ascii=False, default=str)
 
-    def export_one_to_folder(
-        self, pk, out_dir, ext=".json", exclude_falsy=True, **kargs
-    ):
+    def export_one_to_folder(self, pk, out_dir, ext=".json", exclude_falsy=True, **kargs):
         res = self.get(pk, exclude_falsy=exclude_falsy)
         check_target_path(out_dir)
         out_name = self.outfile_name(res, ext)
@@ -366,17 +348,12 @@ class DBView:
 class DBViewIndex:
     @staticmethod
     def all_subclasses(c):
-        return set(c.__subclasses__()).union(
-            [s for c in c.__subclasses__() for s in DBViewIndex.all_subclasses(c)]
-        )
+        return set(c.__subclasses__()).union([s for c in c.__subclasses__() for s in DBViewIndex.all_subclasses(c)])
 
     def __init__(self, db_file=DB_FILE):
         super().__init__()
         self.db = DBManager(db_file=db_file)
-        self.class_dict = {
-            view_class.__name__: view_class
-            for view_class in DBViewIndex.all_subclasses(DBView)
-        }
+        self.class_dict = {view_class.__name__: view_class for view_class in DBViewIndex.all_subclasses(DBView)}
         self.instance_dict = {}
 
     def __getitem__(self, key):

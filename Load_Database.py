@@ -68,9 +68,7 @@ def extract_story_function_json(ex):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Import data to database.")
-    parser.add_argument(
-        "--do_prep", help="Download and extract db related assets", action="store_true"
-    )
+    parser.add_argument("--do_prep", help="Download and extract db related assets", action="store_true")
     parser.add_argument("-m_hash", help="Use", action="store_true")
     parser.add_argument("-o", type=str, help="output file", default="dl.sqlite")
     args = parser.parse_args()
@@ -99,5 +97,4 @@ if __name__ == "__main__":
     load_character_motion(db, os.path.join(in_dir, JP, CHARACTERS_MOTION))
     load_dragon_motion(db, os.path.join(in_dir, JP, DRAGON_MOTION))
     load_ui_skill_detail(db, in_dir)
-
-    print(f"\ntotal: {monotonic()-start:.4f}s")
+    print(f"total: {monotonic()-start:.4f}s")

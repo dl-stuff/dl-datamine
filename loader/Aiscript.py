@@ -41,7 +41,7 @@ class Command(Enum):
     OrderCloser = 30
     OrderAliveFarther = 31
     FromActionSetBoost = 32
-    Reserve07 = 33
+    UnitNumInCircle = 33
     Reserve08 = 34
     Reserve09 = 35
     Reserve10 = 36
@@ -93,6 +93,12 @@ class Target(Enum):
     REGISTERED_03 = 46
     REGISTERED_04 = 47
     HOSTILE_DEAD_ALIVE_00 = 48
+    PLAYER2_TARGET_NO_SUB = 50
+    PLAYER3_TARGET_NO_SUB = 51
+    PLAYER4_TARGET_NO_SUB = 52
+    PLAYER2_TARGET_SUB_HOST = 53
+    PLAYER3_TARGET_SUB_HOST = 54
+    PLAYER4_TARGET_SUB_HOST = 55
 
 
 class Compare(Enum):
@@ -322,6 +328,13 @@ def fmt_rechprate(inst):
     return f"{INDENT*inst.depth}recHPRate()"
 
 
+def fmt_unitnumincircle(inst):
+    variable = s(inst.params[0].values[0])
+    minimum = s(inst.params[1].values[0])
+    maximum = s(inst.params[2].values[0])
+    return f"{INDENT*inst.depth}if {minimum} <= {variable} <= {maximum}:"
+
+
 FMT_PYTHON = {
     Command.Def: fmt_def,
     Command.Set: fmt_set,
@@ -355,6 +368,7 @@ FMT_PYTHON = {
     Command.GM_SetBanditEvent: fmt_gmsetbanditevent,
     Command.RecHpRate: fmt_rechprate,
     Command.FromActionSetBoost: fmt_actionset,
+    Command.UnitNumInCircle: fmt_unitnumincircle,
 }
 
 
@@ -430,9 +444,7 @@ class Instruction:
         self.params = []
         for param in container["_params"]:
             for col in param["columns"]:
-                self.params.append(
-                    Param(col["values"], col["compare"], depth=self.depth + 1)
-                )
+                self.params.append(Param(col["values"], col["compare"], depth=self.depth + 1))
         self.children = []
         self.function_params = []
 
@@ -446,9 +458,7 @@ class Instruction:
         self.children.append(child)
 
     def __repr__(self):
-        repr_str = (
-            f"{INDENT*self.depth}IDX: {self.idx}, {self.command}, JMP: {self.jump}\n"
-        )
+        repr_str = f"{INDENT*self.depth}IDX: {self.idx}, {self.command}, JMP: {self.jump}\n"
         if self.params:
             param_str = "\n".join(map(str, self.params))
             repr_str += f"{INDENT*self.depth}PARAMETERS:\n{param_str}\n"
@@ -490,9 +500,7 @@ def link_instructions(instructions, root, offset=0, limit=None):
         elif inst.command == Command.Def:
             offset = link_instructions(instructions, inst, offset=offset)
         elif inst.command in (Command.If, Command.ElseIF, Command.Else):
-            offset = link_instructions(
-                instructions, inst, offset=offset, limit=offset + inst.jump - 1
-            )
+            offset = link_instructions(instructions, inst, offset=offset, limit=offset + inst.jump - 1)
         # elif inst.command == Command.Function:
         #     next_jump = offset
         #     while next_jump < len(instructions) and instructions[next_jump].command not in (Command.Jump, Command.Function, Command.If, Command.ElseIF, Command.Else, Command.EndIf):

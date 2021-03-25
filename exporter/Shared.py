@@ -21,6 +21,7 @@ from exporter.Mappings import (
     AbilityStat,
     PartConditionType,
     PartConditionComparisonType,
+    ActionCancelType,
 )
 
 
@@ -433,16 +434,8 @@ class PlayerActionHitAttribute(DBView):
                     r[ks] = KILLER_STATE[r[ks]]
         return res
 
-    def get(
-        self,
-        pk,
-        by=None,
-        fields=None,
-        order=None,
-        mode=DBManager.EXACT,
-        exclude_falsy=False,
-    ):
-        res = super().get(pk, by, fields, order, mode, exclude_falsy)
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False, expand_one=True):
+        res = super().get(pk, by, fields, order, mode, exclude_falsy, expand_one=expand_one)
         return self.process_result(res, exclude_falsy=exclude_falsy)
 
     S_PATTERN = re.compile(r"S\d+")
@@ -480,19 +473,50 @@ class CharacterMotion(DBView):
         return self.database.query_many(query=query, param=(state, ref), d_type=DBDict)
 
 
-class ActionParts(DBView):
-    LV_SUFFIX = re.compile(r"(.*LV)(\d{2})")
-    HIT_LABELS = ["_hitLabel", "_hitAttrLabel", "_abHitAttrLabel"]
-    # BURST_ATK_DISPLACEMENT = 1
+class ActionPartsHitLabel(DBView):
+    LV_PATTERN = re.compile(r"_LV\d{2}.*")
+    LV_CHLV_PATTERN = re.compile(r"_CHLV\d{2}")
+    LABEL_SORT = {
+        "_hitLabel": 0,
+        "_hitAttrLabel": 1,
+        "_hitAttrLabelSubList": 2,
+        "_abHitAttrLabel": 3,
+    }
 
+    def __init__(self, index):
+        super().__init__(index, "ActionPartsHitLabel")
+        # SELECT * FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob
+        self.name = f"View_{self.base_table}"
+        self.database.conn.execute(f"DROP VIEW IF EXISTS {self.name}")
+        self.database.conn.execute(
+            f"CREATE VIEW {self.name} AS SELECT ActionPartsHitLabel._ref AS _ref, ActionPartsHitLabel._source AS _source, PlayerActionHitAttribute.* FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob"
+        )
+        self.database.conn.commit()
+        self.tbl_keys = self.database.check_table(self.base_table).field_type.keys()
+
+    def process_result(self, res, exclude_falsy=True):
+        result_dict = {source: [] for source in self.LABEL_SORT.keys()}
+        for r in res:
+            source = r["_source"]
+            del r["_ref"]
+            del r["_source"]
+            result_dict[source].append(r)
+        for source in list(result_dict.keys()):
+            if not result_dict[source]:
+                del result_dict[source]
+            else:
+                result_dict[source] = self.index["PlayerActionHitAttribute"].process_result(result_dict[source], exclude_falsy=exclude_falsy)
+        return result_dict
+
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=True):
+        res = super().get(pk, by=by, fields=fields, order=order, mode=mode, exclude_falsy=exclude_falsy, expand_one=False)
+        return self.process_result(res, exclude_falsy=exclude_falsy)
+
+
+class ActionParts(DBView):
     def __init__(self, index):
         super().__init__(index, "ActionParts")
         self.animation_reference = None
-
-    # # figure out how it works again bleh
-    # def get_burst_action_parts(self, pk, fields=None, exclude_falsy=True, hide_ref=False):
-    #     # sub_parts = super().get((pk, pk+self.BURST_ATK_DISPLACEMENT), by='_ref', fields=fields, order='_ref ASC', mode=DBManager.RANGE, exclude_falsy=exclude_falsy)
-    #     # return self.process_result(sub_parts, exclude_falsy=exclude_falsy, hide_ref=hide_ref)
 
     def process_result(self, action_parts, exclude_falsy=True, hide_ref=True):
         # if isinstance(action_parts, dict):
@@ -500,40 +524,19 @@ class ActionParts(DBView):
         for r in action_parts:
             if "commandType" in r:
                 r["commandType"] = CommandType(r["commandType"])
+
+            hit_labels = self.index["ActionPartsHitLabel"].get(r["_Id"], by="_ref", order="_Id ASC")
+            if hit_labels:
+                r["_allHitLabels"] = hit_labels
+
             del r["_Id"]
             if hide_ref:
                 del r["_ref"]
 
-            for label in self.HIT_LABELS:
-                if label not in r or not r[label]:
-                    continue
-                res = self.LV_SUFFIX.match(r[label])
-                if res:
-                    base_label, _ = res.groups()
-                    hit_attrs = self.index["PlayerActionHitAttribute"].get(
-                        base_label,
-                        by="_Id",
-                        order="_Id ASC",
-                        mode=DBManager.LIKE,
-                        exclude_falsy=exclude_falsy,
-                    )
-                    if hit_attrs:
-                        r[label] = hit_attrs
-                elif "CMB" in r[label]:
-                    base_label = r[label]
-                    hit_attrs = self.index["PlayerActionHitAttribute"].get(
-                        base_label,
-                        by="_Id",
-                        order="_Id ASC",
-                        mode=DBManager.LIKE,
-                        exclude_falsy=exclude_falsy,
-                    )
-                    if hit_attrs:
-                        r[label] = hit_attrs
-                else:
-                    hit_attr = self.index["PlayerActionHitAttribute"].get(r[label], by="_Id", exclude_falsy=exclude_falsy)
-                    if hit_attr:
-                        r[label] = hit_attr
+            try:
+                r["_actionType"] = ActionCancelType(r["_actionType"])
+            except (KeyError, ValueError):
+                pass
 
             self.link(r, "_actionConditionId", "ActionCondition", exclude_falsy=exclude_falsy)
             self.link(

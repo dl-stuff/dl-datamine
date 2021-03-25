@@ -67,25 +67,84 @@ class CommandType(ShortEnum):
     SHIKIGAMI_BULLET = 138
 
 
+HIT_LABEL_FIELDS = ("_hitLabel", "_hitAttrLabel", "_hitAttrLabelSubList", "_abHitAttrLabel")
+# KAT_CHR_07_H01_LV01_CHLV02
+
+# HIT_LABEL_LV_CHLV = re.compile(r".*(_LV\d{2})(_CHLV\d{2})?.*")
+LV_PATTERN = re.compile(r"_LV\d{2}.*")
+
+
+def build_hitlabel_data(ref, k, hit_labels):
+    if not hit_labels:
+        return tuple()
+    if isinstance(hit_labels, str):
+        hit_labels = (hit_labels,)
+    processed = []
+    for idx, label in enumerate(hit_labels):
+        label = label.strip()
+        if not label:
+            continue
+        # has_lv = False
+        # has_chlv = False
+        # if lv_chlv := HIT_LABEL_LV_CHLV.match(label):
+        #     if lv_group := lv_chlv.group(1):
+        #         has_lv = True
+        #         label = label.replace(lv_group, "_LV{lv}")
+        #     if chlv_group := lv_chlv.group(2):
+        #         has_chlv = True
+        #         label = label.replace(chlv_group, "_CHLV{chlv}")
+        if LV_PATTERN.search(label):
+            label_glob = LV_PATTERN.sub("_LV[0-9][0-9]*", label)
+        elif not label.startswith("CMN_AVOID"):
+            label_glob = f"{label}*"
+        else:
+            label_glob = label
+        processed.append(
+            {
+                "_Id": f"{ref}{k}{idx}",
+                "_ref": ref,
+                "_source": k,
+                "_hitLabel": label,
+                "_hitLabelGlob": label_glob,
+                # "_hasCHLV": has_chlv,
+            }
+        )
+    return processed
+    # return (
+    #     {
+    #         "_Id": f"{ref}{k}{idx}",
+    #         "_ref": ref,
+    #         "_hitLabel": label.strip(),
+    #         "_source": k,
+    #     }
+    #     for idx, label in enumerate(hit_labels)
+    #     if label.strip()
+    # )
+
+
 # seen_id = set()
 def build_db_data(meta, ref, seq, data):
     db_data = {}
+    hitlabel_data = []
     for k in meta.field_type.keys():
         if k in data:
-            if isinstance(data[k], str):
-                db_data[k] = data[k].strip()
-            elif ACTION_PART.get_field(k) == DBTableMetadata.BLOB and not any(data[k]):
+            if ACTION_PART.get_field(k) == DBTableMetadata.BLOB and not any(data[k]):
                 db_data[k] = None
+            elif isinstance(data[k], str):
+                db_data[k] = data[k].strip()
             else:
                 db_data[k] = data[k]
         else:
             db_data[k] = None
+    db_data["_Id"] = f"{ref}{seq:05}"
+    for k in HIT_LABEL_FIELDS:
+        if k in data:
+            hitlabel_data.extend(build_hitlabel_data(db_data["_Id"], k, data[k]))
     if (loop := data.get("_loopData")) :
         db_data["_loopFlag"] = loop["flag"]
         db_data["_loopNum"] = loop["loopNum"]
         db_data["_loopFrame"] = loop["restartFrame"]
         db_data["_loopSec"] = loop["restartSec"]
-    db_data["_Id"] = f"{ref}{seq:05}"
     # if db_data['_Id'] in seen_id:
     #     print(db_data['_Id'])
     # seen_id.add(db_data['_Id'])
@@ -95,24 +154,24 @@ def build_db_data(meta, ref, seq, data):
     if cond_data["_conditionType"] and any(cond_data["_conditionValue"]):
         db_data["_conditionType"] = cond_data["_conditionType"]
         db_data["_conditionValue"] = cond_data["_conditionValue"]
-    return db_data
+    return db_data, hitlabel_data
 
 
 def build_arrange_data(meta, ref, seq, data):
     if not data.get("_abHitAttrLabel"):
-        return None
+        return None, None
     return build_db_data(meta, ref, seq, data)
 
 
 def build_bullet(meta, ref, seq, data):
-    db_data = build_db_data(meta, ref, seq, data)
+    db_data, hitlabel_data = build_db_data(meta, ref, seq, data)
     if (ab_label := data["_arrangeBullet"]["_abHitAttrLabel"]) :
-        db_data["_abHitAttrLabel"] = ab_label
+        hitlabel_data.extend(build_hitlabel_data(db_data["_Id"], "_abHitAttrLabel", ab_label))
     if (ab_duration := data["_arrangeBullet"]["_abDuration"]) :
         db_data["_abDuration"] = ab_duration
     if (ab_interval := data["_arrangeBullet"]["_abHitInterval"]) :
         db_data["_abHitInterval"] = ab_interval
-    return db_data
+    return db_data, hitlabel_data
 
 
 def build_formation_bullet(meta, ref, seq, data):
@@ -126,16 +185,16 @@ def build_formation_bullet(meta, ref, seq, data):
         except:
             pass
     if bullet_data:
-        db_data = build_db_data(meta, ref, seq, bullet_data)
+        db_data, hitlabel_data = build_db_data(meta, ref, seq, bullet_data)
         db_data["commandType"] = 100
         db_data["_bulletNum"] = bullet_num
-        return db_data
+        return db_data, hitlabel_data
     else:
-        return None
+        return None, None
 
 
 def build_marker(meta, ref, seq, data):
-    db_data = build_db_data(meta, ref, seq, data)
+    db_data, hitlabel_data = build_db_data(meta, ref, seq, data)
     if charge_lvl_sec := db_data.get("_chargeLvSec"):
         if "_nextLevelMarkerCount" in data and data["_nextLevelMarkerCount"]:
             for lvl in data["_nextLevelMarkerData"]:
@@ -144,14 +203,14 @@ def build_marker(meta, ref, seq, data):
             db_data["_chargeLvSec"] = None
         else:
             db_data["_chargeLvSec"] = charge_lvl_sec
-    return db_data
+    return db_data, hitlabel_data
 
 
 def build_animation(meta, ref, seq, data):
-    db_data = build_db_data(meta, ref, seq, data)
+    db_data, hitlabel_data = build_db_data(meta, ref, seq, data)
     if "_name" in data and data["_name"]:
         db_data["_animationName"] = data["_name"]
-    return db_data
+    return db_data, hitlabel_data
 
 
 ACTION_PART = DBTableMetadata(
@@ -199,9 +258,6 @@ ACTION_PART = DBTableMetadata(
         "_bulletDuration": DBTableMetadata.REAL,
         "_delayTime": DBTableMetadata.REAL,
         "_isHitDelete": DBTableMetadata.INT,
-        "_hitLabel": DBTableMetadata.TEXT,
-        "_hitAttrLabel": DBTableMetadata.TEXT,
-        "_abHitAttrLabel": DBTableMetadata.TEXT,
         "_abHitInterval": DBTableMetadata.REAL,
         "_abDuration": DBTableMetadata.REAL,
         "_bulletNum": DBTableMetadata.INT,
@@ -238,6 +294,7 @@ ACTION_PART = DBTableMetadata(
         # BULLETS - contains marker data, unsure if it does anything
         # '_useMarker': DBTableMetadata.INT,
         # '_marker': DBTableMetadata.BOLB (?)
+        "_isDelayAffectedBySpeedFactor": DBTableMetadata.INT,
         # ANIMATION
         "_animationName": DBTableMetadata.TEXT,
         "_isVisible": DBTableMetadata.INT,
@@ -273,6 +330,20 @@ ACTION_PART = DBTableMetadata(
     },
 )
 
+ACTION_PART_HIT_LABEL = DBTableMetadata(
+    "ActionPartsHitLabel",
+    pk="_Id",
+    field_type={
+        "_Id": DBTableMetadata.TEXT + DBTableMetadata.PK,
+        "_ref": DBTableMetadata.INT,
+        "_source": DBTableMetadata.TEXT,
+        "_hitLabel": DBTableMetadata.TEXT,
+        "_hitLabelGlob": DBTableMetadata.TEXT,
+        # "_hasLV": DBTableMetadata.INT,
+        # "_hasCHLV": DBTableMetadata.INT,
+    },
+)
+
 PROCESSORS = {}
 PROCESSORS[CommandType.PARTS_MOTION] = build_db_data
 PROCESSORS[CommandType.MARKER] = build_marker
@@ -299,9 +370,7 @@ PROCESSORS[CommandType.CONTROL] = build_db_data
 
 
 def log_schema_keys(schema_map, data, command_type):
-    schema_map[f'{data["commandType"]:03}-{command_type}'] = {
-        key: type(value).__name__ for key, value in data.items()
-    }
+    schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}
     for subdata in data.values():
         try:
             if (command_type := subdata.get("commandType")) :
@@ -315,7 +384,10 @@ def load_actions(db, path):
     file_filter = re.compile(r"PlayerAction_([0-9]+)\.json")
     db.drop_table(ACTION_PART.name)
     db.create_table(ACTION_PART)
+    db.drop_table(ACTION_PART_HIT_LABEL.name)
+    db.create_table(ACTION_PART_HIT_LABEL)
     sorted_data = []
+    sorted_hitlabel_data = []
     for root, _, files in os.walk(path):
         for file_name in tqdm(files, desc="action"):
             if file_name == "ActionPartsList.json":
@@ -349,9 +421,7 @@ def load_actions(db, path):
                             if not actdata:
                                 continue
                             action.append((seq, actdata))
-                            if (
-                                additional := actdata.get("_additionalCollision")
-                            ) and actdata["_addNum"]:
+                            if (additional := actdata.get("_additionalCollision")) and actdata["_addNum"]:
                                 for i, act in enumerate(additional):
                                     for j in range(actdata["_addNum"]):
                                         adjusted_seq = seq * 100 + i * 10 + j
@@ -363,16 +433,17 @@ def load_actions(db, path):
                                 command_type = CommandType(data["commandType"])
                             except TypeError:
                                 command_type = data["commandType"]
-                                print(
-                                    f"Unknown command type {command_type} in {file_name}"
-                                )
+                                print(f"Unknown command type {command_type} in {file_name}")
                             log_schema_keys(schema_map, data, command_type)
                             if command_type in PROCESSORS.keys():
                                 builder = PROCESSORS[command_type]
-                                db_data = builder(ACTION_PART, ref, seq, data)
+                                db_data, hitlabel_data = builder(ACTION_PART, ref, seq, data)
                                 if db_data is not None:
                                     sorted_data.append(db_data)
+                                if hitlabel_data:
+                                    sorted_hitlabel_data.extend(hitlabel_data)
     db.insert_many(ACTION_PART.name, sorted_data)
+    db.insert_many(ACTION_PART_HIT_LABEL.name, sorted_hitlabel_data)
     return schema_map
 
 

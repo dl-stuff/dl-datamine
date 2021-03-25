@@ -152,37 +152,24 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if clear_once_per_action:
             once_per_action.clear()
         part_hitattr_map = {}
-        for label in ActionParts.HIT_LABELS:
-            if (hitattr_lst := part.get(label)) :
-                if len(hitattr_lst) == 1:
-                    hitattr_lst = hitattr_lst[0]
-                if isinstance(hitattr_lst, dict):
-                    if (
+        if raw_hitattrs := part.get("_allHitLabels"):
+            for source, hitattr_lst in raw_hitattrs.items():
+                for hitattr in hitattr_lst:
+                    if isinstance(hitattr, str):
+                        continue
+                    if (not pattern or pattern.match(hitattr["_Id"])) and (
                         attr := convert_hitattr(
-                            hitattr_lst,
+                            hitattr,
                             part,
                             action,
                             once_per_action,
                             meta=meta,
                             skill=skill,
                         )
-                    ) :
-                        part_hitattr_map[label] = attr
-                elif isinstance(hitattr_lst, list):
-                    for hitattr in hitattr_lst:
-                        if (not pattern or pattern.match(hitattr["_Id"])) and (
-                            attr := convert_hitattr(
-                                hitattr,
-                                part,
-                                action,
-                                once_per_action,
-                                meta=meta,
-                                skill=skill,
-                            )
-                        ):
-                            part_hitattr_map[label] = attr
-                            if not pattern:
-                                break
+                    ):
+                        part_hitattr_map[source] = attr
+                        if not pattern:
+                            break
         if not part_hitattr_map:
             continue
         part_hitattrs = list(part_hitattr_map.values())
@@ -499,6 +486,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         # if 'BULLET' in part['commandType']
         if (delay := part.get("_delayTime", 0)) :
             attr["msl"] = fr(delay)
+            if part.get("_isDelayAffectedBySpeedFactor"):
+                attr["msl_spd"] = True
         # if attr_tag:
         #     attr['tag'] = attr_tag
         return attr
