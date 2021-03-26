@@ -3,8 +3,10 @@ from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
 COUNT_WEAPON_BONUS = "SELECT _WeaponType, SUM(_WeaponPassiveEffAtk) AS _Bonus FROM WeaponBody GROUP BY _WeaponType"
 
-COUNT_ADV_BY_MAX_LIMIT_BREAK = "SELECT _ElementalType, COUNT(_Id) as _Count FROM CharaData WHERE _MaxLimitBreakCount=? GROUP BY _ElementalType;"
-COUNT_DRG = "SELECT _ElementalType, COUNT(_Id) as _Count FROM DragonData GROUP BY _ElementalType"
+COUNT_ADV_BY_MAX_LIMIT_BREAK = (
+    "SELECT _ElementalType, COUNT(_Id) as _Count FROM CharaData WHERE _MaxLimitBreakCount=? AND _IsPlayable GROUP BY _ElementalType"
+)
+COUNT_DRG = "SELECT _ElementalType, COUNT(_Id) as _Count FROM DragonData WHERE _IsPlayable GROUP BY _ElementalType"
 
 ALBUM_BONUS_ADV = {4: 0.2, 5: 0.3}
 ALBUM_BONUS_DRG = 0.2
@@ -30,10 +32,10 @@ if __name__ == "__main__":
 
     print("=Adventurer Bonus=")
     for ele, bonus in adv_ele_passives.items():
-        print(f"{ele}:\t{bonus/100:.3f}")
-    print("")
-    for wep, bonus in adv_wep_passives.items():
-        print(f"{wep}:\t{bonus/100:.3f}")
+        print(f"{ele}:\t{bonus:.1f}%")
+    # print("")
+    # for wep, bonus in adv_wep_passives.items():
+    #     print(f"{wep}:\t{bonus/100:.3f}")
 
     drg_passives = {ele: 0 for ele in ELEMENTS.values()}
     for res in dbm.query_many(COUNT_DRG, tuple(), dict):
@@ -46,4 +48,4 @@ if __name__ == "__main__":
     print("")
     print("=Dragon Bonus=")
     for ele, bonus in drg_passives.items():
-        print(f"{ele}:\t{bonus/100:.3f}")
+        print(f"{ele}:\t{bonus:.1f}%")
