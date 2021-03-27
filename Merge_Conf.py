@@ -78,10 +78,6 @@ def merge_conf(name, kind, maplist=None, diff=None):
     depth = FMT_LIM.get(kind, 2)
     sim_path = os.path.join(SIM, target)
     gen_path = os.path.join(GEN, target)
-    import pprint
-
-    pprint.pprint(os.path.abspath(gen_path))
-    pprint.pprint(os.path.abspath(gen_path) in diff)
 
     if diff and os.path.abspath(gen_path) not in diff:
         return
@@ -152,9 +148,6 @@ if __name__ == "__main__":
         diff = None
         if args.diff:
             diff = get_gitdiff()
-        import pprint
-
-        pprint.pprint(diff)
         if args.name:
             merge_conf(args.name, args.kind, args.map, diff=diff)
         elif args.kind:
