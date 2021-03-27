@@ -1,9 +1,8 @@
 import argparse
-import sys
 import os
 import json
 import shutil
-from itertools import zip_longest
+import subprocess
 from exporter.AdvConf import fmt_conf
 
 SIM = "../dl/conf"
@@ -12,8 +11,17 @@ TIMING = {"startup", "recovery", "charge"}
 DO_NOT_MERGE = {
     # 'adv': {'interrupt', 'cancel'},
     "drg": {"startup", "recovery", "a"},
+    "wep": {"a"},
 }
 FMT_LIM = {"drg": 3, "wep": 4}
+
+
+def get_gitdiff():
+    os.chdir("out")
+    result = subprocess.check_output(["git", "diff", "--name-only", "gen"])
+    result = {os.path.abspath(p.decode("utf-8")) for p in result.split(b"\n")}
+    os.chdir("..")
+    return result
 
 
 def merge_subconf(simconf, genconf, kind=None):
@@ -54,7 +62,7 @@ def merge_conf_recurse(simconf, genconf, kind, mapdict, depth):
                 merge_subconf(subconf, genconf[gkey], kind)
 
 
-def merge_conf(name, kind, maplist=None):
+def merge_conf(name, kind, maplist=None, diff=None):
     mapdict = {}
     if maplist:
         mapdict = convert_map(maplist)
@@ -64,11 +72,20 @@ def merge_conf(name, kind, maplist=None):
         target = f"{name}.json"
         sim_path = os.path.join(SIM, target)
         gen_path = os.path.join(GEN, target)
+        if diff and os.path.abspath(gen_path) not in diff:
+            return
         shutil.copy(gen_path, sim_path)
-        return
     depth = FMT_LIM.get(kind, 2)
     sim_path = os.path.join(SIM, target)
     gen_path = os.path.join(GEN, target)
+    import pprint
+
+    pprint.pprint(os.path.abspath(gen_path))
+    pprint.pprint(os.path.abspath(gen_path) in diff)
+
+    if diff and os.path.abspath(gen_path) not in diff:
+        return
+
     if not os.path.exists(sim_path):
         return shutil.copy(gen_path, sim_path)
     with open(sim_path) as fn:
@@ -92,13 +109,13 @@ def convert_map(maplist):
     return mapdict
 
 
-def merge_kind_conf(kind):
+def merge_kind_conf(kind, diff=None):
     for _, _, files in os.walk(os.path.join(GEN, kind)):
         for fn in files:
             name, ext = os.path.splitext(fn)
             if ext != ".json":
                 continue
-            merge_conf(name, kind)
+            merge_conf(name, kind, diff=diff)
 
 
 def merge_all_conf():
@@ -120,6 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("-map", type=str, nargs="*", help="suffix map")
     parser.add_argument("-fmt", type=str, help="format a conf file")
     parser.add_argument("--all", action="store_true", help="run everything")
+    parser.add_argument("--diff", action="store_true", help="run diff only")
     args = parser.parse_args()
     if args.all:
         merge_all_conf()
@@ -131,7 +149,13 @@ if __name__ == "__main__":
         with open(args.fmt, "w") as fn:
             fmt_conf(data, f=fn, lim=3)
     else:
+        diff = None
+        if args.diff:
+            diff = get_gitdiff()
+        import pprint
+
+        pprint.pprint(diff)
         if args.name:
-            merge_conf(args.name, args.kind, args.map)
+            merge_conf(args.name, args.kind, args.map, diff=diff)
         elif args.kind:
-            merge_kind_conf(args.kind)
+            merge_kind_conf(args.kind, diff=diff)
