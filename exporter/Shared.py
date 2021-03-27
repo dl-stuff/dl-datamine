@@ -2,7 +2,6 @@ from typing import List, Dict, Any, Callable
 import json
 import re
 import os
-import errno
 from collections import defaultdict
 from tqdm import tqdm
 
@@ -22,6 +21,7 @@ from exporter.Mappings import (
     PartConditionType,
     PartConditionComparisonType,
     ActionCancelType,
+    AuraType,
 )
 
 
@@ -411,6 +411,22 @@ class BuffCountData(DBView):
         super().__init__(index, "BuffCountData")
 
 
+class AuraData(DBView):
+    def __init__(self, index):
+        super().__init__(index, "AuraData")
+
+    def process_result(self, res):
+        try:
+            res["_Type"] = AuraType(res["_Type"])
+        except (KeyError, ValueError):
+            pass
+        return res
+
+    def get(self, pk, **kwargs):
+        res = super().get(pk, **kwargs)
+        return self.process_result(res)
+
+
 class PlayerActionHitAttribute(DBView):
     def __init__(self, index):
         super().__init__(index, "PlayerActionHitAttribute")
@@ -429,6 +445,7 @@ class PlayerActionHitAttribute(DBView):
                 "BuffCountData",
                 exclude_falsy=exclude_falsy,
             )
+            self.link(r, "_AuraId", "AuraData", exclude_falsy=exclude_falsy)
             for ks in ("_KillerState1", "_KillerState2", "_KillerState3"):
                 if ks in r and r[ks] in KILLER_STATE:
                     r[ks] = KILLER_STATE[r[ks]]

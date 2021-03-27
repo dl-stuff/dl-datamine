@@ -341,3 +341,10 @@ class ActionCancelType(ShortEnum):
     Avoid = 2
     AvoidFront = 3
     AvoidBack = 4
+
+
+class AuraType(ShortEnum):
+    NONE = 0
+    HP = 1
+    ATTACK = 2
+    DEFENSE = 3

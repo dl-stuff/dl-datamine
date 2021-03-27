@@ -72,9 +72,8 @@ def merge_conf(name, kind, maplist=None, diff=None):
         target = f"{name}.json"
         sim_path = os.path.join(SIM, target)
         gen_path = os.path.join(GEN, target)
-        if diff and os.path.abspath(gen_path) not in diff:
-            return
         shutil.copy(gen_path, sim_path)
+        return
     depth = FMT_LIM.get(kind, 2)
     sim_path = os.path.join(SIM, target)
     gen_path = os.path.join(GEN, target)

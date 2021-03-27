@@ -26,6 +26,7 @@ from exporter.Mappings import (
     ActionTargetGroup,
     AbilityTargetAction,
     AbilityType,
+    AuraType,
 )
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
@@ -56,6 +57,67 @@ DEFAULT_AFF_IV = {
     "scorchrend": 2.9,
 }
 DISPEL = 100
+GENERIC_BUFF = ("skill_A", "skill_B", "skill_C", "skill_D", "skill_006_01")
+BUFFARG_KEY = {
+    "_RateAttack": ("att", "buff"),
+    "_RateDefense": ("defense", "buff"),
+    "_RateHP": ("maxhp", "buff"),
+    "_RateCritical": ("crit", "chance"),
+    "_EnhancedCritical": ("crit", "damage"),
+    "_RegenePower": ("heal", "buff"),
+    "_SlipDamageRatio": ("regen", "buff"),
+    "_RateRecoverySp": ("sp", "passive"),
+    "_RateAttackSpeed": ("spd", "buff"),
+    "_RateChargeSpeed": ("cspd", "buff"),
+    "_RateBurst": ("fs", "buff"),
+    "_RateSkill": ("s", "buff"),
+    "_EnhancedFire2": ("flame", "ele"),
+    "_RateRecovery": ("recovery", "buff"),
+    # '_RateDamageShield': ('shield', 'buff')
+    "_RatePoisonKiller": ("poison_killer", "passive"),
+    "_RateBurnKiller": ("burn_killer", "passive"),
+    "_RateFreezeKiller": ("freeze_killer", "passive"),
+    "_RateDarknessKiller": ("blind_killer", "passive"),
+    "_RateSwoonKiller": ("stun_killer", "passive"),
+    "_RateSlowMoveKiller": ("bog_killer", "passive"),
+    "_RateSleepKiller": ("sleep_killer", "passive"),
+    "_RateFrostbiteKiller": ("frostbite_killer", "passive"),
+    "_RateFlashheatKiller": ("flashburn_killer", "passive"),
+    "_RateCrashWindKiller": ("stormlash_killer", "passive"),
+    "_RateDarkAbsKiller": ("shadowblight_killer", "passive"),
+    "_RateDestroyFireKiller": ("scorchrend_killer", "passive"),
+}
+DEBUFFARG_KEY = {
+    "_RateDefense": "def",
+    "_RateDefenseB": "defb",
+    "_RateAttack": "attack",
+}
+AFFRES_KEY = {
+    "_RatePoison": "poison",
+    "_RateBurn": "burn",
+    "_RateFreeze": "freeze",
+    "_RateDarkness": "blind",
+    "_RateSwoon": "stun",
+    "_RateSlowMove": "bog",
+    "_RateSleep": "sleep",
+    "_RateFrostbite": "frostbite",
+    "_RateFlashheat": "flashburn",
+    "_RateCrashWind": "stormlash",
+    "_RateDarkAbs": "shadowblight",
+    "_RateDestroyFire": "scorchrend",
+}
+TENSION_KEY = {"_Tension": "energy", "_Inspiration": "inspiration"}
+# OVERWRITE = ('_Overwrite', '_OverwriteVoice', '_OverwriteGroupId')
+ENHANCED_SKILL = {
+    "_EnhancedSkill1": 1,
+    "_EnhancedSkill2": 2,
+    "_EnhancedSkillWeapon": 3,
+}
+AURA_TYPE_BUFFARGS = {
+    AuraType.HP: ("maxhp", "buff"),
+    AuraType.ATTACK: ("att", "buff"),
+    AuraType.DEFENSE: ("def", "buff"),
+}
 
 
 def snakey(name):
@@ -302,6 +364,24 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr["heal"] = heal
     if (crit := hitattr.get("_AdditionCritical")) :
         attr["crit"] = fr(crit)
+    if (aura_max := hitattr.get("_AuraMaxLimitLevel")) and (aura_data := hitattr.get("_AuraId")):
+        try:
+            publish_lv = aura_data.get("_PublishLevel")
+            # fr(aura_data.get("_DurationExtension"))
+            # aura_args = [[aura_data["_Id"], *AURA_TYPE_BUFFARGS[aura_data["_Type"]]]]
+            aura_args = [[aura_data["_Type"].value, *AURA_TYPE_BUFFARGS[aura_data["_Type"]]]]
+            self_aura = []
+            team_aura = []
+            for i in range(1, publish_lv):
+                self_aura.append([fr(aura_data.get(f"_Rate{i:02}")), aura_data.get(f"_Duration{i:02}")])
+            for i in range(publish_lv, publish_lv + aura_max):
+                team_aura.append([fr(aura_data.get(f"_Rate{i:02}")), aura_data.get(f"_Duration{i:02}")])
+            aura_args.append(self_aura)
+            aura_args.append(team_aura)
+            attr["aura"] = aura_args
+        except KeyError:
+            pass
+
     if part.get("commandType") == CommandType.FIRE_STOCK_BULLET:
         if (stock := part.get("_fireMaxCount", 0)) > 1:
             attr["extra"] = stock
@@ -332,7 +412,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         else:
             alt_buffs = []
             if meta and skill:
-                for ehs, s in AdvConf.ENHANCED_SKILL.items():
+                for ehs, s in ENHANCED_SKILL.items():
                     if (esk := actcond.get(ehs)) :
                         if isinstance(esk, int) or esk.get("_Id") in meta.all_chara_skills:
                             meta.chara_skill_loop.add(skill["_Id"])
@@ -378,7 +458,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             else:
                 buffs = []
                 other_overwrite = None
-                for tsn, btype in AdvConf.TENSION_KEY.items():
+                for tsn, btype in TENSION_KEY.items():
                     if (v := actcond.get(tsn)) :
                         if target in (
                             ActionTargetGroup.ALLY,
@@ -417,7 +497,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                             b.append(duration)
                         buffs.append(b)
                     if target == ActionTargetGroup.HOSTILE:
-                        for k, mod in AdvConf.DEBUFFARG_KEY.items():
+                        for k, mod in DEBUFFARG_KEY.items():
                             if (value := actcond.get(k)) :
                                 buffs.append(
                                     [
@@ -428,7 +508,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                                         mod,
                                     ]
                                 )
-                        for k, aff in AdvConf.AFFRES_KEY.items():
+                        for k, aff in AFFRES_KEY.items():
                             if (value := actcond.get(k)) :
                                 buffs.append(["affres", fr(value), duration, aff])
                     else:
@@ -437,7 +517,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                         if drain := actcond.get("_RateHpDrain"):
                             # FIXME: distinction between self vs team?
                             buffs.append(["drain", fr(drain), duration])
-                        for k, mod in AdvConf.BUFFARG_KEY.items():
+                        for k, mod in BUFFARG_KEY.items():
                             if (value := actcond.get(k)) :
                                 if (bele := actcond.get("_TargetElemental")) and btype != "self":
                                     buffs.append(
@@ -515,7 +595,6 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
         elif ("HIT" in part["commandType"].name or "BULLET" in part["commandType"].name) and s is None:
             s = fr(part["_seconds"])
         elif part["commandType"] == CommandType.ACTIVE_CANCEL:
-            # print(part)
             recovery = part["_seconds"]
             actid = part.get("_actionId")
             if seq and actid in signals:
@@ -810,7 +889,7 @@ def convert_skill_common(skill, lv):
                     mstate = sum(a["duration"] for a in animation)
                 else:
                     mstate = animation["duration"]
-            if part.get("_motionState") in AdvConf.GENERIC_BUFF:
+            if part.get("_motionState") in GENERIC_BUFF:
                 mstate = 1.0
         if part["commandType"] == CommandType.TIMESTOP:
             timestop = part["_seconds"] + part["_duration"]
@@ -955,63 +1034,6 @@ class SkillProcessHelper:
 
 
 class AdvConf(CharaData, SkillProcessHelper):
-    GENERIC_BUFF = ("skill_A", "skill_B", "skill_C", "skill_D", "skill_006_01")
-    BUFFARG_KEY = {
-        "_RateAttack": ("att", "buff"),
-        "_RateDefense": ("defense", "buff"),
-        "_RateHP": ("maxhp", "buff"),
-        "_RateCritical": ("crit", "chance"),
-        "_EnhancedCritical": ("crit", "damage"),
-        "_RegenePower": ("heal", "buff"),
-        "_SlipDamageRatio": ("regen", "buff"),
-        "_RateRecoverySp": ("sp", "passive"),
-        "_RateAttackSpeed": ("spd", "buff"),
-        "_RateChargeSpeed": ("cspd", "buff"),
-        "_RateBurst": ("fs", "buff"),
-        "_RateSkill": ("s", "buff"),
-        "_EnhancedFire2": ("flame", "ele"),
-        "_RateRecovery": ("recovery", "buff"),
-        # '_RateDamageShield': ('shield', 'buff')
-        "_RatePoisonKiller": ("poison_killer", "passive"),
-        "_RateBurnKiller": ("burn_killer", "passive"),
-        "_RateFreezeKiller": ("freeze_killer", "passive"),
-        "_RateDarknessKiller": ("blind_killer", "passive"),
-        "_RateSwoonKiller": ("stun_killer", "passive"),
-        "_RateSlowMoveKiller": ("bog_killer", "passive"),
-        "_RateSleepKiller": ("sleep_killer", "passive"),
-        "_RateFrostbiteKiller": ("frostbite_killer", "passive"),
-        "_RateFlashheatKiller": ("flashburn_killer", "passive"),
-        "_RateCrashWindKiller": ("stormlash_killer", "passive"),
-        "_RateDarkAbsKiller": ("shadowblight_killer", "passive"),
-        "_RateDestroyFireKiller": ("scorchrend_killer", "passive"),
-    }
-    DEBUFFARG_KEY = {
-        "_RateDefense": "def",
-        "_RateDefenseB": "defb",
-        "_RateAttack": "attack",
-    }
-    AFFRES_KEY = {
-        "_RatePoison": "poison",
-        "_RateBurn": "burn",
-        "_RateFreeze": "freeze",
-        "_RateDarkness": "blind",
-        "_RateSwoon": "stun",
-        "_RateSlowMove": "bog",
-        "_RateSleep": "sleep",
-        "_RateFrostbite": "frostbite",
-        "_RateFlashheat": "flashburn",
-        "_RateCrashWind": "stormlash",
-        "_RateDarkAbs": "shadowblight",
-        "_RateDestroyFire": "scorchrend",
-    }
-    TENSION_KEY = {"_Tension": "energy", "_Inspiration": "inspiration"}
-    # OVERWRITE = ('_Overwrite', '_OverwriteVoice', '_OverwriteGroupId')
-    ENHANCED_SKILL = {
-        "_EnhancedSkill1": 1,
-        "_EnhancedSkill2": 2,
-        "_EnhancedSkillWeapon": 3,
-    }
-
     MISSING_ENDLAG = []
     DO_NOT_FIND_LOOP = (
         10350302,  # summer norwin
@@ -1089,7 +1111,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                         actcond = ab.get(f"_VariousId{i}str")
                     sid = ab.get("_OnSkill")
                     cd = actcond.get("_CoolDownTimeSec")
-                    for ehs, s in AdvConf.ENHANCED_SKILL.items():
+                    for ehs, s in ENHANCED_SKILL.items():
                         if (esk := actcond.get(ehs)) :
                             eid = next(self.eskill_counter)
                             if group is None:
@@ -1134,33 +1156,61 @@ class AdvConf(CharaData, SkillProcessHelper):
             skill = self.index["SkillData"].get(res[f"_EditSkillId"], exclude_falsy=exclude_falsy, full_query=True)
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
 
+        if (udrg := res.get("_UniqueDragonId")) :
+            if not res.get("_ModeChangeType") and res.get("_IsConvertDragonSkillLevel"):
+                dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
+                res["_ModeId2"] = {
+                    "_UniqueComboId": {"_ActionId": dragon["_DefaultSkill"], "_MaxComboNum": dragon["_ComboMax"]},
+                    "_Skill1Id": dragon["_Skill1"],
+                    "_Skill2Id": dragon["_Skill2"],
+                }
+                if (ddodge := dragon.get("dodge")) :
+                    conf["dodge"] = {"startup": ddodge["recovery"]}
+                else:
+                    conf["dodge"] = {"startup": DrgConf.COMMON_ACTIONS_DEFAULTS["dodge"]}
+            else:
+                conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id")
+                del conf["dragonform"]["d"]
+            # dum
+            self.index["ActionParts"].animation_reference = (
+                "CharacterMotion",
+                int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'),
+            )
+
         for m in range(1, 5):
             if (mode := res.get(f"_ModeId{m}")) :
-                mode = self.index["CharaModeData"].get(mode, exclude_falsy=exclude_falsy, full_query=True)
-                if not mode:
-                    continue
+                mode_name = None
+                if not isinstance(mode, dict):
+                    mode = self.index["CharaModeData"].get(mode, exclude_falsy=exclude_falsy, full_query=True)
+                    if not mode:
+                        continue
+                else:
+                    mode_name = "_ddrive"
                 if (gunkind := mode.get("_GunMode")) :
                     conf["c"]["gun"].append(gunkind)
                     # if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
                     #     continue
-                try:
-                    mode_name = unidecode(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
-                except:
-                    if res.get("_ModeChangeType") == 3 and m == 2:
-                        mode_name = "ddrive"
-                        if (udrg := res.get("_UniqueDragonId")) :
-                            dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
-                            for s in (1, 2):
-                                try:
-                                    mode[f"_Skill{s}Id"]["_ActionId1"]["_Parts"].extend(dragon[f"_Skill{s}"]["_ActionId1"]["_Parts"])
-                                except KeyError:
-                                    mode[f"_Skill{s}Id"]["_ActionId1"] = dragon[f"_Skill{s}"]["_ActionId1"]["_Parts"]
-                    else:
-                        mode_name = f"mode{m}"
+                if not mode_name:
+                    try:
+                        mode_name = unidecode(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
+                    except:
+                        if res.get("_ModeChangeType") == 3 and m == 2:
+                            mode_name = "_ddrive"
+                            if (udrg := res.get("_UniqueDragonId")) :
+                                dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
+                                for s in (1, 2):
+                                    try:
+                                        mode[f"_Skill{s}Id"]["_ActionId1"]["_Parts"].extend(dragon[f"_Skill{s}"]["_ActionId1"]["_Parts"])
+                                    except KeyError:
+                                        mode[f"_Skill{s}Id"]["_ActionId1"] = dragon[f"_Skill{s}"]["_ActionId1"]["_Parts"]
+                        elif m == 1:
+                            mode_name = ""
+                        else:
+                            mode_name = f"_mode{m}"
                 for s in (1, 2):
                     if (skill := mode.get(f"_Skill{s}Id")) :
                         self.chara_skills[skill.get("_Id")] = (
-                            f"s{s}_{mode_name}",
+                            f"s{s}{mode_name}",
                             s,
                             skill,
                             None,
@@ -1170,7 +1220,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     if not marker:
                         marker = self.index["PlayerAction"].get(burst["_Id"] + 4, exclude_falsy=True)
                     for fs, fsc in convert_fs(burst, marker).items():
-                        conf[f"{fs}_{mode_name}"] = fsc
+                        conf[f"{fs}{mode_name}"] = fsc
                 if (xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict):
                     xalt_pattern = re.compile(r".*H0\d_LV02$") if conf["c"]["spiral"] else None
                     for prefix in ("", "Ex"):
@@ -1183,9 +1233,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                                     xlen=xalt["_MaxComboNum"],
                                     pattern=xalt_pattern,
                                 ):
-                                    conf[f"x{n}_{mode_name}{prefix.lower()}"] = xaltconf
+                                    conf[f"x{n}{mode_name}{prefix.lower()}"] = xaltconf
                                 elif xalt_pattern is not None and (xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"])):
-                                    conf[f"x{n}_{mode_name}{prefix.lower()}"] = xaltconf
+                                    conf[f"x{n}{mode_name}{prefix.lower()}"] = xaltconf
         try:
             conf["c"]["gun"] = list(set(conf["c"]["gun"]))
         except KeyError:
@@ -1194,10 +1244,6 @@ class AdvConf(CharaData, SkillProcessHelper):
         # self.abilities = self.last_abilities(res, as_mapping=True)
         # pprint(self.abilities)
         # for k, seq, skill in self.chara_skills.values():
-
-        if (udrg := res.get("_UniqueDragonId")) :
-            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id")
-            del conf["dragonform"]["d"]
 
         if conf["c"]["spiral"]:
             mlvl = {1: 4, 2: 3}
@@ -1396,6 +1442,10 @@ def ab_cond(ab, chains=False):
         cparts.append(f"hp≤{condval}")
     elif cond == AbilityCondition.TOTAL_HITCOUNT_MORE:
         cparts.append(f"hit{condval}")
+    elif cond == AbilityCondition.ON_BUFF_FIELD:
+        cparts.append("zone")
+    elif cond == AbilityCondition.HAS_AURA_TYPE:
+        cparts.append(f"aura_{condval}")
     if cparts:
         return "_".join(cparts)
 
