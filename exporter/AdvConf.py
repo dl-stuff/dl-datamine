@@ -12,7 +12,7 @@ import argparse
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.Actions import CommandType
-from exporter.Shared import ActionParts, PlayerAction, AbilityData
+from exporter.Shared import ActionCondition, ActionParts, PlayerAction, AbilityData
 from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
@@ -559,6 +559,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                     elif other_overwrite:
                         buffs.append(f"-overwrite_{other_overwrite}")
                     attr["buff"] = buffs
+                    if target == ActionTargetGroup.HOSTILE or actcond.get("_CurseOfEmptinessInvalid"):
+                        attr["coei"] = 1
     if attr:
         iv = fr(part["_seconds"])
         if iv > 0:
