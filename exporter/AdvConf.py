@@ -199,6 +199,8 @@ def clean_hitattr(attr, once_per_action):
         for act in ONCE_PER_ACT:
             try:
                 del attr[act]
+                if act == "buff" and "coei" in attr:
+                    del attr["coei"]
                 need_copy = True
             except KeyError:
                 continue
@@ -1510,12 +1512,22 @@ def ab_damage(**kwargs):
 VALUE_CONDS = {
     AbilityCondition.TOTAL_HITCOUNT_MORE: "hitcount",
     AbilityCondition.HP_MORE_MOMENT: "hpmore",
+    AbilityCondition.HP_MORE: "hpmore",
     AbilityCondition.HP_LESS: "hpless",
 }
 OTHER_CONDS = {
     AbilityCondition.SKILLCONNECT_SKILL1_MOMENT: "primed",
     AbilityCondition.ON_BUFF_FIELD: "poised",
     AbilityCondition.GET_BUFF_TENSION: "energy",
+}
+ACTCOND_TO_AB = {
+    "_RateAttack": "att",
+    "_RateCritical": "crit_chance",
+    "_EnhancedCritical": "crit_damage",
+    "_RateDefense": "defense",
+    "_RegenePower": "heal",
+    "_RateAttackSpeed": "spd_buff",
+    "_RateBurst": "fs_buff",
 }
 
 
@@ -1645,27 +1657,15 @@ def ab_actcond(**kwargs):
         elif (val := actcond.get("_Inspiration")) :
             full_astr = f"{astr}_inspiration"
             value = int(val)
-        elif (att := actcond.get("_RateAttack")) :
-            full_astr = f"{astr}_att"
-            value = fr(att)
-        elif (cchance := actcond.get("_RateCritical")) :
-            full_astr = f"{astr}_crit_chance"
-            value = fr(cchance)
-        elif (cdmg := actcond.get("_EnhancedCritical")) :
-            full_astr = f"{astr}_crit_damage"
-            value = fr(cdmg)
-        elif (defence := actcond.get("_RateDefense")) :
-            full_astr = f"{astr}_defense"
-            value = fr(defence)
-        elif (regen := actcond.get("_SlipDamageRatio")) :
+        elif (regen := actcond.get("_SlipDamageRatio")) and actcond.get("_ValidRegeneHP"):
             full_astr = f"{astr}_regen"
             value = fr(regen * -100)
-        elif (heal := actcond.get("_RegenePower")) :
-            full_astr = f"{astr}_heal"
-            value = fr(heal)
-        elif (fsdmg := actcond.get("_RateBurst")) :
-            full_astr = f"{astr}_fs_buff"
-            value = fr(fsdmg)
+        else:
+            for key, suffix in ACTCOND_TO_AB.items():
+                if val := actcond.get(key):
+                    full_astr = f"{astr}_{suffix}"
+                    value = fr(val)
+                    break
         if full_astr and value:
             return [full_astr, value, *extra_args]
 
