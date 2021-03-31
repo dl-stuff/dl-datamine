@@ -1633,9 +1633,13 @@ def ab_actcond(**kwargs):
             extra_args.append(count)
         else:
             check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=5)
-    elif cond == AbilityCondition.JUST_AVOID:
+    elif cond in (AbilityCondition.AVOID, AbilityCondition.JUST_AVOID):
         astr = "dodge"
-        check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=15)
+        if cond == AbilityCondition.JUST_AVOID:
+            check_duration_and_cooltime(ab, actcond, extra_args, default_duration=-1, default_cooltime=-1)
+            extra_args.append("iframe")
+        else:
+            check_duration_and_cooltime(ab, actcond, extra_args, default_cooltime=15)
     elif cond in VALUE_CONDS:
         condval = ab.get("_ConditionValue")
         if condval == int(condval):
