@@ -638,9 +638,13 @@ class PlayerAction(DBView):
             player_action["_BurstMarkerId"] = marker
         else:
             try:
-                if action_parts[0]["_motionState"] == "charge_13":
-                    player_action["_BurstMarkerId"] = pa_id + PlayerAction.BURST_MARKER_DISPLACEMENT
-                    if marker := self.get(player_action["_BurstMarkerId"], exclude_falsy=exclude_falsy):
+                if (
+                    player_action.get("_EnhancedBurstAttackOffsetFlag")
+                    or action_parts[0]["_motionState"].startswith("charge_13")
+                    or action_parts[0]["_motionState"].startswith("charge_12_c")
+                ):
+                    guess_burst_id = pa_id + PlayerAction.BURST_MARKER_DISPLACEMENT
+                    if marker := self.get(guess_burst_id, exclude_falsy=exclude_falsy):
                         player_action["_BurstMarkerId"] = marker
             except:
                 pass

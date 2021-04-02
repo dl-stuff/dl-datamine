@@ -93,12 +93,12 @@ def build_hitlabel_data(ref, k, hit_labels):
         #     if chlv_group := lv_chlv.group(2):
         #         has_chlv = True
         #         label = label.replace(chlv_group, "_CHLV{chlv}")
-        if LV_PATTERN.search(label):
-            label_glob = LV_PATTERN.sub("_LV[0-9][0-9]*", label)
-        elif not label.startswith("CMN_AVOID"):
-            label_glob = f"{label}*"
-        else:
+        if label.startswith("CMN_AVOID"):
             label_glob = label
+        elif LV_PATTERN.search(label):
+            label_glob = LV_PATTERN.sub("_LV[0-9][0-9]*", label)
+        else:
+            label_glob = f"{label}*"
         processed.append(
             {
                 "_Id": f"{ref}{k}{idx}",
