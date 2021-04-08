@@ -516,7 +516,10 @@ def load_aiscript_file(file_path):
     instructions = []
     depth = 0
     with open(file_path, "r") as f:
-        raw = json.load(f)
+        try:
+            raw = json.load(f)
+        except json.decoder.JSONDecodeError:
+            return
         name = raw["name"]
         for idx, container in enumerate(raw["_containers"]):
             inst = Instruction(idx, container, depth=depth)

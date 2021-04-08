@@ -22,6 +22,8 @@ from exporter.Mappings import (
     PartConditionComparisonType,
     ActionCancelType,
     AuraType,
+    ActionSignalType,
+    CharacterControl,
 )
 
 
@@ -552,6 +554,15 @@ class ActionParts(DBView):
 
             try:
                 r["_actionType"] = ActionCancelType(r["_actionType"])
+            except (KeyError, ValueError):
+                pass
+
+            if r["commandType"] == CommandType.SEND_SIGNAL:
+                r["_signalType"] = ActionSignalType(r.get("_signalType", 0))
+
+            try:
+                r["_charaCommand"] = CharacterControl(r["_charaCommand"])
+                r["_charaCommandArgs"] = json.loads(r["_charaCommandArgs"])
             except (KeyError, ValueError):
                 pass
 

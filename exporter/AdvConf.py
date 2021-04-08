@@ -147,7 +147,7 @@ INDENT = "    "
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
     if depth >= lim:
-        if k == "attr":
+        if k.startswith("attr"):
             r_str_lst = []
             end = len(data) - 1
             for idx, d in enumerate(data):
@@ -338,8 +338,13 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr["crisis"] = fr(crisis - 1)
         if (bufc := hitattr.get("_DamageUpRateByBuffCount")) :
             attr["bufc"] = fr(bufc)
+        if (dragon := hitattr.get("_AttrDragon")) :
+            attr["drg"] = dragon
         if (od := hitattr.get("_ToBreakDmgRate")) and od != 1:
             attr["odmg"] = fr(od)
+        # wow i fucking hate cykagames
+        if part.get("DEBUG_GLUCA_FLAG"):
+            attr["gluca"] = 1
     if "sp" not in once_per_action:
         if (sp := hitattr.get("_AdditionRecoverySp")) :
             attr["sp"] = fr(sp)
@@ -376,8 +381,10 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             aura_args = [
                 [
                     aura_data["_Type"].value,
+                    # aura_data["_Id"],
                     publish_lv,
                     aura_max,
+                    fr(aura_data.get("_DurationExtension", 0)),
                     *AURA_TYPE_BUFFARGS[aura_data["_Type"]],
                 ]
             ]
@@ -389,7 +396,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         except KeyError:
             pass
 
-    if part.get("commandType") == CommandType.FIRE_STOCK_BULLET:
+    if part.get("commandType") == CommandType.STOCK_BULLET_FIRE:
         if (stock := part.get("_fireMaxCount", 0)) > 1:
             attr["extra"] = stock
         elif (stock := action.get("_MaxStockBullet", 0)) > 1:
@@ -424,7 +431,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         if (delay := part.get("_delayTime", 0)) :
             attr["msl"] = fr(delay)
             if part.get("_isDelayAffectedBySpeedFactor"):
-                attr["msl_spd"] = True
+                attr["msl_spd"] = 1
         # if attr_tag:
         #     attr['tag'] = attr_tag
         return attr
@@ -635,7 +642,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
                 followed_by.add((recovery, actid))
             # else:
             #     recovery = max(timestop, recovery)
-        elif part["commandType"] == CommandType.TIMESTOP:
+        elif part["commandType"] == CommandType.HIT_STOP:
             # timestop = part.get('_seconds', 0) + part.get('_duration', 0)
             ts_second = part.get("_seconds", 0)
             ts_delay = part.get("_duration", 0)
@@ -647,9 +654,9 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
             #             # found_hit = found_hit or ('HIT' in npart['commandType'] or 'BULLET' in npart['commandType'])
             #             if 'HIT' in npart['commandType'] or 'BULLET' in npart['commandType']:
             #                 npart['_seconds'] += ts_delay
-        elif is_dragon and part["commandType"] == CommandType.TIMECURVE and not part.get("_isNormalizeCurve"):
+        elif is_dragon and part["commandType"] == CommandType.MOVE_TIME_CURVE and not part.get("_isNormalizeCurve"):
             timecurve = part.get("_duration")
-        # if part['commandType'] == 'PARTS_MOTION' and part.get('_animation'):
+        # if part['commandType'] == 'PLAY_MOTION' and part.get('_animation'):
         #     motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
         #     if part['_animation']['name'][0] == 'D':
         #         use_motion = True
@@ -763,7 +770,7 @@ def convert_fs(burst, marker=None, cancel=None):
         )
     else:
         for mpart in marker["_Parts"]:
-            if mpart["commandType"] == CommandType.MARKER:
+            if mpart["commandType"] == CommandType.GEN_MARKER:
                 break
         charge = mpart.get("_chargeSec", 0.5)
         fsconf["fs"] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
@@ -913,7 +920,7 @@ def convert_skill_common(skill, lv):
                 followed_by.add((part["_seconds"], part["_actionId"]))
             else:
                 actcancel = part["_seconds"]
-        if part["commandType"] == CommandType.PARTS_MOTION and mstate is None:
+        if part["commandType"] == CommandType.PLAY_MOTION and mstate is None:
             if (animation := part.get("_animation")) :
                 if isinstance(animation, list):
                     mstate = sum(a["duration"] for a in animation)
@@ -921,7 +928,7 @@ def convert_skill_common(skill, lv):
                     mstate = animation["duration"]
             if part.get("_motionState") in GENERIC_BUFF:
                 mstate = 1.0
-        if part["commandType"] == CommandType.TIMESTOP:
+        if part["commandType"] == CommandType.HIT_STOP:
             timestop = part["_seconds"] + part["_duration"]
         if actcancel and mstate:
             break
@@ -1163,6 +1170,8 @@ class AdvConf(CharaData, SkillProcessHelper):
         if (udrg := res.get("_UniqueDragonId")) :
             if not res.get("_ModeChangeType") and res.get("_IsConvertDragonSkillLevel"):
                 dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
+                for part in dragon["_Skill1"]["_ActionId1"]["_Parts"]:
+                    part["DEBUG_GLUCA_FLAG"] = True
                 res["_ModeId2"] = {
                     "_UniqueComboId": {"_ActionId": dragon["_DefaultSkill"], "_MaxComboNum": dragon["_ComboMax"]},
                     "_Skill1Id": dragon["_Skill1"],
@@ -1203,10 +1212,17 @@ class AdvConf(CharaData, SkillProcessHelper):
                             if (udrg := res.get("_UniqueDragonId")) :
                                 dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
                                 for s in (1, 2):
-                                    try:
-                                        mode[f"_Skill{s}Id"]["_ActionId1"]["_Parts"].extend(dragon[f"_Skill{s}"]["_ActionId1"]["_Parts"])
-                                    except KeyError:
-                                        mode[f"_Skill{s}Id"]["_ActionId1"] = dragon[f"_Skill{s}"]["_ActionId1"]["_Parts"]
+                                    a_skey = f"_Skill{s}Id"
+                                    d_skey = f"_Skill{s}"
+                                    if not d_skey in dragon:
+                                        continue
+                                    if s == 1:
+                                        for part in dragon[d_skey]["_ActionId1"]["_Parts"]:
+                                            part["DEBUG_GLUCA_FLAG"] = True
+                                    if a_skey in mode:
+                                        mode[a_skey]["_ActionId1"]["_Parts"].extend(dragon[d_skey]["_ActionId1"]["_Parts"])
+                                    else:
+                                        mode[a_skey] = dragon[d_skey]
                         elif m == 1:
                             mode_name = ""
                         else:
@@ -1565,7 +1581,7 @@ def ab_actcond(**kwargs):
                 condval = int(condval)
             astr = f"hpless_{condval}"
             check_duration_and_cooltime(ab, actcond, extra_args)
-    elif cond == AbilityCondition.HITCOUNT_MOMENT:
+    elif cond == AbilityCondition.HIT_ATTRIBUTECOUNT_MOMENT:
         if ab.get("_TargetAction") == AbilityTargetAction.BURST_ATTACK:
             return [
                 "fsprep",
@@ -1736,7 +1752,7 @@ def ab_eledmg(**kwargs):
 
 def ab_dpcharge(**kwargs):
     ab = kwargs.get("ab")
-    if ab.get("_ConditionType") == AbilityCondition.HITCOUNT_MOMENT:
+    if ab.get("_ConditionType") == AbilityCondition.HIT_ATTRIBUTECOUNT_MOMENT:
         return [f"dpcombo", int(ab.get("_ConditionValue"))]
 
 
