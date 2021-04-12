@@ -265,7 +265,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             and ((bld := part.get("_bulletDuration", 0)) > bci or (bld := part.get("_duration", 0)) > bci)
             and ("_hitLabel" in part_hitattr_map or "_hitAttrLabel" in part_hitattr_map)
         ):
-            gen = int(bld / bci) + 1
+            gen = int(bld / bci)
             delay = bci
             ref_attrs = []
             if part_hitattr_map.get("_hitLabel"):
@@ -629,7 +629,7 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
                 signals[actid] = -10
                 if part.get("_motionEnd"):
                     signal_end.add(actid)
-        elif ("HIT" in part["commandType"].name or "BULLET" in part["commandType"].name) and s is None:
+        elif part.get("_allHitLabels") and s is None:
             s = fr(part["_seconds"])
         elif part["commandType"] == CommandType.ACTIVE_CANCEL:
             recovery = part["_seconds"]
@@ -1581,7 +1581,7 @@ def ab_actcond(**kwargs):
                 condval = int(condval)
             astr = f"hpless_{condval}"
             check_duration_and_cooltime(ab, actcond, extra_args)
-    elif cond == AbilityCondition.HIT_ATTRIBUTECOUNT_MOMENT:
+    elif cond == AbilityCondition.HITCOUNT_MOMENT:
         if ab.get("_TargetAction") == AbilityTargetAction.BURST_ATTACK:
             return [
                 "fsprep",
@@ -1752,7 +1752,7 @@ def ab_eledmg(**kwargs):
 
 def ab_dpcharge(**kwargs):
     ab = kwargs.get("ab")
-    if ab.get("_ConditionType") == AbilityCondition.HIT_ATTRIBUTECOUNT_MOMENT:
+    if ab.get("_ConditionType") == AbilityCondition.HITCOUNT_MOMENT:
         return [f"dpcombo", int(ab.get("_ConditionValue"))]
 
 
@@ -1813,7 +1813,7 @@ def convert_ability(ab, skip_abtype=tuple(), chains=False):
                     var_str=ab.get(f"_VariousId{i}str"),
                     chains=chains,
                 )
-            except:
+            except Exception as e:
                 res = None
             if res:
                 converted.append(res)
