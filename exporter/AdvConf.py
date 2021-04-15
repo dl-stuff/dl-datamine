@@ -7,8 +7,10 @@ import itertools
 from collections import defaultdict
 from unidecode import unidecode
 from tqdm import tqdm
-from pprint import pprint, pformat
+from pprint import pprint
 import argparse
+from ctypes import c_float
+
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.Actions import CommandType
@@ -140,6 +142,12 @@ def confsort(a):
         except IndexError:
             return k
     return k
+
+
+def float_ceil(value, percent):
+    c_float_value = c_float(c_float(percent).value * value).value
+    int_value = int(c_float_value)
+    return int_value if int_value == c_float_value else int_value + 1
 
 
 INDENT = "    "
@@ -1013,16 +1021,44 @@ class SkillProcessHelper:
             if isinstance(ab, int):
                 ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
             for a in (1, 2, 3):
-                if ab.get("_AbilityType1") == AbilityType.EnhancedSkill:  # alt skill
+                if ab.get(f"_AbilityType{a}") == AbilityType.EnhancedSkill:  # alt skill
                     s = int(ab["_TargetAction1"].name[-1])
                     eid = next(self.eskill_counter)
-                    group = "enhanced" if eid == 1 else f"enhanced{eid}"
-                    self.chara_skills[ab[f"_VariousId1a"]["_Id"]] = (
+                    if existing_skill := self.chara_skills.get(ab[f"_VariousId{a}a"]["_Id"]):
+                        group = existing_skill[0].split("_")[-1]
+                    else:
+                        eid = next(self.eskill_counter)
+                        group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                    self.chara_skills[ab[f"_VariousId{a}a"]["_Id"]] = (
                         f"s{s}_{group}",
                         s,
-                        ab[f"_VariousId1a"],
-                        skill["_Id"],
+                        ab[f"_VariousId{a}a"],
+                        ab[f"_VariousId{a}a"]["_Id"],
                     )
+                elif ab.get(f"_AbilityType{a}") == AbilityType.ChangeState:
+                    actcond = ab.get(f"_VariousId{a}a")
+                    if not actcond:
+                        actcond = ab.get(f"_VariousId{a}str")
+                    if not actcond:
+                        continue
+                    if (ab.get("_ConditionType") == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (
+                        ab.get("_ConditionType") == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")
+                    ):
+                        sconf["sp_regen"] = float_ceil(sconf["sp"], -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"))
+                    for ehs, s in ENHANCED_SKILL.items():
+                        if (esk := actcond.get(ehs)) :
+                            if existing_skill := self.chara_skills.get(esk.get("_Id")):
+                                group = existing_skill[0].split("_")[-1]
+                            else:
+                                eid = next(self.eskill_counter)
+                                group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                            self.chara_skills[esk["_Id"]] = (
+                                f"s{s}_{group}",
+                                s,
+                                esk,
+                                esk["_Id"],
+                            )
+
         return sconf, k
 
     def process_skill(self, res, conf, mlvl, all_levels=False):
@@ -1445,6 +1481,7 @@ HP_LEQ = (
 def ab_cond(ab, chains=False):
     cond = ab.get("_ConditionType")
     condval = ab.get("_ConditionValue")
+    condval2 = ab.get("_ConditionValue2")
     ele = ab.get("_ElementalType")
     wep = ab.get("_WeaponType")
     cparts = []
@@ -1456,6 +1493,10 @@ def ab_cond(ab, chains=False):
         condval = int(condval)
     except TypeError:
         condval = 0
+    try:
+        condval2 = int(condval2)
+    except TypeError:
+        condval2 = 0
     if cond in HP_GEQ:
         cparts.append(f"hp{condval}")
     elif cond in HP_LEQ:
@@ -1466,6 +1507,10 @@ def ab_cond(ab, chains=False):
         cparts.append("zone")
     elif cond == AbilityCondition.HAS_AURA_TYPE:
         cparts.append(f"amp_{condval}")
+    elif cond == AbilityCondition.SELF_AURA_LEVEL_MORE:
+        cparts.append(f"amp_{condval}_self_{condval2}")
+    elif cond == AbilityCondition.PARTY_AURA_LEVEL_MORE:
+        cparts.append(f"amp_{condval}_team_{condval2}")
     if cparts:
         return "_".join(cparts)
 
