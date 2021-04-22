@@ -138,6 +138,15 @@ class AbilityData(DBView):
         return res.get(f"_VariousId{i}str", None)
 
     @staticmethod
+    def first_a_id(res, i):
+        try:
+            key = f"_VariousId{i}a"
+            return key, res[key]
+        except KeyError:
+            key = f"_VariousId{i}"
+            return key, res[key]
+
+    @staticmethod
     def generic_description(name):
         def f(ad, res, i):
             a_ids = AbilityData.a_ids(res, i)
@@ -171,101 +180,63 @@ class AbilityData(DBView):
 
     @staticmethod
     def stat_ability(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"stat {AbilityStat(a_id)}"
+        key, value = AbilityData.first_a_id(res, i)
+        res[key] = AbilityStat(value)
         return res
 
     @staticmethod
-    def affliction_resist(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"affliction resist {AFFLICTION_TYPES.get(a_id, a_id)}"
+    def affliction_ability(ad, res, i):
+        key, value = AbilityData.first_a_id(res, i)
+        res[key] = AFFLICTION_TYPES.get(value, value)
         return res
 
     @staticmethod
-    def affliction_proc_rate(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"affliction proc rate {AFFLICTION_TYPES.get(a_id, a_id)}"
-        return res
-
-    @staticmethod
-    def tribe_resist(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"tribe resist {TRIBE_TYPES.get(a_id, a_id)}"
-        return res
-
-    @staticmethod
-    def tribe_bane(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"tribe bane {TRIBE_TYPES.get(a_id, a_id)}"
+    def tribe_ability(ad, res, i):
+        key, value = AbilityData.first_a_id(res, i)
+        res[key] = TRIBE_TYPES.get(value, value)
         return res
 
     @staticmethod
     def action_condition(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i)
         res, a_str = AbilityData.link_various_str(ad, res, i)
-        res[f"_Description{i}"] = f"action condition {a_ids, a_str}"
-        return res
-
-    @staticmethod
-    def affliction_punisher(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"affliction punisher {AFFLICTION_TYPES.get(a_id, a_id)}"
+        # res[f"_Description{i}"] = f"action condition {a_ids, a_str}"
         return res
 
     @staticmethod
     def conditional_action_grant(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i, view="ActionGrant")
-        res[f"_Description{i}"] = f"conditional action grant {a_ids}"
+        # res[f"_Description{i}"] = f"conditional action grant {a_ids}"
         return res
 
     @staticmethod
-    def elemental_resist(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"elemental resist {ELEMENTS.get(a_id, a_id)}"
+    def elemental_ability(ad, res, i):
+        key, value = AbilityData.first_a_id(res, i)
+        res[key] = ELEMENTS.get(value, value)
         return res
 
     @staticmethod
     def action_grant(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i, view="ActionGrant")
-        res[f"_Description{i}"] = f"action grant {a_ids}"
+        # res[f"_Description{i}"] = f"action grant {a_ids}"
         return res
 
     @staticmethod
     def ability_reference(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i, view="AbilityData")
-        res[f"_Description{i}"] = f"ability reference {a_ids}"
+        # res[f"_Description{i}"] = f"ability reference {a_ids}"
         return res
 
     @staticmethod
     def skill_reference(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i, view="SkillData")
-        res[f"_Description{i}"] = f"skill reference {a_ids}"
+        # res[f"_Description{i}"] = f"skill reference {a_ids}"
         return res
 
     @staticmethod
     def action_reference(ad, res, i):
         res, a_ids = AbilityData.link_various_ids(ad, res, i, view="PlayerAction")
-        res[f"_Description{i}"] = f"action reference {a_ids}"
-        return res
-
-    @staticmethod
-    def random_1_action_condition(ad, res, i):
-        res, a_ids = AbilityData.link_various_ids(ad, res, i)
-        res, a_str = AbilityData.link_various_str(ad, res, i)
-        res[f"_Description{i}"] = f"random 1 action condition {a_ids, a_str}"
-        return res
-
-    @staticmethod
-    def random_n_action_condition(ad, res, i):
-        res, a_ids = AbilityData.link_various_ids(ad, res, i)
-        res, a_str = AbilityData.link_various_str(ad, res, i)
-        res[f"_Description{i}"] = f"random N action condition {a_ids, a_str}"
-        return res
-
-    @staticmethod
-    def elemental_damage(ad, res, i):
-        a_id = AbilityData.a_ids(res, i)[0]
-        res[f"_Description{i}"] = f"elemental damage {ELEMENTS.get(a_id, a_id)}"
+        # res[f"_Description{i}"] = f"action reference {a_ids}"
         return res
 
     @staticmethod
@@ -336,10 +307,10 @@ class AbilityData(DBView):
 
 ABILITY_TYPES = {
     1: AbilityData.stat_ability,
-    2: AbilityData.affliction_resist,
-    3: AbilityData.affliction_proc_rate,
-    4: AbilityData.tribe_resist,
-    5: AbilityData.tribe_bane,
+    2: AbilityData.affliction_ability,
+    3: AbilityData.affliction_ability,
+    4: AbilityData.tribe_ability,
+    5: AbilityData.tribe_ability,
     # 6: AbilityData.generic_description('damage'),
     # 7: AbilityData.generic_description('critical rate'),
     # 8: AbilityData.generic_description('recovery potency'),
@@ -353,7 +324,7 @@ ABILITY_TYPES = {
     # 17: AbilityData.generic_description('skill prep'),
     # 18: AbilityData.generic_description('buff time'),
     # 19: AbilityData.generic_description('debuff time'),
-    20: AbilityData.affliction_punisher,
+    20: AbilityData.affliction_ability,
     # 21: AbilityData.generic_description('player exp'),
     # 22: AbilityData.generic_description('adv exp'),
     # 23: AbilityData.generic_description('rupies'),
@@ -361,7 +332,7 @@ ABILITY_TYPES = {
     25: AbilityData.conditional_action_grant,
     # 26: AbilityData.generic_description('critical damage'),
     # 27: AbilityData.generic_description('shapeshift prep'),
-    28: AbilityData.elemental_resist,
+    28: AbilityData.elemental_ability,
     # 29: AbilityData.generic_description('specific enemy resist'),
     # 30: AbilityData.generic_description('specific enemy bane'),
     # 31 32
@@ -383,18 +354,18 @@ ABILITY_TYPES = {
     # 48: AbilityData.generic_description('dragon gauge decrease rate'),
     # 49: AbilityData.generic_description('dragon gauge self'),
     # 50 do nothing
-    51: AbilityData.random_1_action_condition,
+    51: AbilityData.action_condition,
     # 52: AbilityData.generic_description('buff icon critical rate'),
     # 53
     # 54: AbilityData.generic_description('combo damage boost'),
     # 55: AbilityData.generic_description('combo time'),
     # 56: AbilityData.generic_description('dragondrive'),
-    57: AbilityData.elemental_damage,
+    57: AbilityData.elemental_ability,
     # 58: AbilityData.generic_description('dragondrive charge'),
     # 59: AbilityData.generic_description('debuff time'),
     # 60: AbilityData.generic_description('stop autofire'),
     # 61: AbilityData.generic_description('mode change'),
-    62: AbilityData.random_n_action_condition,
+    62: AbilityData.action_condition,
     63: AbilityData.action_condition_timer,
     # 64: AbilityData.generic_description('cp gauge gain'),
     65: AbilityData.action_reference,  # dodge

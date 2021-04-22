@@ -326,8 +326,8 @@ class DBView:
         self.database.delete_view(self.name)
         self.name = self.base_table
 
-    def export_all_to_folder(self, out_dir, ext=".json", exclude_falsy=True, **kargs):
-        all_res = self.get_all(exclude_falsy=exclude_falsy)
+    def export_all_to_folder(self, out_dir, ext=".json", exclude_falsy=True, where=None, order=None, **kargs):
+        all_res = self.get_all(exclude_falsy=exclude_falsy, where=where, order=order)
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             res = self.process_result(res, exclude_falsy=exclude_falsy, **kargs)

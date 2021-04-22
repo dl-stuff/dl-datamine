@@ -237,8 +237,9 @@ class CharaData(DBView):
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
+        where = "_ElementalType != 99 OR _Id=19900004"
         out_dir = os.path.join(out_dir, "adventurers")
-        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, where=where, condense=True)
 
     def export_one_to_folder(self, pk=10250101, out_dir="./out", ext=".json", exclude_falsy=True):
         out_dir = os.path.join(out_dir, "adventurers")

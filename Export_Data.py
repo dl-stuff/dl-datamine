@@ -7,6 +7,7 @@ from exporter.Dragons import DragonData
 from exporter.Enemy import EnemyParam
 from exporter.Weapons import WeaponBody, WeaponType
 from exporter.Wyrmprints import AbilityCrest
+from exporter.BattleRoyal import BattleRoyalUnit, BattleRoyalCharaSkin
 
 # from exporter.Shared import (
 #     ActionCondition,
@@ -22,6 +23,8 @@ CLASSES = [
     WeaponBody,
     AbilityCrest,
     WeaponType,
+    BattleRoyalUnit,
+    BattleRoyalCharaSkin,
 ]
 
 if __name__ == "__main__":

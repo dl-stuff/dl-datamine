@@ -28,6 +28,7 @@ from exporter.Mappings import (
     ActionTargetGroup,
     AbilityTargetAction,
     AbilityType,
+    AbilityStat,
     AuraType,
 )
 
@@ -1127,7 +1128,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         10350302,  # summer norwin
         10650101,  # gala sarisse
     )
-    SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1, 109501023: 1}
+    SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1, 109501023: 1, 104501034: 1}
     EX_CATEGORY_NAMES = {
         1: "Lance",
         2: "Blade",
@@ -1506,7 +1507,11 @@ def ab_cond(ab, chains=False):
     elif cond == AbilityCondition.ON_BUFF_FIELD:
         cparts.append("zone")
     elif cond == AbilityCondition.HAS_AURA_TYPE:
-        cparts.append(f"amp_{condval}")
+        if condval2 == 1:
+            target = "self"
+        else:
+            target = "team"
+        cparts.append(f"amp_{condval}_{target}")
     elif cond == AbilityCondition.SELF_AURA_LEVEL_MORE:
         cparts.append(f"amp_{condval}_self_{condval2}")
     elif cond == AbilityCondition.PARTY_AURA_LEVEL_MORE:
@@ -1515,12 +1520,21 @@ def ab_cond(ab, chains=False):
         return "_".join(cparts)
 
 
-AB_STATS = {1: "hp", 2: "a", 4: "sp", 5: "dh", 8: "dt", 10: "spd", 12: "cspd"}
+AB_STATS = {
+    AbilityStat.Hp: "hp",
+    AbilityStat.Atk: "a",
+    AbilityStat.Spr: "sp",
+    AbilityStat.Dpr: "dh",
+    AbilityStat.DragonTime: "dt",
+    AbilityStat.AttackSpeed: "spd",
+    AbilityStat.BurstSpeed: "fspd",
+    AbilityStat.ChargeSpeed: "cspd",
+}
 
 
 def ab_stats(**kwargs):
     if (stat := AB_STATS.get(kwargs.get("var_a"))) and (upval := kwargs.get("upval")):
-        if kwargs.get("ex") and stat == "a":
+        if kwargs.get("ex") and stat in "a":
             return [stat, upval / 100, "ex"]
         res = [stat, upval / 100]
         if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
@@ -1530,7 +1544,7 @@ def ab_stats(**kwargs):
 
 def ab_aff_edge(**kwargs):
     if (a_id := kwargs.get("var_a")) :
-        return [f"edge_{AFFLICTION_TYPES.get(a_id, a_id)}", kwargs.get("upval")]
+        return [f"edge_{a_id}", kwargs.get("upval")]
 
 
 def ab_damage(**kwargs):
@@ -1758,9 +1772,19 @@ def ab_generic(name, div=100):
     return ab_whatever
 
 
+def ab_bufftime(**kwargs):
+    if (upval := kwargs.get("upval")) :
+        res = ["bt", fr(upval / 100)]
+        if kwargs.get("ex"):
+            res.append("ex")
+        elif (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
+            res.append(condstr)
+        return res
+
+
 def ab_aff_k(**kwargs):
     if (a_id := kwargs.get("var_a")) :
-        res = [f"k_{AFFLICTION_TYPES.get(a_id, a_id)}", kwargs.get("upval") / 100]
+        res = [f"k_{a_id}", kwargs.get("upval") / 100]
         if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
             res.append(condstr)
         return res
@@ -1776,7 +1800,7 @@ def ab_tribe_k(**kwargs):
 
 def ab_aff_res(**kwargs):
     if (a_id := kwargs.get("var_a")) :
-        aff = AFFLICTION_TYPES.get(a_id, a_id)
+        aff = a_id
         if aff == 99:
             res = ["affshield", kwargs.get("ab").get("_OccurenceNum")]
         else:
@@ -1792,7 +1816,7 @@ def ab_psalm(**kwargs):
 
 
 def ab_eledmg(**kwargs):
-    return [f"ele_{ELEMENTS.get(kwargs.get('var_a')).lower()}", kwargs.get("upval") / 100]
+    return [f"ele_{kwargs.get('var_a').lower()}", kwargs.get("upval") / 100]
 
 
 def ab_dpcharge(**kwargs):
@@ -1810,7 +1834,7 @@ ABILITY_CONVERT = {
     AbilityType.AddRecoverySp: ab_generic("spf"),
     AbilityType.AddRecoveryDp: ab_actcond,
     AbilityType.SpCharge: ab_prep,
-    AbilityType.BuffExtension: ab_generic("bt"),
+    AbilityType.BuffExtension: ab_bufftime,
     AbilityType.DebuffExtension: ab_generic("dbt"),
     AbilityType.AbnormalKiller: ab_aff_k,
     AbilityType.CriticalDamageUp: ab_generic("cd"),
