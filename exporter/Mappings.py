@@ -289,6 +289,7 @@ class AbilityType(ShortEnum):
     ActDamageDown = 78
     AutoAvoidProbability = 79
     LimitCriticalAddRate = 80
+    AddReborn = 81
 
 
 class AbilityStat(ShortEnum):
@@ -324,6 +325,8 @@ class PartConditionType(ShortEnum):
     ActionContainerHitCount = 9
     ActionCriticalStatus = 10
     HumanOrDragon = 11
+    BulletTagContains = 12
+    InitialOwner = 13
 
 
 class PartConditionComparisonType(ShortEnum):

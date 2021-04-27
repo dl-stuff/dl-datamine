@@ -14,7 +14,7 @@ from ctypes import c_float
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.Actions import CommandType
-from exporter.Shared import ActionCondition, ActionParts, PlayerAction, AbilityData
+from exporter.Shared import ActionCondition, ActionParts, PlayerAction, AbilityData, ActionPartsHitLabel
 from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
@@ -226,7 +226,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     for part in actparts:
         if clear_once_per_action:
             once_per_action.clear()
-        part_hitattr_map = {}
+        part_hitattr_map = {"_hitAttrLabelSubList": []}
         if raw_hitattrs := part.get("_allHitLabels"):
             for source, hitattr_lst in raw_hitattrs.items():
                 for hitattr in hitattr_lst:
@@ -242,20 +242,33 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                             skill=skill,
                         )
                     ):
-                        part_hitattr_map[source] = attr
+                        if source == "_hitAttrLabelSubList":
+                            part_hitattr_map[source].append(attr)
+                        else:
+                            part_hitattr_map[source] = attr
                         if not pattern:
                             break
         if not part_hitattr_map:
             continue
-        part_hitattrs = list(part_hitattr_map.values())
+        part_hitattrs = []
+        for key in ActionPartsHitLabel.LABEL_SORT:
+            try:
+                value = part_hitattr_map[key]
+            except KeyError:
+                continue
+            if isinstance(value, list):
+                part_hitattrs.extend(value)
+            else:
+                part_hitattrs.append(value)
         is_msl = True
         if (blt := part.get("_bulletNum", 0)) > 1 and "_hitAttrLabel" in part_hitattr_map and not "extra" in part_hitattr_map["_hitAttrLabel"]:
-            last_copy, need_copy = clean_hitattr(part_hitattr_map["_hitAttrLabel"].copy(), once_per_action)
-            if need_copy:
-                part_hitattrs.append(last_copy)
-                part_hitattrs.append(blt - 1)
-            else:
-                part_hitattrs.append(blt)
+            for hattr in (part_hitattr_map["_hitAttrLabel"], *part_hitattr_map["_hitAttrLabelSubList"]):
+                last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
+                if need_copy:
+                    part_hitattrs.append(last_copy)
+                    part_hitattrs.append(blt - 1)
+                else:
+                    part_hitattrs.append(blt)
         gen, delay = None, None
         if (gen := part.get("_generateNum")) :
             delay = part.get("_generateDelay")
@@ -281,6 +294,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 ref_attrs.append(part_hitattr_map.get("_hitLabel"))
             if part_hitattr_map.get("_hitAttrLabel"):
                 ref_attrs.append(part_hitattr_map.get("_hitAttrLabel"))
+                ref_attrs.extend(part_hitattr_map.get("_hitAttrLabelSubList"))
         # if adv is not None:
         #     print(adv.name)
         elif part.get("_loopFlag") and "_hitAttrLabel" in part_hitattr_map:
@@ -292,7 +306,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             else:
                 gen = loopnum
             gen += 1
-            ref_attrs = [part_hitattr_map["_hitAttrLabel"]]
+            ref_attrs = [part_hitattr_map["_hitAttrLabel"], *part_hitattr_map["_hitAttrLabelSubList"]]
             is_msl = False
         gen_attrs = []
         timekey = "msl" if is_msl else "iv"
