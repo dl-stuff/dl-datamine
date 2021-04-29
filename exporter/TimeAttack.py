@@ -136,7 +136,7 @@ def value_sort(item):
     return -item[1]
 
 
-def weighted_usage_data(quest_id, timestamp, weigh_by_rank=True):
+def weighted_usage_data(quest_id, timestamp, weigh_by_rank=True, no_write=False):
     with open(os.path.join(OUTPUT_DIR, f"{quest_id}_converted_{timestamp}.json"), "r") as fn:
         data = json.load(fn)
     chara_usage = defaultdict(float)
@@ -155,10 +155,12 @@ def weighted_usage_data(quest_id, timestamp, weigh_by_rank=True):
             for amulet in player["amulet"]:
                 amulet_usage[amulet["name"]] += weight
     weighted = {
-        "chara": dict(sorted(chara_usage.items(), key=value_sort)),
-        "dragon": dict(sorted(dragon_usage.items(), key=value_sort)),
-        "amulet": dict(sorted(amulet_usage.items(), key=value_sort)),
+        "Chara": dict(sorted(chara_usage.items(), key=value_sort)),
+        "Dragon": dict(sorted(dragon_usage.items(), key=value_sort)),
+        "Amulet": dict(sorted(amulet_usage.items(), key=value_sort)),
     }
+    if no_write:
+        return weighted
     prefix = "weighted" if weigh_by_rank else "usage"
     weighted_outfile = os.path.join(OUTPUT_DIR, f"{quest_id}_{prefix}_{timestamp}.json")
     with open(weighted_outfile, "w") as fn:
@@ -166,12 +168,30 @@ def weighted_usage_data(quest_id, timestamp, weigh_by_rank=True):
     print(f"Wrote {weighted_outfile}")
 
 
+def weighted_usage_as_csv(quest_id, timestamp):
+    usage = weighted_usage_data(quest_id, timestamp, no_write=True, weigh_by_rank=False)
+    weighted = weighted_usage_data(quest_id, timestamp, no_write=True)
+    wu_outfile = os.path.join(OUTPUT_DIR, f"{quest_id}_weightedusage_{timestamp}.csv")
+    with open(wu_outfile, "w") as fn:
+        for category in usage:
+            fn.write(f"{category},Usage,Weighted,\n")
+            for item in usage[category]:
+                fn.write(item)
+                fn.write(",")
+                fn.write(str(usage[category][item]))
+                fn.write(",")
+                fn.write(str(weighted[category][item]))
+                fn.write(",\n")
+            fn.write("\n")
+
+
 # 227030104 tart solo
 # 227030105 tart coop
 if __name__ == "__main__":
-    quest_id = 227030105
+    quest_id = 227030104
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     # prepare_icons()
     timestamp = get_timeattack_data(quest_id)
-    weighted_usage_data(quest_id, timestamp)
-    weighted_usage_data(quest_id, timestamp, weigh_by_rank=False)
+    # weighted_usage_data(quest_id, timestamp)
+    # weighted_usage_data(quest_id, timestamp, weigh_by_rank=False)
+    weighted_usage_as_csv(quest_id, timestamp)
