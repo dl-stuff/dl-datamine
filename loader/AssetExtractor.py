@@ -777,7 +777,7 @@ if __name__ == "__main__":
 
     IMAGE_PATTERNS = {
         "jp": {
-            r"^images/fort": None,
+            r"^images/icon/chara/m": None,
         }
     }
 

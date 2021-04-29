@@ -249,4 +249,4 @@ class CharaData(DBView):
 if __name__ == "__main__":
     index = DBViewIndex()
     view = CharaData(index)
-    view.export_all_to_folder()
+    view.export_one_to_folder(10750505)
