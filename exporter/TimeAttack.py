@@ -8,6 +8,7 @@ from collections import defaultdict
 from loader.AssetExtractor import Extractor
 from loader.Database import DBManager
 
+TIMEATTACK_INDEX = "https://dragalialost.com/api/index.php?lang=en_us&type=event_web&action=index_list"
 TIMEATTACK_URL = "https://dragalialost.com/api/index.php?lang=en_us&type=event_web&action=ranking_data&quest_id={quest_id}"
 OUTPUT_DIR = "_timeattack"
 ICON_PATTERNS = {
@@ -19,11 +20,16 @@ ICON_PATTERNS = {
 }
 QUERY_CHARA_NAME = "SELECT _Name, _SecondName FROM View_CharaData WHERE _BaseId=? AND _VariationId=?"
 QUERY_DRAGON_NAME = "SELECT _Name, _SecondName FROM View_DragonData WHERE _BaseId=? AND _VariationId=?"
-QUERY_AMULET_NAME = "SELECT _Name FROM View_AbilityCrest WHERE _BaseId=?"
+QUERY_AMULET_NAME = "SELECT View_AbilityData._Name, AbilityCrest._CrestSlotType, View_AbilityData._AbilityType1UpValue FROM AbilityCrest INNER JOIN View_AbilityData ON AbilityCrest._Abilities13=View_AbilityData._Id WHERE AbilityCrest._BaseId=?"
+
+# some magical knowledge
+FORM_TO_VALUE = {
+    "Strength Doublebuff +{ability_val0}%": {1: 13, 2: 10},
+}
 
 
 def calculate_percent_difference(i1, i2):
-    if i1.mode != i2.mode:
+    if i1.mode != i2.mode and (i1.mode not in ("RGB", "RGBA") or i2.mode not in ("RGB", "RGBA")):
         return 100
     if i1.size != i2.size:
         return 100
@@ -59,6 +65,14 @@ def query_name_from_icon(img_url, category, query, dbm, seen_icons):
         if not query_res:
             raise RuntimeError(f"{base_id} not found in {category}")
         name = query_res["_Name"]
+        try:
+            if query_res["_AbilityType1UpValue"]:
+                name = name.format(ability_val0=int(query_res["_AbilityType1UpValue"]))
+            else:
+                name = name.format(ability_val0=FORM_TO_VALUE[name][query_res["_CrestSlotType"]])
+        except KeyError:
+            pass
+        name = name.replace(" {ability_shift0}", "")
     else:
         base_id = parts[0]
         var_id = parts[1]
@@ -109,8 +123,9 @@ def get_timeattack_data(quest_id):
     if os.path.isfile(iconmap_outfile):
         with open(iconmap_outfile, "r") as fn:
             seen_icons = json.load(fn)
+        seen_icons.update({"": "Empty", None: "Empty"})
     else:
-        seen_icons = {"": "Empty"}
+        seen_icons = {"": "Empty", None: "Empty"}
     for entry in tqdm(data["ranking"]["ranking_data"], desc="icon to names"):
         for player_slots in entry["player_list"]:
             convert_player_slots(player_slots, dbm, seen_icons)
@@ -119,6 +134,8 @@ def get_timeattack_data(quest_id):
         json.dump(data, fn, indent=2, ensure_ascii=False, sort_keys=True)
     print(f"Wrote {converted_outfile}")
 
+    del seen_icons[""]
+    del seen_icons[None]
     with open(iconmap_outfile, "w") as fn:
         json.dump(seen_icons, fn, indent=2, sort_keys=True)
     print(f"Wrote {iconmap_outfile}")
@@ -185,13 +202,46 @@ def weighted_usage_as_csv(quest_id, timestamp):
             fn.write("\n")
 
 
-# 227030104 tart solo
-# 227030105 tart coop
+def get_timeattack_index():
+    response = requests.get(TIMEATTACK_INDEX)
+    if response.status_code != 200:
+        return
+    res_json = response.json()
+    all_quest_ids = {}
+    for entry in res_json["data"]["index_list"].values():
+        for tab in entry.values():
+            all_quest_ids[tab["quest_id"]] = tab["title"]
+            print(tab["quest_id"], tab["title"])
+    return all_quest_ids
+
+
+def test_image_diff():
+    i1 = Image.open("_timeattack/9842825c6c9c024bea230bf7140aaa0b.png")
+    i2 = Image.open("_timeattack/200009_01.png")
+    print(calculate_percent_difference(i1, i2))
+    exit()
+
+
+# 210010103 High Midgardsormr
+# 210020103 High Mercury
+# 210030103 High Brunhilda
+# 210040103 High Jupiter
+# 210050103 High Zodiark
+
+# 227010104 Solo Volk
+# 227010105 Co-op Volk
+# 227020104 Solo Kai
+# 227020105 Co-op Kai
+# 227030104 Solo Tart
+# 227030105 Co-op Tart
 if __name__ == "__main__":
-    quest_id = 227030104
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     # prepare_icons()
-    timestamp = get_timeattack_data(quest_id)
-    # weighted_usage_data(quest_id, timestamp)
-    # weighted_usage_data(quest_id, timestamp, weigh_by_rank=False)
-    weighted_usage_as_csv(quest_id, timestamp)
+    # get_timeattack_index()
+    # exit()
+    for quest_id in (227010104, 227010105, 227020104, 227020105):
+        timestamp = get_timeattack_data(quest_id)
+        # timestamp = 1619683200
+        weighted_usage_data(quest_id, timestamp)
+        weighted_usage_data(quest_id, timestamp, weigh_by_rank=False)
+        weighted_usage_as_csv(quest_id, timestamp)

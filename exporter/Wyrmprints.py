@@ -136,6 +136,8 @@ class AbilityCrest(DBView):
     @staticmethod
     def outfile_name(res, ext=".json"):
         name = "UNKNOWN" if "_Name" not in res else res["_Name"]
+        # FIXME: do better name sanitation here
+        name = name.replace('"', "")
         return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
