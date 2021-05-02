@@ -1041,11 +1041,11 @@ class SkillProcessHelper:
                     )
 
         if (ab := skill.get(f"_Ability{lv}")) :
-            self.parse_skill_ab(skill, action, sconf, ab)
+            self.parse_skill_ab(k, seq, skill, action, sconf, ab)
 
         return sconf, k
 
-    def parse_skill_ab(self, skill, action, sconf, ab):
+    def parse_skill_ab(self, k, seq, skill, action, sconf, ab):
         if isinstance(ab, int):
             ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
         for a in (1, 2, 3):
@@ -1053,7 +1053,7 @@ class SkillProcessHelper:
             if ab_type == AbilityType.ReferenceOther:
                 for k in ("a", "b", "c"):
                     if sub_ab := ab.get(f"_VariousId{a}{k}"):
-                        self.parse_skill_ab(skill, action, sconf, sub_ab)
+                        self.parse_skill_ab(k, seq, skill, action, sconf, sub_ab)
             if ab_type == AbilityType.EnhancedSkill:  # alt skill
                 s = int(ab["_TargetAction1"].name[-1])
                 eid = next(self.eskill_counter)
@@ -1069,39 +1069,42 @@ class SkillProcessHelper:
                     ab[f"_VariousId{a}a"]["_Id"],
                 )
             elif ab_type == AbilityType.ChangeState:
-                actcond = ab.get(f"_VariousId{a}a")
-                if not actcond:
-                    hitattr = ab.get(f"_VariousId{a}str")
-                    if (attr := convert_hitattr(hitattr, DUMMY_PART, action, set(), meta=self, skill=skill)) :
-                        if (cooltime := ab.get("_CoolTime")) :
-                            attr["cd"] = cooltime
-                        condtype = ab.get("_ConditionType")
-                        if condtype in HP_GEQ:
-                            attr["cond"] = ["hp>", fr(ab["_ConditionValue"])]
-                        elif condtype in HP_LEQ:
-                            attr["cond"] = ["hp<=", fr(ab["_ConditionValue"])]
-                        try:
-                            sconf["attr"].append(attr)
-                        except KeyError:
-                            sconf["attr"] = [attr]
+                condtype = ab.get("_ConditionType")
+                hitattr = ab.get(f"_VariousId{a}str")
+                if not hitattr:
+                    actcond = ab.get(f"_VariousId{a}a")
+                    if (condtype == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (
+                        condtype == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")
+                    ):
+                        sconf["sp_regen"] = float_ceil(sconf["sp"], -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"))
+                        continue
+                    hitattr = {"_ActionCondition1": ab.get(f"_VariousId{a}a")}
+                if not (attr := convert_hitattr(hitattr, DUMMY_PART, action, set(), meta=self, skill=skill)):
                     continue
-                if (ab.get("_ConditionType") == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (
-                    ab.get("_ConditionType") == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")
-                ):
-                    sconf["sp_regen"] = float_ceil(sconf["sp"], -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"))
-                for ehs, s in ENHANCED_SKILL.items():
-                    if (esk := actcond.get(ehs)) :
-                        if existing_skill := self.chara_skills.get(esk.get("_Id")):
-                            group = existing_skill[0].split("_")[-1]
-                        else:
-                            eid = next(self.eskill_counter)
-                            group = "enhanced" if eid == 1 else f"enhanced{eid}"
-                        self.chara_skills[esk["_Id"]] = (
-                            f"s{s}_{group}",
-                            s,
-                            esk,
-                            esk["_Id"],
-                        )
+                if (cooltime := ab.get("_CoolTime")) :
+                    attr["cd"] = cooltime
+                if condtype in HP_GEQ:
+                    attr["cond"] = ["hp>", fr(ab["_ConditionValue"])]
+                elif condtype in HP_LEQ:
+                    attr["cond"] = ["hp<=", fr(ab["_ConditionValue"])]
+                confkey = "attr" if ab.get("_OnSkill") == seq else f"attr_{condtype}"
+                try:
+                    sconf[confkey].insert(0, attr)
+                except KeyError:
+                    sconf[confkey] = [attr]
+                # for ehs, s in ENHANCED_SKILL.items():
+                #     if (esk := actcond.get(ehs)) :
+                #         if existing_skill := self.chara_skills.get(esk.get("_Id")):
+                #             group = existing_skill[0].split("_")[-1]
+                #         else:
+                #             eid = next(self.eskill_counter)
+                #             group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                #         self.chara_skills[esk["_Id"]] = (
+                #             f"s{s}_{group}",
+                #             s,
+                #             esk,
+                #             esk["_Id"],
+                #         )
 
     def process_skill(self, res, conf, mlvl, all_levels=False):
         # exceptions exist
