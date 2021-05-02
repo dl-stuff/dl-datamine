@@ -2,54 +2,81 @@ import json
 import os
 from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata
+from pprint import pprint
 
 EntryId = "EntryId"
 
 
-def load_table(db, data, table, key=None, stdout_log=False):
-    if isinstance(data, dict):
-        keys = data.keys()
-        values = data.values()
-    elif isinstance(data, list):
-        keys = range(0, len(data))
-        values = data
-    else:
-        return
-    if len(values) == 0:
-        if stdout_log:
-            print(f"Skip {table}")
-        return
-    try:
-        row = next(iter(values))
-        pk = next(iter(row))
-    except:
-        if stdout_log:
-            print(f"Skip {table}")
-        return
+def flatten_data(data, table, parent_keys=None):
+    if not data:
+        return {}
+    if isinstance(data, list):
+        row = data[0]
+        pk = "_Id" if "_Id" in row else next(iter(row))
+        if not isinstance(row, dict) or not pk.startswith("_"):
+            return {}
+        if parent_keys is None:
+            parent_keys = []
+        flattened = {}
+        for seq, entry in enumerate(data):
+            pk = f"{table}_0"
+            entry[pk] = "".join(map(str, parent_keys)) + str(seq)
+            if parent_keys:
+                for idx, parent_key in enumerate(parent_keys):
+                    entry[f"{table}_{idx+1}"] = parent_key
+                entry[f"{table}_{idx+2}"] = seq
+            flattened[entry[pk]] = entry
+        return flattened
+    if not isinstance(data, dict):
+        return {}
+    row = next(iter(data.values()))
+    pk = "_Id" if "_Id" in row else next(iter(row))
     if isinstance(row, dict) and pk.startswith("_"):
-        if key:
-            if "_Id" in row:
-                for v in values:
-                    v[EntryId] = int(f'{key}{v["_Id"]:04}')
-            else:
-                for idx, v in enumerate(values):
-                    v[EntryId] = int(f"{key}{idx:04}")
-            row = next(iter(values))
-            pk = EntryId
-        if not db.check_table(table):
-            meta = DBTableMetadata(table, pk=pk)
-            meta.init_from_row(row, auto_pk=not key and "_Id" not in row)
-            db.create_table(meta)
-        db.insert_many(table, values, mode=DBManager.REPLACE)
+        flattened = data
+        if parent_keys is not None:
+            flattened = {}
+            for key, row in data.items():
+                pk = f"{table}_0"
+                row[pk] = "".join(map(str, parent_keys)) + str(key)
+                if parent_keys:
+                    for idx, parent_key in enumerate(parent_keys):
+                        row[f"{table}_{idx+1}"] = parent_key
+                    row[f"{table}_{idx+2}"] = key
+                flattened[row[pk]] = row
+        return flattened
+    flattened = {}
+    if parent_keys is None:
+        parent_keys = []
+    for key, row in data.items():
+        flattened.update(flatten_data(row, table, parent_keys=(parent_keys + [key])))
+    return flattened
+
+
+def load_table(db, data, table, stdout_log=False):
+    data = flatten_data(data, table)
+    if not data:
+        if stdout_log:
+            print(f"Skip {table}")
+        return
+    row = next(iter(data.values()))
+    auto_pk = False
+    if f"{table}_0" in row:
+        pk = f"{table}_0"
+    elif "_Id" in row:
+        pk = "_Id"
     else:
-        for k, v in zip(keys, values):
-            load_table(db, v, table, key=k)
+        auto_pk = True
+    if not db.check_table(table):
+        meta = DBTableMetadata(table, pk=pk)
+        meta.init_from_row(row, auto_pk=auto_pk)
+        db.create_table(meta)
+    db.insert_many(table, data.values(), mode=DBManager.REPLACE)
 
 
 def load_json(db, path, table, stdout_log=False):
     db.drop_table(table)
     with open(path) as f:
-        load_table(db, json.load(f), table)
+        load_table(db, json.load(f), table, stdout_log=stdout_log)
 
 
 def load_master(db, path, stdout_log=False):
@@ -65,8 +92,8 @@ def load_master(db, path, stdout_log=False):
 
 if __name__ == "__main__":
     db = DBManager()
-    # path = './extract/en/master/InteractiveBGM.json'
-    # table = 'InteractiveBGM'
+    # table = "MC"
+    # path = f"./_ex_sim/en/master/{table}.json"
     # with open(path) as f:
-    #     load_table(db, json.load(f), table)
-    load_master(db, "./_ex_sim/jp/master")
+    #     load_json(db, path, table)
+    load_master(db, "./_ex_sim/en/master")

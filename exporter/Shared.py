@@ -844,6 +844,46 @@ class SkillData(DBView):
         )
 
 
+class MaterialData(DBView):
+    def __init__(self, index):
+        super().__init__(index, "MaterialData", labeled_fields=["_Name", "_Detail", "_Description"])
+
+
+class FortPlantData(DBView):
+    def __init__(self, index):
+        super().__init__(
+            index,
+            "FortPlantData",
+            labeled_fields=[
+                "_Name",
+                "_Description",
+                "_EventDescription",
+                "_EventMenuDescription",
+            ],
+        )
+
+    def process_result(self, res, exclude_falsy=True):
+        self.link(res, "_DetailId", "FortPlantDetail", exclude_falsy=exclude_falsy)
+        return res
+
+
+class FortPlantDetail(DBView):
+    def __init__(self, index):
+        super().__init__(index, "FortPlantDetail", labeled_fields=["_Name", "_Description"])
+
+    def process_result(self, res, exclude_falsy=True):
+        self.link(res, "_NextAssetGroup", "FortPlantDetail", exclude_falsy=exclude_falsy)
+        # for i in (1, 2, 3, 4, 5):
+        #     self.link(res, f'_MaterialsId{i}', 'MaterialData', exclude_falsy=exclude_falsy)
+        return res
+
+    def get(self, *args, **kargs):
+        res = super().get(*args, **kargs)
+        if not res:
+            return None
+        return self.process_result(res, exclude_falsy=kargs.get("exclude_falsy"))
+
+
 if __name__ == "__main__":
     index = DBViewIndex()
     view = ActionCondition(index)

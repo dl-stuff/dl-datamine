@@ -55,7 +55,10 @@ class DBTableMetadata:
             elif isinstance(v, float):
                 self.field_type[k] = DBTableMetadata.REAL
             elif isinstance(v, str):
-                self.field_type[k] = DBTableMetadata.TEXT
+                if v.isdigit():
+                    self.field_type[k] = DBTableMetadata.INT
+                else:
+                    self.field_type[k] = DBTableMetadata.TEXT
             else:
                 self.field_type[k] = DBTableMetadata.BLOB
             if k == self.pk:
