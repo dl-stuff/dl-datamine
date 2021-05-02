@@ -121,6 +121,7 @@ AURA_TYPE_BUFFARGS = {
     AuraType.ATTACK: ("att", "buff"),
     AuraType.DEFENSE: ("def", "buff"),
 }
+DUMMY_PART = {"_seconds": 0}
 
 
 def snakey(name):
@@ -383,8 +384,13 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
     if "utp" not in once_per_action and ((utp := hitattr.get("_AddUtp")) or (utp := hitattr.get("_AdditionRecoveryUtp"))):
         attr["utp"] = utp
         once_per_action.add("utp")
-    if (hp := hitattr.get("_HpDrainLimitRate")) :
-        attr["hp"] = fr(hp * 100)
+    if (hp := hitattr.get("_SetCurrentHpRate")) :
+        attr["hp"] = [fr(hp * 100), "="]
+    else:
+        if (hp := hitattr.get("_HpDrainLimitRate")) :
+            attr["hp"] = fr(hp * 100)
+        if (hp := hitattr.get("_ConsumeHpRate")) :
+            attr["hp"] = attr.get("hp", 0) - fr(hp * 100)
     if (cp := hitattr.get("_RecoveryCP")) :
         attr["cp"] = cp
     if (heal := hitattr.get("_RecoveryValue")) :
@@ -394,6 +400,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr["heal"] = [heal, "lowest"]
         else:
             attr["heal"] = heal
+    # if (counter := hitattr.get("_DamageCounterCoef")) :
+    #     attr["counter"] = counter
     if (crit := hitattr.get("_AdditionCritical")) :
         attr["crit"] = fr(crit)
     if (aura_max := hitattr.get("_AuraMaxLimitLevel")) and (aura_data := hitattr.get("_AuraId")):
@@ -1033,48 +1041,67 @@ class SkillProcessHelper:
                     )
 
         if (ab := skill.get(f"_Ability{lv}")) :
-            if isinstance(ab, int):
-                ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
-            for a in (1, 2, 3):
-                if ab.get(f"_AbilityType{a}") == AbilityType.EnhancedSkill:  # alt skill
-                    s = int(ab["_TargetAction1"].name[-1])
-                    eid = next(self.eskill_counter)
-                    if existing_skill := self.chara_skills.get(ab[f"_VariousId{a}a"]["_Id"]):
-                        group = existing_skill[0].split("_")[-1]
-                    else:
-                        eid = next(self.eskill_counter)
-                        group = "enhanced" if eid == 1 else f"enhanced{eid}"
-                    self.chara_skills[ab[f"_VariousId{a}a"]["_Id"]] = (
-                        f"s{s}_{group}",
-                        s,
-                        ab[f"_VariousId{a}a"],
-                        ab[f"_VariousId{a}a"]["_Id"],
-                    )
-                elif ab.get(f"_AbilityType{a}") == AbilityType.ChangeState:
-                    actcond = ab.get(f"_VariousId{a}a")
-                    if not actcond:
-                        actcond = ab.get(f"_VariousId{a}str")
-                    if not actcond:
-                        continue
-                    if (ab.get("_ConditionType") == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (
-                        ab.get("_ConditionType") == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")
-                    ):
-                        sconf["sp_regen"] = float_ceil(sconf["sp"], -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"))
-                    for ehs, s in ENHANCED_SKILL.items():
-                        if (esk := actcond.get(ehs)) :
-                            if existing_skill := self.chara_skills.get(esk.get("_Id")):
-                                group = existing_skill[0].split("_")[-1]
-                            else:
-                                eid = next(self.eskill_counter)
-                                group = "enhanced" if eid == 1 else f"enhanced{eid}"
-                            self.chara_skills[esk["_Id"]] = (
-                                f"s{s}_{group}",
-                                s,
-                                esk,
-                                esk["_Id"],
-                            )
+            self.parse_skill_ab(skill, action, sconf, ab)
 
         return sconf, k
+
+    def parse_skill_ab(self, skill, action, sconf, ab):
+        if isinstance(ab, int):
+            ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
+        for a in (1, 2, 3):
+            ab_type = ab.get(f"_AbilityType{a}")
+            if ab_type == AbilityType.ReferenceOther:
+                for k in ("a", "b", "c"):
+                    if sub_ab := ab.get(f"_VariousId{a}{k}"):
+                        self.parse_skill_ab(skill, action, sconf, sub_ab)
+            if ab_type == AbilityType.EnhancedSkill:  # alt skill
+                s = int(ab["_TargetAction1"].name[-1])
+                eid = next(self.eskill_counter)
+                if existing_skill := self.chara_skills.get(ab[f"_VariousId{a}a"]["_Id"]):
+                    group = existing_skill[0].split("_")[-1]
+                else:
+                    eid = next(self.eskill_counter)
+                    group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                self.chara_skills[ab[f"_VariousId{a}a"]["_Id"]] = (
+                    f"s{s}_{group}",
+                    s,
+                    ab[f"_VariousId{a}a"],
+                    ab[f"_VariousId{a}a"]["_Id"],
+                )
+            elif ab_type == AbilityType.ChangeState:
+                actcond = ab.get(f"_VariousId{a}a")
+                if not actcond:
+                    hitattr = ab.get(f"_VariousId{a}str")
+                    if (attr := convert_hitattr(hitattr, DUMMY_PART, action, set(), meta=self, skill=skill)) :
+                        if (cooltime := ab.get("_CoolTime")) :
+                            attr["cd"] = cooltime
+                        condtype = ab.get("_ConditionType")
+                        if condtype in HP_GEQ:
+                            attr["cond"] = ["hp>", fr(ab["_ConditionValue"])]
+                        elif condtype in HP_LEQ:
+                            attr["cond"] = ["hp<=", fr(ab["_ConditionValue"])]
+                        try:
+                            sconf["attr"].append(attr)
+                        except KeyError:
+                            sconf["attr"] = [attr]
+                    continue
+                if (ab.get("_ConditionType") == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (
+                    ab.get("_ConditionType") == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")
+                ):
+                    sconf["sp_regen"] = float_ceil(sconf["sp"], -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"))
+                for ehs, s in ENHANCED_SKILL.items():
+                    if (esk := actcond.get(ehs)) :
+                        if existing_skill := self.chara_skills.get(esk.get("_Id")):
+                            group = existing_skill[0].split("_")[-1]
+                        else:
+                            eid = next(self.eskill_counter)
+                            group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                        self.chara_skills[esk["_Id"]] = (
+                            f"s{s}_{group}",
+                            s,
+                            esk,
+                            esk["_Id"],
+                        )
 
     def process_skill(self, res, conf, mlvl, all_levels=False):
         # exceptions exist

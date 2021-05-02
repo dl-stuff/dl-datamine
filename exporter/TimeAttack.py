@@ -139,7 +139,6 @@ def get_timeattack_data(quest_id):
     with open(iconmap_outfile, "w") as fn:
         json.dump(seen_icons, fn, indent=2, sort_keys=True)
     print(f"Wrote {iconmap_outfile}")
-    dbm.close()
 
     return timestamp
 

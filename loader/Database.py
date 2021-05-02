@@ -102,6 +102,9 @@ class DBManager:
             self.open(db_file)
         self.tables = {}
 
+    def __del__(self):
+        self.close()
+
     def open(self, db_file):
         self.conn = sqlite3.connect(db_file)
         self.conn.row_factory = sqlite3.Row
