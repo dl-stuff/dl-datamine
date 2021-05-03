@@ -99,6 +99,26 @@ class UnionAbility(DBView):
             json.dump(processed_res, fp, indent=2, ensure_ascii=False, default=str)
 
 
+class AbilityCrestBuildupGroup(DBView):
+    def __init__(self, index):
+        super().__init__(index, "AbilityCrestBuildupGroup")
+
+
+class AbilityCrestBuildupLevel(DBView):
+    def __init__(self, index):
+        super().__init__(index, "AbilityCrestBuildupLevel")
+
+
+class AbilityCrestRarity(DBView):
+    def __init__(self, index):
+        super().__init__(index, "AbilityCrestRarity")
+
+
+class AbilityCrestTrade(DBView):
+    def __init__(self, index):
+        super().__init__(index, "AbilityCrestTrade")
+
+
 class AbilityCrest(DBView):
     def __init__(self, index):
         super().__init__(
@@ -107,7 +127,7 @@ class AbilityCrest(DBView):
             labeled_fields=["_Name", "_Text1", "_Text2", "_Text3", "_Text4", "_Text5"],
         )
 
-    def process_result(self, res, exclude_falsy, full_abilities=False):
+    def process_result(self, res, exclude_falsy=True, full_abilities=False):
         inner = (1, 2, 3) if full_abilities else (3,)
         outer = (1, 2, 3)
         for i in outer:
@@ -117,6 +137,8 @@ class AbilityCrest(DBView):
                     res[k] = self.index["AbilityData"].get(res[k], full_query=True, exclude_falsy=exclude_falsy)
         if uab := res.get("_UnionAbilityGroupId"):
             res["_UnionAbilityGroupId"] = self.index["UnionAbility"].get(uab)
+        if (trade_data := self.index["AbilityCrestTrade"].get(res["_Id"], by="_AbilityCrestId", exclude_falsy=exclude_falsy)) :
+            res["_TradeData"] = trade_data
         return res
 
     def get(

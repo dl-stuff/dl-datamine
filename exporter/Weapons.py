@@ -20,18 +20,12 @@ class WeaponData(DBView):
         if "_Type" in res:
             res["_Type"] = WEAPON_TYPES.get(res["_Type"], res["_Type"])
         if "_ElementalType" in res:
-            res["_ElementalType"] = ELEMENTS.get(
-                res["_ElementalType"], res["_ElementalType"]
-            )
+            res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
         if "_Skill" in res:
-            res["_Skill"] = self.index["SkillData"].get(
-                res["_Skill"], exclude_falsy=exclude_falsy, full_abilities=True
-            )
+            res["_Skill"] = self.index["SkillData"].get(res["_Skill"], exclude_falsy=exclude_falsy, full_abilities=True)
         for k in ("_Abilities11", "_Abilities21"):
             if k in res and res[k]:
-                res[k] = self.index["AbilityData"].get(
-                    res[k], full_query=True, exclude_falsy=exclude_falsy
-                )
+                res[k] = self.index["AbilityData"].get(res[k], full_query=True, exclude_falsy=exclude_falsy)
         return res
 
     def get(self, pk, fields=None, exclude_falsy=False, full_query=True):
@@ -45,9 +39,7 @@ class WeaponData(DBView):
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
         out_dir = os.path.join(out_dir, "weapons")
-        super().export_all_to_folder(
-            out_dir, ext, exclude_falsy=exclude_falsy, full_query=True
-        )
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
 
 class WeaponSkin(DBView):
@@ -74,6 +66,11 @@ class WeaponBodyBuildupGroup(DBView):
         super().__init__(index, "WeaponBodyBuildupGroup")
 
 
+class WeaponBodyBuildupLevel(DBView):
+    def __init__(self, index):
+        super().__init__(index, "WeaponBodyBuildupLevel")
+
+
 class WeaponPassiveAbility(DBView):
     def __init__(self, index):
         super().__init__(index, "WeaponPassiveAbility")
@@ -97,47 +94,33 @@ class WeaponBody(DBView):
         if not full_query:
             return res
         if res.get("_WeaponSeriesId"):
-            res["_WeaponSeriesId"] = self.index["WeaponBodyGroupSeries"].get(
-                res["_WeaponSeriesId"], exclude_falsy=exclude_falsy
-            )
+            res["_WeaponSeriesId"] = self.index["WeaponBodyGroupSeries"].get(res["_WeaponSeriesId"], exclude_falsy=exclude_falsy)
         if res.get("_WeaponPassiveAbilityGroupId"):
-            res["_WeaponPassiveAbilityGroupId"] = self.index[
-                "WeaponPassiveAbility"
-            ].get(
+            res["_WeaponPassiveAbilityGroupId"] = self.index["WeaponPassiveAbility"].get(
                 res["_WeaponPassiveAbilityGroupId"],
                 by="_WeaponPassiveAbilityGroupId",
                 exclude_falsy=exclude_falsy,
             )
         if res.get("_WeaponType"):
-            res["_WeaponType"] = WEAPON_TYPES.get(
-                res["_WeaponType"], res["_WeaponType"]
-            )
+            res["_WeaponType"] = WEAPON_TYPES.get(res["_WeaponType"], res["_WeaponType"])
         if res.get("_ElementalType"):
-            res["_ElementalType"] = ELEMENTS.get(
-                res["_ElementalType"], res["_ElementalType"]
-            )
+            res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
         skill_ids = {0}
         for i in (3, 2, 1):
             key = f"_ChangeSkillId{i}"
             if key in res and res[key] not in skill_ids:
                 skill_ids.add(res[key])
-                res[key] = self.index["SkillData"].get(
-                    res[key], exclude_falsy=exclude_falsy, full_abilities=True
-                )
+                res[key] = self.index["SkillData"].get(res[key], exclude_falsy=exclude_falsy, full_abilities=True)
         ab_ids = {0}
         for i in (1, 2, 3):
             for j in (3, 2, 1):
                 key = f"_Abilities{i}{j}"
                 if key in res and res[key] not in ab_ids:
                     ab_ids.add(res[key])
-                    res[key] = self.index["AbilityData"].get(
-                        res[key], full_query=True, exclude_falsy=exclude_falsy
-                    )
+                    res[key] = self.index["AbilityData"].get(res[key], full_query=True, exclude_falsy=exclude_falsy)
         for skin in WeaponBody.WEAPON_SKINS:
             if res.get(skin):
-                res[skin] = self.index["WeaponSkin"].get(
-                    res[skin], exclude_falsy=exclude_falsy
-                )
+                res[skin] = self.index["WeaponSkin"].get(res[skin], exclude_falsy=exclude_falsy)
         return res
 
     def get(self, pk, fields=None, exclude_falsy=False, full_query=True):
@@ -151,9 +134,7 @@ class WeaponBody(DBView):
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
         out_dir = os.path.join(out_dir, "weapons")
-        super().export_all_to_folder(
-            out_dir, ext, exclude_falsy=exclude_falsy, full_query=True
-        )
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
 
 class WeaponType(DBView):
@@ -180,15 +161,7 @@ class WeaponType(DBView):
         if not full_query:
             return res
         for act in WeaponType.ACTION_IDS:
-            if (
-                act in res
-                and res[act]
-                and (
-                    action := self.index["PlayerAction"].get(
-                        res[act], exclude_falsy=exclude_falsy
-                    )
-                )
-            ):
+            if act in res and res[act] and (action := self.index["PlayerAction"].get(res[act], exclude_falsy=exclude_falsy)):
                 res[act] = action
         return res
 
@@ -198,9 +171,7 @@ class WeaponType(DBView):
 
     def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
         out_dir = os.path.join(out_dir, "_weapon_types")
-        super().export_all_to_folder(
-            out_dir, ext, exclude_falsy=exclude_falsy, full_query=True
-        )
+        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy, full_query=True)
 
 
 if __name__ == "__main__":
