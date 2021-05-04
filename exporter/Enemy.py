@@ -18,16 +18,16 @@ class EnemyList(DBView):
     def __init__(self, index):
         super().__init__(index, "EnemyList", labeled_fields=["_Name"])
 
-    def process_result(self, res, exclude_falsy=False):
+    def process_result(self, res):
         if "_TribeType" in res and res["_TribeType"]:
             res["_TribeType"] = TRIBE_TYPES.get(res["_TribeType"], res["_TribeType"])
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, fields=None, full_query=True):
+        res = super().get(pk, fields=fields)
         if not full_query:
             return res
-        res = self.process_result(res, exclude_falsy=exclude_falsy)
+        res = self.process_result(res)
         return res
 
 
@@ -35,20 +35,19 @@ class EnemyData(DBView):
     def __init__(self, index):
         super().__init__(index, "EnemyData")
 
-    def process_result(self, res, exclude_falsy=False):
+    def process_result(self, res):
         if "_BookId" in res and res["_BookId"]:
-            if (data := self.index["EnemyList"].get(res["_BookId"], exclude_falsy=exclude_falsy)) :
+            if (data := self.index["EnemyList"].get(res["_BookId"])) :
                 res["_BookId"] = data
         if "_ElementalType" in res and res["_ElementalType"]:
             res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
         return res
 
-    # def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, fields=None, full_query=True):
+        res = super().get(pk, fields=fields)
         if not full_query:
             return res
-        res = self.process_result(res, exclude_falsy=exclude_falsy)
+        res = self.process_result(res)
         return res
 
 
@@ -56,120 +55,88 @@ class EnemyActionHitAttribute(DBView):
     def __init__(self, index):
         super().__init__(index, "EnemyActionHitAttribute")
 
-    def process_result(self, res, exclude_falsy=True):
+    def process_result(self, res):
         res_list = [res] if isinstance(res, dict) else res
         for r in res_list:
             if "_ActionCondition" in r and r["_ActionCondition"]:
-                act_cond = self.index["ActionCondition"].get(r["_ActionCondition"], exclude_falsy=exclude_falsy)
+                act_cond = self.index["ActionCondition"].get(r["_ActionCondition"])
                 if act_cond:
                     r["_ActionCondition"] = act_cond
         return res
 
-    def get(
-        self,
-        pk,
-        by=None,
-        fields=None,
-        order=None,
-        mode=DBManager.EXACT,
-        exclude_falsy=False,
-    ):
-        res = super().get(pk, by, fields, order, mode, exclude_falsy)
-        return self.process_result(res, exclude_falsy=exclude_falsy)
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT):
+        res = super().get(pk, by, fields, order, mode)
+        return self.process_result(res)
 
 
 class EnemyHitDifficulty(DBView):
     def __init__(self, index):
         super().__init__(index, "EnemyHitDifficulty")
 
-    def process_result(self, res, exclude_falsy=True):
+    def process_result(self, res):
         for k in res:
             if k == "_Id":
                 continue
-            res[k] = self.self.index["EnemyActionHitAttribute"].get(res[k], exclude_falsy=exclude_falsy)
+            res[k] = self.self.index["EnemyActionHitAttribute"].get(res[k])
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, fields=None, full_query=True):
+        res = super().get(pk, fields=fields)
         if not full_query:
             return res
-        return self.process_result(res, exclude_falsy=exclude_falsy)
+        return self.process_result(res)
 
 
 class EnemyAction(DBView):
     def __init__(self, index):
-        super().__init__(
-            index,
-            "EnemyAction",
-            labeled_fields=[
-                "_NameFire",
-                "_NameWater",
-                "_NameWind",
-                "_NameLight",
-                "_NameDark",
-            ],
-        )
+        super().__init__(index, "EnemyAction", labeled_fields=["_NameFire", "_NameWater", "_NameWind", "_NameLight", "_NameDark"])
 
-    def process_result(self, res, exclude_falsy=True):
-        if (
-            "_ActionGroupName" in res
-            and res["_ActionGroupName"]
-            and (hitdiff := self.index["EnemyHitDifficulty"].get(res["_ActionGroupName"], exclude_falsy=exclude_falsy))
-        ):
+    def process_result(self, res):
+        if "_ActionGroupName" in res and res["_ActionGroupName"] and (hitdiff := self.index["EnemyHitDifficulty"].get(res["_ActionGroupName"])):
             res["_ActionGroupName"] = hitdiff
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, fields=None, full_query=True):
+        res = super().get(pk, fields=fields)
         if not full_query:
             return res
-        return self.process_result(res, exclude_falsy=exclude_falsy)
+        return self.process_result(res)
 
 
 class EnemyActionSet(DBView):
     def __init__(self, index):
         super().__init__(index, "EnemyActionSet")
 
-    def process_result(self, res, exclude_falsy=True):
+    def process_result(self, res):
         for k in res:
             if k == "_Id":
                 continue
-            res[k] = self.index["EnemyAction"].get(res[k], exclude_falsy=exclude_falsy)
+            res[k] = self.index["EnemyAction"].get(res[k])
         return res
 
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, fields=None, full_query=True):
+        res = super().get(pk, fields=fields)
         if not full_query:
             return res
-        return self.process_result(res, exclude_falsy=exclude_falsy)
+        return self.process_result(res)
 
 
 class EnemyParam(DBView):
     DP_PATTERN = {1: "On Death", 2: "Every 10% HP"}
-    RESIST_ID_ADJUST = {
-        7: 9,
-        8: None,
-        9: 7,
-        10: 8,
-        11: 10,
-        12: 11,
-        13: 12,
-        14: 13,
-        15: 14,
-    }
+    RESIST_ID_ADJUST = {7: 9, 8: None, 9: 7, 10: 8, 11: 10, 12: 11, 13: 12, 14: 13, 15: 14}
 
     def __init__(self, index):
         super().__init__(index, "EnemyParam")
 
-    def process_result(self, res, exclude_falsy=True, full_actions=False):
+    def process_result(self, res, full_actions=False):
         if "_DataId" in res and res["_DataId"]:
-            if (data := self.index["EnemyData"].get(res["_DataId"], exclude_falsy=exclude_falsy)) :
+            if (data := self.index["EnemyData"].get(res["_DataId"])) :
                 res["_DataId"] = data
         if full_actions:
             if "_ActionSet" in res and res["_ActionSet"]:
-                res["_ActionSet"] = self.index["EnemyActionSet"].get(res["_ActionSet"], exclude_falsy=exclude_falsy)
+                res["_ActionSet"] = self.index["EnemyActionSet"].get(res["_ActionSet"])
         for ab in ("_Ability01", "_Ability02", "_BerserkAbility"):
-            if ab in res and res[ab] and (data := self.index["EnemyAbility"].get(res[ab], exclude_falsy=exclude_falsy)):
+            if ab in res and res[ab] and (data := self.index["EnemyAbility"].get(res[ab])):
                 res[ab] = data
         resists = {}
         for k, v in AFFLICTION_TYPES.items():
@@ -187,16 +154,11 @@ class EnemyParam(DBView):
             res["_DropDpPattern"] = self.DP_PATTERN.get(res["_DropDpPattern"], res["_DropDpPattern"])
         return res
 
-    # @staticmethod
-    # def remove_falsy_fields(res):
-    #     return DBDict(filter(lambda x: bool(x[1]) or x[0].startswith('_RegistAbnormalRate'), res.items()))
-
-    # def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, exclude_falsy=False):
-    def get(self, pk, fields=None, exclude_falsy=True, full_query=True, full_actions=False):
-        res = super().get(pk, fields=fields, exclude_falsy=exclude_falsy)
+    def get(self, pk, fields=None, full_query=True, full_actions=False):
+        res = super().get(pk, fields=fields)
         if not full_query:
             return res
-        res = self.process_result(res, exclude_falsy=exclude_falsy, full_actions=full_actions)
+        res = self.process_result(res, full_actions=full_actions)
         return res
 
     # @staticmethod
@@ -206,18 +168,17 @@ class EnemyParam(DBView):
 
     PARAM_GROUP = re.compile(r"([^\d]+)_\d{2}_\d{2}_E_?\d{2}")
 
-    def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
-        # super().export_all_to_folder(out_dir, ext, fn_mode='a', exclude_falsy=exclude_falsy, full_actions=False)
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "enemies")
-        all_res = self.get_all(exclude_falsy=exclude_falsy)
+        all_res = self.get_all()
         check_target_path(out_dir)
         sorted_res = defaultdict(lambda: [])
         for res in tqdm(all_res, desc="enemies"):
             if "_ParamGroupName" in res:
                 if (match := self.PARAM_GROUP.match(res["_ParamGroupName"])) :
-                    sorted_res[match.group(1)].append(self.process_result(res, exclude_falsy=exclude_falsy))
+                    sorted_res[match.group(1)].append(self.process_result(res))
                 else:
-                    sorted_res[res["_ParamGroupName"].split("_", 1)[0]].append(self.process_result(res, exclude_falsy=exclude_falsy))
+                    sorted_res[res["_ParamGroupName"].split("_", 1)[0]].append(self.process_result(res))
         for group_name, res_list in sorted_res.items():
             out_name = get_valid_filename(f"{group_name}{ext}")
             output = os.path.join(out_dir, out_name)

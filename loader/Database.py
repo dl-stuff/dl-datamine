@@ -270,6 +270,8 @@ class DBManager:
 
 
 class DBView:
+    EXCLUDE_FALSY = True
+
     def __init__(self, index, table, references=None, labeled_fields=None, override_view=False):
         self.index = index
         self.database = index.db
@@ -295,28 +297,19 @@ class DBView:
         if (idx := res.get(key)) and (linked := self.index[view].get(idx, **kwargs)):
             res[key] = linked
 
-    def get(
-        self,
-        pk,
-        by=None,
-        fields=None,
-        order=None,
-        mode=DBManager.EXACT,
-        exclude_falsy=False,
-        expand_one=True,
-    ):
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=True):
         if order and "." not in order:
             order = self.name + "." + order
         res = self.database.select(self.name, pk, by, fields, order, mode)
-        if exclude_falsy:
+        if self.EXCLUDE_FALSY:
             res = [self.remove_falsy_fields(r) for r in res]
         if expand_one and len(res) == 1:
             res = res[0]
         return res
 
-    def get_all(self, exclude_falsy=False, where=None, order=None):
+    def get_all(self, where=None, order=None):
         res = self.database.select_all(self.name, where, order)
-        if exclude_falsy:
+        if self.EXCLUDE_FALSY:
             res = [self.remove_falsy_fields(r) for r in res]
         return res
 
@@ -332,18 +325,18 @@ class DBView:
         self.database.delete_view(self.name)
         self.name = self.base_table
 
-    def export_all_to_folder(self, out_dir, ext=".json", exclude_falsy=True, where=None, order=None, **kargs):
-        all_res = self.get_all(exclude_falsy=exclude_falsy, where=where, order=order)
+    def export_all_to_folder(self, out_dir, ext=".json", where=None, order=None, **kargs):
+        all_res = self.get_all(where=where, order=order)
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-            res = self.process_result(res, exclude_falsy=exclude_falsy, **kargs)
+            res = self.process_result(res, **kargs)
             out_name = self.outfile_name(res, ext)
             output = os.path.join(out_dir, out_name)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 json.dump(res, fp, indent=2, ensure_ascii=False, default=str)
 
-    def export_one_to_folder(self, pk, out_dir, ext=".json", exclude_falsy=True, **kargs):
-        res = self.get(pk, exclude_falsy=exclude_falsy)
+    def export_one_to_folder(self, pk, out_dir, ext=".json", **kargs):
+        res = self.get(pk, **kargs)
         check_target_path(out_dir)
         out_name = self.outfile_name(res, ext)
         output = os.path.join(out_dir, out_name)

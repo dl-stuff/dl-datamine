@@ -23,16 +23,16 @@ class BattleRoyalCharaSkin(DBView):
         return filtered_res
 
     def get(self, *args, **kwargs):
-        return self.process_result(super().get(*args, **kwargs), exclude_falsy=True)
+        return self.process_result(super().get(*args, **kwargs))
 
-    def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
         where = "_SpecialSkillId != 0"
         out_dir = os.path.join(out_dir, "_br")
-        all_res = self.get_all(exclude_falsy=exclude_falsy, where=where)
+        all_res = self.get_all(where=where)
         check_target_path(out_dir)
         sorted_res = {}
         for res in tqdm(all_res, desc="_br"):
-            res = self.process_result(res, exclude_falsy=exclude_falsy)
+            res = self.process_result(res)
             sorted_res[res["_Id"]] = res
         out_name = get_valid_filename(f"_chara_skin.json")
         output = os.path.join(out_dir, out_name)
@@ -59,11 +59,11 @@ class BattleRoyalUnit(DBView):
         return res
 
     def get(self, *args, **kwargs):
-        return self.process_result(super().get(*args, **kwargs), exclude_falsy=True)
+        return self.process_result(super().get(*args, **kwargs))
 
-    def export_all_to_folder(self, out_dir="./out", ext=".json", exclude_falsy=True):
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "_br")
-        super().export_all_to_folder(out_dir, ext, exclude_falsy=exclude_falsy)
+        super().export_all_to_folder(out_dir, ext)
 
 
 if __name__ == "__main__":

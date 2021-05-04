@@ -6,7 +6,7 @@ from collections import defaultdict
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.AssetExtractor import Extractor
-from exporter.Shared import AbilityData
+from exporter.Shared import AbilityData, MaterialData, FortPlantData, FortPlantDetail
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 from exporter.Wyrmprints import (
@@ -32,6 +32,7 @@ IMAGE_PATTERNS = {
         r"^images/icon/amulet/l": "../amulet",
         r"^images/icon/weapon/l": "../weapon",
         # r'^images/icon/item/materialdata/l': '../material'
+        r"^images/icon/manacircle": "../manacircle",
     }
 }
 
@@ -52,95 +53,29 @@ def download_all_icons(out, set_icons=None):
     ex.download_and_extract_by_pattern(patterns)
 
 
-class MaterialData(DBView):
-    def __init__(self, index):
-        super().__init__(index, "MaterialData", labeled_fields=["_Name", "_Detail", "_Description"])
-
-
-class FortPlantData(DBView):
-    def __init__(self, index):
-        super().__init__(
-            index,
-            "FortPlantData",
-            labeled_fields=[
-                "_Name",
-                "_Description",
-                "_EventDescription",
-                "_EventMenuDescription",
-            ],
-        )
-
-    def process_result(self, res, exclude_falsy=True):
-        self.link(res, "_DetailId", "FortPlantDetail", exclude_falsy=exclude_falsy)
-        return res
-
-
-# class FortPlantEffect(Enum):
-#     NULL = 0
-#     BOOST_CHARA_WEAPON = 1
-#     BOOST_CHARA_ELEMENT = 2
-#     BOOST_CHARA_ALL = 3
-#     BOOST_DRAGON_DAMAGE = 4
-#     BOOST_DRAGON_TIME = 5
-#     BOOST_DRAGON_ELEMENT = 6
-#     BOOST_CHARA_WEAPON_BY_WEAPON = 7
-
-
-# class FortPlantType(Enum):
-#     NONE = 0
-#     BASE = 1
-#     PRODUCE_GOLD = 2
-#     PRODUCE_FRUIT = 3
-#     BOOST_CHARA_WEAPON = 4
-#     BOOST_CHARA_ELEMENT = 5
-#     BOOST_CHARA_ALL = 6
-#     BOOST_DRAGON_DAMAGE = 7
-#     BOOST_DRAGON_TIME = 8
-#     DECORATION = 9
-#     BOOST_DRAGON_ELEMENT = 10
-#     CRAFT_WEAPON = 11
-
-
-class FortPlantDetail(DBView):
-    def __init__(self, index):
-        super().__init__(index, "FortPlantDetail", labeled_fields=["_Name", "_Description"])
-
-    def process_result(self, res, exclude_falsy=True):
-        self.link(res, "_NextAssetGroup", "FortPlantDetail", exclude_falsy=exclude_falsy)
-        # for i in (1, 2, 3, 4, 5):
-        #     self.link(res, f'_MaterialsId{i}', 'MaterialData', exclude_falsy=exclude_falsy)
-        return res
-
-    def get(self, *args, **kargs):
-        res = super().get(*args, **kargs)
-        if not res:
-            return None
-        return self.process_result(res, exclude_falsy=kargs.get("exclude_falsy"))
-
-
 def make_bv_id(res, view):
     return f'{res["_BaseId"]}_{res["_VariationId"]:02}'
 
 
 def make_chara_json(res):
     return {
-        "NameEN": res["_SecondName"] or res["_Name"],
-        "NameJP": res["_SecondNameJP"] or res["_NameJP"],
-        "NameCN": res["_SecondNameCN"] or res["_NameCN"],
-        "Element": res["_ElementalType"],
-        "Weapon": res["_WeaponType"],
-        "Rarity": res["_Rarity"],
-        "Spiral": bool(res["_MaxLimitBreakCount"] == 5),
+        "NameEN": res.get("_SecondName") or res.get("_Name"),
+        "NameJP": res.get("_SecondNameJP") or res.get("_NameJP"),
+        "NameCN": res.get("_SecondNameCN") or res.get("_NameCN"),
+        "Element": res.get("_ElementalType"),
+        "Weapon": res.get("_WeaponType"),
+        "Rarity": res.get("_Rarity"),
+        "Spiral": bool(res.get("_MaxLimitBreakCount") == 5),
     }
 
 
 def make_dragon_json(res):
     return {
-        "NameEN": res["_SecondName"] or res["_Name"],
-        "NameJP": res["_SecondNameJP"] or res["_NameJP"],
-        "NameCN": res["_SecondNameCN"] or res["_NameCN"],
-        "Element": res["_ElementalType"],
-        "Rarity": res["_Rarity"],
+        "NameEN": res.get("_SecondName") or res.get("_Name"),
+        "NameJP": res.get("_SecondNameJP") or res.get("_NameJP"),
+        "NameCN": res.get("_SecondNameCN") or res.get("_NameCN"),
+        "Element": res.get("_ElementalType"),
+        "Rarity": res.get("_Rarity"),
     }
 
 
@@ -155,40 +90,40 @@ def make_base_id(res, view):
 def make_amulet_json(res):
     result = {
         "BaseId": res["_BaseId"],
-        "NameEN": res["_Name"],
-        "NameJP": res["_NameJP"],
-        "NameCN": res["_NameCN"],
-        "Rarity": res["_Rarity"],
+        "NameEN": res.get("_Name"),
+        "NameJP": res.get("_NameJP"),
+        "NameCN": res.get("_NameCN"),
+        "Rarity": res.get("_Rarity"),
         "Form": res["_CrestSlotType"],
         "Cost": res.get("_TradeData", {"_NeedDewPoint": 0})["_NeedDewPoint"],
-        "Build": res["_AbilityCrestBuildupGroupId"],
+        "Build": res.get("_AbilityCrestBuildupGroupId"),
         "AbIcon": res["_Abilities13"]["_AbilityIconName"],
     }
     ability_icons.add(res["_Abilities13"]["_AbilityIconName"])
     if uab := res.get("_UnionAbilityGroupId"):
         result["Union"] = uab.get("_Id")
-    if res["_UniqueBuildupMaterialId"]:
-        material_icons.add(res["_UniqueBuildupMaterialId"])
-        result["UniqueMaterial"] = res["_UniqueBuildupMaterialId"]
-    if res["_IsHideChangeImage"]:
+    if res.get("_UniqueBuildupMaterialId"):
+        material_icons.add(res.get("_UniqueBuildupMaterialId"))
+        result["UniqueMaterial"] = res.get("_UniqueBuildupMaterialId")
+    if res.get("_IsHideChangeImage"):
         result["NoRefine"] = res.get("_IsHideChangeImage")
     return result
 
 
 def make_material_json(res):
     return {
-        "NameEN": res["_Name"],
-        "NameJP": res["_NameJP"],
-        "NameCN": res["_NameCN"],
-        "SortId": res["_SortId"],
+        "NameEN": res.get("_Name"),
+        "NameJP": res.get("_NameJP"),
+        "NameCN": res.get("_NameCN"),
+        "SortId": res.get("_SortId"),
     }
 
 
 def make_weapon_series_json(res):
     return {
-        "NameEN": res["_GroupSeriesName"],
-        "NameJP": res["_GroupSeriesNameJP"],
-        "NameCN": res["_GroupSeriesNameCN"],
+        "NameEN": res.get("_GroupSeriesName"),
+        "NameJP": res.get("_GroupSeriesNameJP"),
+        "NameCN": res.get("_GroupSeriesNameCN"),
     }
 
 
@@ -275,7 +210,7 @@ def amulet_availability_data(data):
 
 
 def make_json(out, outfile, view, id_fn, data_fn, avail_fn=None, where=None, order="_Id ASC", name_key="_Name", process=False):
-    all_res = view.get_all(exclude_falsy=False, where=where, order=order)
+    all_res = view.get_all(where=where, order=order)
     data = {}
     for res in all_res:
         if not res[name_key]:
@@ -290,11 +225,6 @@ def make_json(out, outfile, view, id_fn, data_fn, avail_fn=None, where=None, ord
                 del data[d]
     with open(os.path.join(out, outfile), "w") as f:
         json.dump(data, f)
-
-
-# def make_wpn_id(res, view):
-#     skin = view.index['WeaponSkin'].get(res['_WeaponSkinId'], exclude_falsy=False)
-#     return f'{skin["_BaseId"]}_{skin["_VariationId"]:02}_{skin["_FormId"]}'
 
 
 def make_wpn_id(skin):
@@ -319,7 +249,7 @@ def get_mats_dict(res, idx_range, k1_fmt, k2_fmt):
 
 def make_weapon_jsons(out, index):
     rarity_level_mats = defaultdict(dict)
-    for row in WeaponBodyBuildupLevel(index).get_all(exclude_falsy=True):
+    for row in WeaponBodyBuildupLevel(index).get_all():
         rarity_level_mats[row["_RarityGroup"]][row["_Level"]] = get_mats_dict(row, range(1, 4), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
     rarity_level_mats = dict(rarity_level_mats)
     for rarity, level_mats in rarity_level_mats.items():
@@ -333,7 +263,7 @@ def make_weapon_jsons(out, index):
             rarity_level_mats[rarity][level] = dict(cumulative_mats)
 
     rarity_unbind_level = defaultdict(dict)
-    for row in WeaponBodyRarity(index).get_all(exclude_falsy=False):
+    for row in WeaponBodyRarity(index).get_all():
         rarity = row["_Id"]
         if rarity not in rarity_level_mats:
             continue
@@ -347,23 +277,23 @@ def make_weapon_jsons(out, index):
         json.dump(dict(rarity_unbind_level), f)
 
     view = WeaponBodyBuildupGroup(index)
-    all_res = view.get_all(exclude_falsy=True)
+    all_res = view.get_all()
     processed = defaultdict(lambda: defaultdict(list))
     for res in all_res:
         mats = get_mats_dict(res, range(1, 11), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
         # a hack for 7slot
-        if res["_BuildupPieceType"] == 9:
-            res["_BuildupPieceType"] = 3
-            res["_Step"] += 1
+        if res.get("_BuildupPieceType") == 9:
+            res.get("_BuildupPieceType") = 3
+            res.get("_Step") += 1
         # lv_req = res.get("_UnlockConditionLevel", 0)
         # ub_req = res.get("_UnlockConditionLimitBreakCount", 0)
         # rf_req = res.get("_UnlockConditionLimitOverCount", 0)
-        processed[res["_WeaponBodyBuildupGroupId"]][res["_BuildupPieceType"]].append(
+        processed[res.get("_WeaponBodyBuildupGroupId")][res.get("_BuildupPieceType")].append(
             {
-                "Step": res["_Step"],
+                "Step": res.get("_Step"),
                 "UnbindReq": res.get("_UnlockConditionLimitBreakCount", 0),
                 "SkinId": res.get("_RewardWeaponSkinNo", 0),
-                "Cost": res["_BuildupCoin"],
+                "Cost": res.get("_BuildupCoin"),
                 "Mats": mats,
             }
         )
@@ -373,7 +303,7 @@ def make_weapon_jsons(out, index):
         json.dump(processed, f)
 
     view = WeaponBody(index)
-    all_res = view.get_all(exclude_falsy=True)
+    all_res = view.get_all()
     processed = {}
     for res in all_res:
         if not res.get("_Name") or (not res.get("_WeaponBodyBuildupGroupId") and not res.get("_WeaponPassiveAbilityGroupId")):
@@ -382,7 +312,7 @@ def make_weapon_jsons(out, index):
         skins = {}
         for i, sid in enumerate(WeaponBody.WEAPON_SKINS):
             try:
-                skin = index["WeaponSkin"].get(res[sid], exclude_falsy=True)
+                skin = index["WeaponSkin"].get(res[sid])
                 skins[i] = make_wpn_id(skin)
             except (KeyError, TypeError):
                 continue
@@ -392,32 +322,31 @@ def make_weapon_jsons(out, index):
         passive = None
         if res.get("_WeaponPassiveAbilityGroupId"):
             passive_ab_group = index["WeaponPassiveAbility"].get(
-                res["_WeaponPassiveAbilityGroupId"],
-                by="_WeaponPassiveAbilityGroupId",
-                exclude_falsy=True,
+                res.get("_WeaponPassiveAbilityGroupId"),
+                by="_WeaponPassiveAbilityGroupId"
             )
             passive = {}
             for p in passive_ab_group:
-                ab = index["AbilityData"].get(p["_AbilityId"], full_query=False)
-                ability_icons.add(ab["_AbilityIconName"].lower())
+                ab = index["AbilityData"].get(p.get("_AbilityId"), full_query=False)
+                ability_icons.add(ab.get("_AbilityIconName").lower())
                 ab_skins = {}
                 for i in (1, 2):
                     sid = f"_RewardWeaponSkinId{i}"
                     try:
-                        skin = index["WeaponSkin"].get(p[sid], exclude_falsy=True)
+                        skin = index["WeaponSkin"].get(p[sid])
                         ab_skins[i] = make_wpn_id(skin)
                     except (KeyError, TypeError):
                         continue
                 ab_mats = get_mats_dict(p, range(1, 6), "_UnlockMaterialId{}", "_UnlockMaterialQuantity{}")
                 ability_val0 = int(ab.get("_AbilityType1UpValue", 0))
                 ability_info = {
-                    "Icon": ab["_AbilityIconName"],
-                    "NameEN": ab["_Name"].format(ability_val0=ability_val0).strip(),
-                    "NameJP": ab["_NameJP"].format(ability_val0=ability_val0).strip(),
-                    "NameCN": ab["_NameCN"].format(ability_val0=ability_val0).strip(),
+                    "Icon": ab.get("_AbilityIconName"),
+                    "NameEN": ab.get("_Name").format(ability_val0=ability_val0).strip(),
+                    "NameJP": ab.get("_NameJP").format(ability_val0=ability_val0).strip(),
+                    "NameCN": ab.get("_NameCN").format(ability_val0=ability_val0).strip(),
                 }
 
-                passive[p["_WeaponPassiveAbilityNo"]] = {
+                passive[p.get("_WeaponPassiveAbilityNo")] = {
                     "UnbindReq": p.get("_UnlockConditionLimitBreakCount", 0),
                     "Ability": ability_info,
                     "Cost": p.get("_UnlockCoin", 0),
@@ -425,16 +354,16 @@ def make_weapon_jsons(out, index):
                     "Skins": ab_skins,
                 }
 
-        processed[res["_Id"]] = {
-            "NameEN": res["_Name"],
-            "NameJP": res["_NameJP"],
-            "NameCN": res["_NameCN"],
-            "Series": res["_WeaponSeriesId"],
+        processed[res.get("_Id")] = {
+            "NameEN": res.get("_Name"),
+            "NameJP": res.get("_NameJP"),
+            "NameCN": res.get("_NameCN"),
+            "Series": res.get("_WeaponSeriesId"),
             "Build": res.get("_WeaponBodyBuildupGroupId"),
             "Passive": passive,
-            "Element": res["_ElementalType"],
-            "Weapon": res["_WeaponType"],
-            "Rarity": res["_Rarity"],
+            "Element": res.get("_ElementalType"),
+            "Weapon": res.get("_WeaponType"),
+            "Rarity": res.get("_Rarity"),
             "Prereq": {"Create": prereqcreate, "FullUp": prereqfull},
             "Cost": res.get("_CreateCoin", 0),
             "Mats": mats,
@@ -448,10 +377,10 @@ def make_weapon_jsons(out, index):
 
 def make_fort_jsons(out, index):
     view = FortPlantData(index)
-    all_res = view.get_all(exclude_falsy=True)
+    all_res = view.get_all()
     processed = {}
     for res in all_res:
-        res = view.process_result(res, exclude_falsy=True)
+        res = view.process_result(res)
         flattened_detail = []
         detail = res.get("_DetailId")
         while isinstance(detail, dict):
@@ -460,22 +389,22 @@ def make_fort_jsons(out, index):
             mats = get_mats_dict(detail, range(1, 6), "_MaterialsId{}", "_MaterialsNum{}")
             flattened_detail.append(
                 {
-                    "Icon": detail["_ImageUiName"],
-                    "Level": detail["_Level"],
+                    "Icon": detail.get("_ImageUiName"),
+                    "Level": detail.get("_Level"),
                     "Time": detail.get("_Time", 0),
                     "Cost": detail.get("_Cost", 0),
                     "Mats": mats,
                 }
             )
-            fort_icons.add(detail["_ImageUiName"].lower())
+            fort_icons.add(detail.get("_ImageUiName").lower())
             detail = detail.get("_NextAssetGroup")
         if not flattened_detail:
             continue
-        processed[res["_Id"]] = {
-            "NameEN": res["_Name"],
-            "NameJP": res["_NameJP"],
-            "NameCN": res["_NameCN"],
-            "Type": res["_Type"],
+        processed[res.get("_Id")] = {
+            "NameEN": res.get("_Name"),
+            "NameJP": res.get("_NameJP"),
+            "NameCN": res.get("_NameCN"),
+            "Type": res.get("_Type"),
             "Detail": flattened_detail,
         }
     outfile = "fort.json"
@@ -487,12 +416,12 @@ def make_amulet_jsons(out, index):
     make_json(out, "amulet.json", AbilityCrest(index), make_id, make_amulet_json, amulet_availability_data, process=True)
 
     rarity_level_mats = defaultdict(dict)
-    for row in AbilityCrestBuildupLevel(index).get_all(exclude_falsy=True):
+    for row in AbilityCrestBuildupLevel(index).get_all():
         mats = get_mats_dict(row, range(1, 4), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
         if uniqc := row.get("_UniqueBuildupMaterialCount"):
             mats["UNIQUE"] = uniqc
-        rarity = 9 if row["_RarityGroup"] == 901 else row["_RarityGroup"]
-        rarity_level_mats[rarity][row["_Level"]] = mats
+        rarity = 9 if row.get("_RarityGroup") == 901 else row.get("_RarityGroup")
+        rarity_level_mats[rarity][row.get("_Level")] = mats
     rarity_level_mats = dict(rarity_level_mats)
     for rarity, level_mats in rarity_level_mats.items():
         cumulative_mats = {}
@@ -505,8 +434,8 @@ def make_amulet_jsons(out, index):
             rarity_level_mats[rarity][level] = dict(cumulative_mats)
 
     rarity_level = defaultdict(dict)
-    for row in AbilityCrestRarity(index).get_all(exclude_falsy=False):
-        rarity = row["_Id"]
+    for row in AbilityCrestRarity(index).get_all():
+        rarity = row.get("_Id")
         if rarity not in rarity_level_mats:
             continue
         for i in range(5):
@@ -519,15 +448,15 @@ def make_amulet_jsons(out, index):
         json.dump(dict(rarity_level), f)
 
     view = AbilityCrestBuildupGroup(index)
-    all_res = view.get_all(exclude_falsy=True)
+    all_res = view.get_all()
     processed = defaultdict(lambda: defaultdict(list))
     for res in all_res:
         mats = get_mats_dict(res, range(1, 4), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
         if uniqc := res.get("_UniqueBuildupMaterialCount"):
             mats["UNIQUE"] = uniqc
-        processed[res["_AbilityCrestBuildupGroupId"]][res["_BuildupPieceType"]].append(
+        processed[res.get("_AbilityCrestBuildupGroupId")][res.get("_BuildupPieceType")].append(
             {
-                "Step": res["_Step"],
+                "Step": res.get("_Step"),
                 # "UnbindReq": res.get("_UnlockConditionLimitBreakCount", 0),
                 "Cost": res.get("_BuildupDewPoint", 0),
                 "Mats": mats,
@@ -537,6 +466,10 @@ def make_amulet_jsons(out, index):
     outfile = "amuletbuild.json"
     with open(os.path.join(out, outfile), "w") as f:
         json.dump(processed, f)
+
+
+def make_manacircle_jsons(out, index):
+    pass
 
 
 if __name__ == "__main__":
@@ -581,6 +514,7 @@ if __name__ == "__main__":
     make_weapon_jsons(datadir, index)
     make_fort_jsons(datadir, index)
     make_amulet_jsons(datadir, index)
+    make_manacircle_jsons(datadir, index)
 
     with open(os.path.join(datadir, "availabilities.json"), "w") as f:
         json.dump({k: sorted(list(v)) for k, v in all_avail.items()}, f)
