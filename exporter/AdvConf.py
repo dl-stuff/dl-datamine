@@ -345,7 +345,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     return hitattrs
 
 
-def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None):
+def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None, from_ab=False):
     if hitattr.get("_IgnoreFirstHitCheck"):
         once_per_action = set()
     attr = {}
@@ -452,7 +452,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                 meta=meta,
                 skill=skill,
             )
-        convert_actcond(attr, actcond, target, part, meta=meta, skill=skill)
+        convert_actcond(attr, actcond, target, part, meta=meta, skill=skill, from_ab=from_ab)
 
     if attr:
         iv = fr(part["_seconds"])
@@ -999,7 +999,7 @@ class SkillProcessHelper:
         self.efs_counter = itertools.count(start=1)
         self.all_chara_skills = {}
         self.enhanced_fs = {}
-        self.ab_alt_buffs = defaultdict(lambda: [])
+        self.ab_alt_attrs = defaultdict(lambda: [])
 
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
         sconf, action = convert_skill_common(skill, lv)
@@ -1043,7 +1043,7 @@ class SkillProcessHelper:
         if (ab := skill.get(f"_Ability{lv}")) :
             self.parse_skill_ab(k, seq, skill, action, sconf, ab)
 
-        return sconf, k
+        return sconf, k, action
 
     def parse_skill_ab(self, k, seq, skill, action, sconf, ab):
         if isinstance(ab, int):
@@ -1115,19 +1115,23 @@ class SkillProcessHelper:
                 lv = mlvl[res["_EditSkillLevelNum"]]
             else:
                 lv = mlvl.get(seq, 2)
-            cskill, k = self.convert_skill(k, seq, skill, lv)
-            conf[k] = cskill
-            if all_levels:
-                for s_lv in range(1, lv):
-                    s_cskill, _ = self.convert_skill(k, seq, skill, s_lv, no_loop=True)
-                    conf[k][f"lv{s_lv}"] = s_cskill
-            for actcond in self.ab_alt_buffs.get(seq, []):
+            cskill, k, action = self.convert_skill(k, seq, skill, lv)
+            for ab, hitattr in self.ab_alt_attrs.get(seq, []):
                 attr = {}
-                convert_actcond(attr, actcond, ActionTargetGroup.MYSELF, meta=self, skill=skill, from_ab=True)
-                if attr:
-                    if "attr" not in conf[k]:
-                        conf[k]["attr"] = []
-                    conf[k]["attr"].append(attr)
+                condtype = ab.get("_ConditionType")
+                if not (attr := convert_hitattr(hitattr, DUMMY_PART, action, set(), meta=self, skill=skill, from_ab=True)):
+                    continue
+                if (cooltime := ab.get("_CoolTime")) :
+                    attr["cd"] = cooltime
+                if condtype in HP_GEQ:
+                    attr["cond"] = ["hp>", fr(ab["_ConditionValue"])]
+                elif condtype in HP_LEQ:
+                    attr["cond"] = ["hp<=", fr(ab["_ConditionValue"])]
+                try:
+                    cskill["attr"].insert(0, attr)
+                except KeyError:
+                    cskill["attr"] = [attr]
+            conf[k] = cskill
             del self.chara_skills[skill.get("_Id")]
 
         for efs, eba, emk in self.enhanced_fs.values():
@@ -1150,20 +1154,21 @@ class SkillProcessHelper:
         #                 del conf[k]
 
 
-def find_ab_alt_buffs(ab_alt_buffs, ab):
+def find_ab_alt_attrs(ab_alt_attrs, ab):
     if not ab:
         return
     for i in (1, 2, 3):
         ab_type = ab.get(f"_AbilityType{i}")
         if ab_type == AbilityType.ChangeState:
-            actcond = ab.get(f"_VariousId{i}a")
-            if not actcond:
-                actcond = ab.get(f"_VariousId{i}str")
+            hitattr = ab.get(f"_VariousId{i}str")
+            if not hitattr:
+                hitattr = {"_ActionCondition1": ab.get(f"_VariousId{i}a")}
             if (sid := ab.get("_OnSkill")) :
-                ab_alt_buffs[sid].append(actcond)
+                ab_alt_attrs[sid].append((ab, hitattr))
+
         elif ab_type == AbilityType.ReferenceOther:
             for sfx in ("a", "b", "c"):
-                find_ab_alt_buffs(ab_alt_buffs, ab.get(f"_VariousId{i}{sfx}"))
+                find_ab_alt_attrs(ab_alt_attrs, ab.get(f"_VariousId{i}{sfx}"))
 
 
 class AdvConf(CharaData, SkillProcessHelper):
@@ -1234,7 +1239,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         self.name = conf["c"]["name"]
 
         for ab in ab_lst:
-            find_ab_alt_buffs(self.ab_alt_buffs, ab)
+            find_ab_alt_attrs(self.ab_alt_attrs, ab)
 
         if (burst := res.get("_BurstAttack")) :
             burst = self.index["PlayerAction"].get(res["_BurstAttack"], exclude_falsy=exclude_falsy)
@@ -1286,7 +1291,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     #     continue
                 if not mode_name:
                     try:
-                        mode_name = unidecode(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
+                        mode_name = "_" + unidecode(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
                     except:
                         if res.get("_ModeChangeType") == 3 and m == 2:
                             mode_name = "_ddrive"
@@ -2007,8 +2012,8 @@ class WpConf(AbilityCrest):
         if boon in WpConf.SKIP_BOON:
             if not converted:
                 return
-            if converted[0][0].startswith("sts") or converted[0][0].startswith("sls"):
-                return
+            # if converted[0][0].startswith("sts") or converted[0][0].startswith("sls"):
+            #     return
 
         if res.get("_IsHideChangeImage"):
             icon = f'{res["_BaseId"]}_01'
@@ -2032,7 +2037,7 @@ class WpConf(AbilityCrest):
         outdata = {}
         skipped = []
         collisions = defaultdict(list)
-        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+        for res in tqdm(all_res, desc="wp"):
             conf = self.process_result(res, exclude_falsy=True)
             if conf:
                 qual_name = snakey(res["_Name"])
@@ -2084,7 +2089,7 @@ class DrgConf(DragonData, SkillProcessHelper):
     }
 
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
-        conf, k = super().convert_skill(k, seq, skill, lv, no_loop=no_loop)
+        conf, k, action = super().convert_skill(k, seq, skill, lv, no_loop=no_loop)
         conf["sp_db"] = skill.get("_SpLv2Dragon", 45)
         conf["uses"] = skill.get("_MaxUseNum", 1)
         try:
@@ -2093,7 +2098,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             conf["attr"] = attr
         except KeyError:
             pass
-        return conf, k
+        return conf, k, action
 
     def process_result(self, res, exclude_falsy=True):
         super().process_result(res, exclude_falsy)
@@ -2297,7 +2302,7 @@ if __name__ == "__main__":
         if args.a:
             view.get(args.a)
         view.reset_meta()
-        sconf, k = view.convert_skill(
+        sconf, k, action = view.convert_skill(
             "s1",
             0,
             view.index["SkillData"].get(int(args.s), exclude_falsy=True),

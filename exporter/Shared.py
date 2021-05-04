@@ -886,8 +886,12 @@ class FortPlantDetail(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = ActionCondition(index)
-    view.check_overwrite_groups()
+    view = PlayerActionHitAttribute(index)
+    # view.check_overwrite_groups()
     # view = SkillData(index)
     # test = view.get(106505012)
     # print(test)
+    res = view.get("S152_002_01_LV0[0-9]", mode=DBManager.GLOB, exclude_falsy=True)
+    from pprint import pprint
+
+    pprint(res)

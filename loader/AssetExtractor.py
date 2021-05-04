@@ -28,6 +28,16 @@ MANIFESTS = {
     "tw": "manifest/assetbundle.zh_tw.manifest.json",
 }
 
+IMG_EXT = ".png"
+IMG_ARGS = {
+    ".png": {"optimize": False},
+    ".webp": {"lossless": True, "quality": 0},
+}
+
+
+def save_img(img, dest):
+    img.save(dest, **IMG_ARGS[IMG_EXT])
+
 
 class ParsedManifestFlat(dict):
     def __init__(self, manifest):
@@ -425,9 +435,9 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                         continue
                 if a:
                     image.putalpha(a)
-                dest = os.path.splitext(dest)[0] + ".png"
+                dest = os.path.splitext(dest)[0] + IMG_EXT
                 check_target_path(dest)
-                image.save(dest)
+                save_img(image, dest)
                 if stdout_log:
                     print(f"Merged RGBA {dest}")
 
@@ -442,8 +452,8 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                 if a:
                     image.putalpha(a)
                 check_target_path(dest)
-                dest = os.path.splitext(dest)[0] + ".png"
-                image.save(dest)
+                dest = os.path.splitext(dest)[0] + IMG_EXT
+                save_img(image, dest)
                 if stdout_log:
                     print(f"Merged YCbCr {dest}")
             if image is not None:
@@ -456,9 +466,9 @@ def merge_categorized(all_categorized_images, stdout_log=False):
                         s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
                         if mask is not None:
                             s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
-                        s_dest = os.path.splitext(s_dest)[0] + ".png"
+                        s_dest = os.path.splitext(s_dest)[0] + IMG_EXT
                         check_target_path(s_dest)
-                        s_img.save(s_dest)
+                        save_img(s_img, s_dest)
                         if stdout_log:
                             print(f"Merged Sprite {s_dest}")
                 except KeyError:
@@ -504,14 +514,14 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 layer1[f"{c_idx:03}{a_idx:03}"] = merged, mask
             else:
                 layer2[f"{c_idx:03}{a_idx:03}"] = merged, mask
-            # merged.save(f'{dest}_c{c_idx:03}a{a_idx:03}.png')
+            # save_img(merged, f'{dest}_c{c_idx:03}a{a_idx:03}{IMG_EXT}')
         if combine_all:
-            base = Image.open(f"{dest}_base.png")
+            base = Image.open(f"{dest}_base{IMG_EXT}")
             # for l1_key, l1_img in layer1.items():
             #     for l2_key, l2_img in layer2.items():
             #         base.paste(l1_img[0], box=box, mask=l1_img[1])
             #         base.paste(l2_img[0], box=box, mask=l2_img[1])
-            #         base.save(f'{dest}_{l1_key}_{l2_key}.png')
+            #         save_img(base, f'{dest}_{l1_key}_{l2_key}{IMG_EXT}')
             for l1, l2 in zip(layer1.items(), layer2.items()):
                 l1_key, l1_img = l1
                 l2_key, l2_img = l2
@@ -520,17 +530,17 @@ def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
                 merged_dest = os.path.join(
                     os.path.dirname(dest),
                     "merged",
-                    f"{os.path.basename(dest)}_{l1_key}_{l2_key}.png",
+                    f"{os.path.basename(dest)}_{l1_key}_{l2_key}{IMG_EXT}",
                 )
                 check_target_path(merged_dest)
-                base.save(merged_dest)
+                save_img(base, merged_dest)
             if stdout_log:
                 print(f"Merged expressions {dest}")
         for layer in (layer1, layer2):
             for key, img in layer.items():
                 if img[1]:
                     img[0].putalpha(img[1])
-                img[0].save(f"{dest}_{key}.png")
+                save_img(img[0], f"{dest}_{key}{IMG_EXT}")
                 if stdout_log:
                     print(f"Saved {dest}_{key}")
 
@@ -777,7 +787,7 @@ if __name__ == "__main__":
 
     IMAGE_PATTERNS = {
         "jp": {
-            r"^images/icon/chara/m": None,
+            r"^images/outgame/unitdetail/chara/": None,
         }
     }
 
