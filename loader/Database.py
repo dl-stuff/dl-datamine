@@ -270,7 +270,7 @@ class DBManager:
 
 
 class DBView:
-    def __init__(self, index, table, references=None, labeled_fields=None):
+    def __init__(self, index, table, references=None, labeled_fields=None, override_view=False):
         self.index = index
         self.database = index.db
         self.references = references or {}
@@ -280,7 +280,7 @@ class DBView:
                 self.references[table][label] = ("TextLabel", "_Id", "_Text")
         self.name = table
         self.base_table = table
-        if len(self.references) > 0:
+        if len(self.references) > 0 or override_view:
             self.open()
 
     def process_result(self, *args, **kargs):

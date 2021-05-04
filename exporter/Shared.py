@@ -474,15 +474,16 @@ class ActionPartsHitLabel(DBView):
     }
 
     def __init__(self, index):
-        super().__init__(index, "ActionPartsHitLabel")
+        super().__init__(index, "ActionPartsHitLabel", override_view=True)
         # SELECT * FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob
+
+    def open(self):
         self.name = f"View_{self.base_table}"
         self.database.conn.execute(f"DROP VIEW IF EXISTS {self.name}")
         self.database.conn.execute(
             f"CREATE VIEW {self.name} AS SELECT ActionPartsHitLabel._ref AS _ref, ActionPartsHitLabel._source AS _source, PlayerActionHitAttribute.* FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob"
         )
         self.database.conn.commit()
-        self.tbl_keys = self.database.check_table(self.base_table).field_type.keys()
 
     def process_result(self, res, exclude_falsy=True):
         result_dict = {source: [] for source in self.LABEL_SORT.keys()}

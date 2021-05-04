@@ -1,5 +1,8 @@
 import json
 import os
+from collections import defaultdict
+from itertools import count
+
 from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata
 from pprint import pprint
@@ -52,8 +55,10 @@ def flatten_data(data, table, parent_keys=None):
     return flattened
 
 
-def load_table(db, data, table, stdout_log=False):
+def load_table(db, data, table, stdout_log=False, extra_proc=None):
     data = flatten_data(data, table)
+    if extra_proc:
+        data = extra_proc(data)
     if not data:
         if stdout_log:
             print(f"Skip {table}")
@@ -73,10 +78,19 @@ def load_table(db, data, table, stdout_log=False):
     db.insert_many(table, data.values(), mode=DBManager.REPLACE)
 
 
+def proc_MC(data):
+    id_piece_count = defaultdict(count)
+    for key, row in data.items():
+        row["_ManaCircleName"] = f"MC_{int(row['MC_1']):04}"
+        row["_Step"] = next(id_piece_count[(row["MC_1"], row["_ManaPieceType"])]) + 1
+    return data
+
+
 def load_json(db, path, table, stdout_log=False):
     db.drop_table(table)
+    extra_proc = proc_MC if table == "MC" else None
     with open(path) as f:
-        load_table(db, json.load(f), table, stdout_log=stdout_log)
+        load_table(db, json.load(f), table, stdout_log=stdout_log, extra_proc=extra_proc)
 
 
 def load_master(db, path, stdout_log=False):

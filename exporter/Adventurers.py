@@ -246,7 +246,56 @@ class CharaData(DBView):
         super().export_one_to_folder(pk, out_dir, ext, exclude_falsy=exclude_falsy, condense=True)
 
 
+class ManaCircle(DBView):
+    FIELD_DEF = {
+        "MC": (
+            "_ManaCircleName",
+            ("_Id", "_Seq"),
+            "_Hierarchy",
+            "_No",
+            "_ManaPieceType",
+            "_Step",
+            "_IsReleaseStory",
+            "_NecessaryManaPoint",
+            "_UniqueGrowMaterialCount1",
+            "_UniqueGrowMaterialCount2",
+            "_GrowMaterialCount",
+        ),
+        "ManaPieceMaterial": (
+            "_ElementId",
+            "_MaterialId1",
+            "_MaterialQuantity1",
+            "_MaterialId2",
+            "_MaterialQuantity2",
+            "_MaterialId3",
+            "_MaterialQuantity3",
+            "_DewPoint",
+        ),
+    }
+
+    def __init__(self, index):
+        super().__init__(index, "MC", override_view=True)
+        # SELECT DISTINCT _ManaCircleName, _PieceMaterialElementId FROM CharaData
+        # SELECT * FROM ManaPieceMaterial WHERE _ElementId=3011
+
+    def open(self):
+        self.name = "View_ManaCircle"
+        self.database.conn.execute(f"DROP VIEW IF EXISTS {self.name}")
+        fieldnames = []
+        for tbl, fields in ManaCircle.FIELD_DEF.items():
+            for field in fields:
+                if isinstance(field, tuple):
+                    field, as_field = field
+                else:
+                    as_field = field
+                fieldnames.append(f"{tbl}.{field} AS {as_field}")
+        fieldnames = ",".join(fieldnames)
+        self.database.conn.execute(
+            f"CREATE VIEW {self.name} AS SELECT {fieldnames} FROM MC LEFT JOIN ManaPieceMaterial ON (MC._ManaPieceType == ManaPieceMaterial._ManaPieceType AND MC._Step == ManaPieceMaterial._Step)"
+        )
+        self.database.conn.commit()
+
+
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = CharaData(index)
-    view.export_one_to_folder(10750505)
+    view = ManaCircle(index)
