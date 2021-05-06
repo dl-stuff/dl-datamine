@@ -864,11 +864,11 @@ class BaseConf(WeaponType):
     }
     GUN_MODES = (40, 41, 42)
 
-    def process_result(self, res, exclude_falsy=True, full_query=True):
+    def process_result(self, res, full_query=True):
         conf = {"lv2": {}}
         if res["_Label"] != "GUN":
             fs_id = res["_BurstPhase1"]
-            res = super().process_result(res, exclude_falsy=True, full_query=True)
+            res = super().process_result(res, full_query=True)
             # fs_delay = {}
             fsconf = convert_fs(res["_BurstPhase1"], res["_ChargeMarker"], res["_ChargeCancel"])
             startup = fsconf["fs"]["startup"]
@@ -893,7 +893,7 @@ class BaseConf(WeaponType):
         else:
             # gun stuff
             for mode in BaseConf.GUN_MODES:
-                mode = self.index["CharaModeData"].get(mode, exclude_falsy=exclude_falsy, full_query=True)
+                mode = self.index["CharaModeData"].get(mode, full_query=True)
                 mode_name = f'gun{mode["_GunMode"]}'
                 if (burst := mode.get("_BurstAttackId")) :
                     marker = burst.get("_BurstMarkerId")
@@ -922,11 +922,11 @@ class BaseConf(WeaponType):
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "base")
-        all_res = self.get_all(exclude_falsy=True)
+        all_res = self.get_all()
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             out_name = self.outfile_name(res, ext)
-            res = self.process_result(res, exclude_falsy=True)
+            res = self.process_result(res)
             output = os.path.join(out_dir, out_name)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 # json.dump(res, fp, indent=2, ensure_ascii=False)
@@ -1047,7 +1047,7 @@ class SkillProcessHelper:
 
     def parse_skill_ab(self, k, seq, skill, action, sconf, ab):
         if isinstance(ab, int):
-            ab = self.index["AbilityData"].get(ab, exclude_falsy=True)
+            ab = self.index["AbilityData"].get(ab)
         for a in (1, 2, 3):
             ab_type = ab.get(f"_AbilityType{a}")
             if ab_type == AbilityType.ReferenceOther:
@@ -1203,7 +1203,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         26: "Mona",
     }
 
-    def process_result(self, res, exclude_falsy=True, condense=True, all_levels=False):
+    def process_result(self, res, condense=True, all_levels=False):
         self.index["ActionParts"].animation_reference = (
             "CharacterMotion",
             int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'),
@@ -1214,13 +1214,13 @@ class AdvConf(CharaData, SkillProcessHelper):
         for i in (1, 2, 3):
             for j in (3, 2, 1):
                 if (ab := res.get(f"_Abilities{i}{j}")) :
-                    ab_lst.append(self.index["AbilityData"].get(ab, full_query=True, exclude_falsy=exclude_falsy))
+                    ab_lst.append(self.index["AbilityData"].get(ab, full_query=True))
                     break
         converted, skipped = convert_all_ability(ab_lst)
         res = self.condense_stats(res)
         conf = {
             "c": {
-                "name": res.get("_SecondName", res["_Name"]),
+                "name": res.get("_SecondName", res.get("_Name")),
                 "icon": f'{res["_BaseId"]:06}_{res["_VariationId"]:02}_r{res["_Rarity"]:02}',
                 "att": res["_MaxAtk"],
                 "hp": res["_MaxHp"],
@@ -1242,20 +1242,20 @@ class AdvConf(CharaData, SkillProcessHelper):
             find_ab_alt_attrs(self.ab_alt_attrs, ab)
 
         if (burst := res.get("_BurstAttack")) :
-            burst = self.index["PlayerAction"].get(res["_BurstAttack"], exclude_falsy=exclude_falsy)
+            burst = self.index["PlayerAction"].get(res["_BurstAttack"])
             if burst and (marker := burst.get("_BurstMarkerId")):
                 conf.update(convert_fs(burst, marker))
 
         for s in (1, 2):
-            skill = self.index["SkillData"].get(res[f"_Skill{s}"], exclude_falsy=exclude_falsy, full_query=True)
+            skill = self.index["SkillData"].get(res[f"_Skill{s}"], full_query=True)
             self.chara_skills[res[f"_Skill{s}"]] = (f"s{s}", s, skill, None)
         if (edit := res.get("_EditSkillId")) and edit not in self.chara_skills:
-            skill = self.index["SkillData"].get(res[f"_EditSkillId"], exclude_falsy=exclude_falsy, full_query=True)
+            skill = self.index["SkillData"].get(res[f"_EditSkillId"], full_query=True)
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
 
         if (udrg := res.get("_UniqueDragonId")) :
             if not res.get("_ModeChangeType") and res.get("_IsConvertDragonSkillLevel"):
-                dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
+                dragon = self.index["DragonData"].get(udrg, by="_Id")
                 for part in dragon["_Skill1"]["_ActionId1"]["_Parts"]:
                     part["DEBUG_GLUCA_FLAG"] = True
                 res["_ModeId2"] = {
@@ -1280,7 +1280,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             if (mode := res.get(f"_ModeId{m}")) :
                 mode_name = None
                 if not isinstance(mode, dict):
-                    mode = self.index["CharaModeData"].get(mode, exclude_falsy=exclude_falsy, full_query=True)
+                    mode = self.index["CharaModeData"].get(mode, full_query=True)
                     if not mode:
                         continue
                 else:
@@ -1296,7 +1296,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                         if res.get("_ModeChangeType") == 3 and m == 2:
                             mode_name = "_ddrive"
                             if (udrg := res.get("_UniqueDragonId")) :
-                                dragon = self.index["DragonData"].get(udrg, by="_Id", exclude_falsy=True)
+                                dragon = self.index["DragonData"].get(udrg, by="_Id")
                                 for s in (1, 2):
                                     a_skey = f"_Skill{s}Id"
                                     d_skey = f"_Skill{s}"
@@ -1324,7 +1324,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 if (burst := mode.get("_BurstAttackId")) :
                     marker = burst.get("_BurstMarkerId")
                     if not marker:
-                        marker = self.index["PlayerAction"].get(burst["_Id"] + 4, exclude_falsy=True)
+                        marker = self.index["PlayerAction"].get(burst["_Id"] + 4)
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f"{fs}{mode_name}"] = fsc
                 if (xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict):
@@ -1388,7 +1388,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             if modifiers["_BuffDebuffOffset"] != 1:
                 res_data["mod_buff"] = modifiers["_BuffDebuffOffset"]
         if res.get("_EditSkillId", 0) > 0 and res.get("_EditSkillCost", 0) > 0:
-            skill = self.index["SkillData"].get(res["_EditSkillId"], exclude_falsy=False)
+            skill = self.index["SkillData"].get(res["_EditSkillId"])
             res_data["s"] = self.edit_skill_idx
             if res["_MaxLimitBreakCount"] >= 5:
                 sp_lv = 4
@@ -1409,9 +1409,9 @@ class AdvConf(CharaData, SkillProcessHelper):
         return res_data
 
     def exability_data(self, res):
-        ex_res = self.index["ExAbilityData"].get(res["_ExAbilityData5"], exclude_falsy=True)
+        ex_res = self.index["ExAbilityData"].get(res["_ExAbilityData5"])
         ex_ab, ex_skipped = convert_exability(ex_res)
-        chain_res = self.index["AbilityData"].get(res.get("_ExAbility2Data5"), full_query=True, exclude_falsy=True)
+        chain_res = self.index["AbilityData"].get(res.get("_ExAbility2Data5"), full_query=True)
         chain_ab, chain_skipped = convert_ability(chain_res, chains=True)
         if len(chain_ab) > 1:
             print(res)
@@ -1481,7 +1481,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         exability_data.update(extra_data)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        all_res = self.get_all(exclude_falsy=True, where="_ElementalType != 99 AND _IsPlayable = 1")
+        all_res = self.get_all(where="_ElementalType != 99 AND _IsPlayable = 1")
         # ref_dir = os.path.join(out_dir, '..', 'adv')
         skillshare_out = os.path.join(out_dir, f"skillshare{ext}")
         exability_out = os.path.join(out_dir, f"exability{ext}")
@@ -1491,7 +1491,9 @@ class AdvConf(CharaData, SkillProcessHelper):
         exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
         for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
             try:
-                outconf = self.process_result(res, exclude_falsy=True)
+                outconf = self.process_result(
+                    res,
+                )
                 out_name = self.outfile_name(outconf, ext)
                 if (ss_res := self.skillshare_data(res)) :
                     skillshare_data[snakey(outconf["c"]["name"])] = ss_res
@@ -1593,7 +1595,10 @@ def ab_stats(**kwargs):
 
 def ab_aff_edge(**kwargs):
     if (a_id := kwargs.get("var_a")) :
-        return [f"edge_{a_id}", kwargs.get("upval")]
+        res = [f"edge_{a_id}", kwargs.get("upval")]
+        if (condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains"))) :
+            res.append(condstr)
+        return res
 
 
 def ab_damage(**kwargs):
@@ -1998,14 +2003,14 @@ class WpConf(AbilityCrest):
 
     def __init__(self, index):
         super().__init__(index)
-        self.boon_names = {res["_Id"]: res["_Name"] for res in self.index["UnionAbility"].get_all(exclude_falsy=True)}
+        self.boon_names = {res["_Id"]: res["_Name"] for res in self.index["UnionAbility"].get_all()}
 
-    def process_result(self, res, exclude_falsy=True):
+    def process_result(self, res):
         ab_lst = []
         for i in (1, 2, 3):
             k = f"_Abilities{i}3"
             if (ab := res.get(k)) :
-                ab_lst.append(self.index["AbilityData"].get(ab, full_query=True, exclude_falsy=exclude_falsy))
+                ab_lst.append(self.index["AbilityData"].get(ab, full_query=True))
         converted, skipped = convert_all_ability(ab_lst, skip_abtype=WpConf.SKIP_AB)
 
         boon = res.get("_UnionAbilityGroupId", 0)
@@ -2032,13 +2037,15 @@ class WpConf(AbilityCrest):
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        all_res = self.get_all(exclude_falsy=True)
+        all_res = self.get_all()
         check_target_path(out_dir)
         outdata = {}
         skipped = []
         collisions = defaultdict(list)
         for res in tqdm(all_res, desc="wp"):
-            conf = self.process_result(res, exclude_falsy=True)
+            conf = self.process_result(
+                res,
+            )
             if conf:
                 qual_name = snakey(res["_Name"])
                 if qual_name in outdata:
@@ -2100,8 +2107,8 @@ class DrgConf(DragonData, SkillProcessHelper):
             pass
         return conf, k, action
 
-    def process_result(self, res, exclude_falsy=True):
-        super().process_result(res, exclude_falsy)
+    def process_result(self, res):
+        super().process_result(res)
 
         ab_lst = []
         for i in (1, 2):
@@ -2111,7 +2118,7 @@ class DrgConf(DragonData, SkillProcessHelper):
 
         conf = {
             "d": {
-                "name": res.get("_SecondName", res["_Name"]),
+                "name": res.get("_SecondName", res.get("_Name")),
                 "icon": f'{res["_BaseId"]}_{res["_VariationId"]:02}',
                 "att": res["_MaxAtk"],
                 "hp": res["_MaxHp"],
@@ -2183,13 +2190,13 @@ class DrgConf(DragonData, SkillProcessHelper):
             + ")) AND _Id = _EmblemId"
         )
         # where_str = '_IsPlayable = 1'
-        all_res = self.get_all(exclude_falsy=True, where=where_str)
+        all_res = self.get_all(where=where_str)
         out_dir = os.path.join(out_dir, "drg")
         check_target_path(out_dir)
         outdata = {ele.lower(): {} for ele in ELEMENTS.values()}
         # skipped = []
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-            conf = self.process_result(res, exclude_falsy=True)
+            conf = self.process_result(res)
             # outfile = snakey(conf['d']['ele']) + '.json'
             if conf:
                 outdata[conf["d"]["ele"]][snakey(conf["d"]["name"])] = conf
@@ -2209,8 +2216,8 @@ class DrgConf(DragonData, SkillProcessHelper):
 class WepConf(WeaponBody, SkillProcessHelper):
     T2_ELE = ("shadow", "flame")
 
-    def process_result(self, res, exclude_falsy=True):
-        super().process_result(res, exclude_falsy)
+    def process_result(self, res):
+        super().process_result(res)
         skin = res["_WeaponSkinId"]
         # if skin['_FormId'] % 10 == 1 and res['_ElementalType'] in WepConf.T2_ELE:
         #     return None
@@ -2259,13 +2266,13 @@ class WepConf(WeaponBody, SkillProcessHelper):
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        all_res = self.get_all(exclude_falsy=True, where="_IsPlayable = 1")
+        all_res = self.get_all(where="_IsPlayable = 1")
         out_dir = os.path.join(out_dir, "wep")
         check_target_path(out_dir)
         outdata = {wt.lower(): {ele.lower(): {} for ele in ("any", *ELEMENTS.values())} for wt in WEAPON_TYPES.values()}
         # skipped = []
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-            conf = self.process_result(res, exclude_falsy=True)
+            conf = self.process_result(res)
             # outfile = snakey(conf['d']['ele']) + '.json'
             if conf:
                 outdata[conf["w"]["wt"]][conf["w"]["ele"]][snakey(conf["w"]["series"]).lower()] = conf
@@ -2305,7 +2312,7 @@ if __name__ == "__main__":
         sconf, k, action = view.convert_skill(
             "s1",
             0,
-            view.index["SkillData"].get(int(args.s), exclude_falsy=True),
+            view.index["SkillData"].get(int(args.s)),
             int(args.slv),
         )
         sconf = {k: sconf}
@@ -2336,17 +2343,17 @@ if __name__ == "__main__":
             fmt_conf({snakey(wp["name"]): wp}, f=sys.stdout)
     elif args.f:
         view = PlayerAction(index)
-        burst = view.get(int(args.f), exclude_falsy=True)
+        burst = view.get(int(args.f))
         if (mid := burst.get("_BurstMarkerId")) :
             marker = mid
         elif args.fm:
-            marker = view.get(int(args.fm), exclude_falsy=True)
+            marker = view.get(int(args.fm))
         else:
-            marker = view.get(int(args.f) + 4, exclude_falsy=True)
+            marker = view.get(int(args.f) + 4)
         fmt_conf(convert_fs(burst, marker), f=sys.stdout)
     elif args.x:
         view = CharaUniqueCombo(index)
-        xalt = view.get(int(args.x), exclude_falsy=True)
+        xalt = view.get(int(args.x))
         if not isinstance(xalt, dict):
             exit()
         conf = {}
@@ -2366,5 +2373,5 @@ if __name__ == "__main__":
             view.export_all_to_folder(out_dir=out_dir)
     elif args.act:
         view = PlayerAction(index)
-        action = view.get(int(args.act), exclude_falsy=True)
+        action = view.get(int(args.act))
         pprint(hit_sr(action["_Parts"], is_dragon=True))

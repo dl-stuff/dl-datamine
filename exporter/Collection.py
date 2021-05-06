@@ -3,11 +3,12 @@ import os
 import json
 import pathlib
 from collections import defaultdict
+from datetime import datetime
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.AssetExtractor import Extractor
-from exporter.Shared import AbilityData, MaterialData, FortPlantData, FortPlantDetail
-from exporter.Adventurers import CharaData
+from exporter.Shared import SkillData, AbilityData, MaterialData, FortPlantData, FortPlantDetail
+from exporter.Adventurers import CharaData, ManaCircle, CharaLimitBreak
 from exporter.Dragons import DragonData
 from exporter.Wyrmprints import (
     AbilityCrest,
@@ -31,12 +32,16 @@ IMAGE_PATTERNS = {
         r"^images/icon/dragon/l": "../dragon",
         r"^images/icon/amulet/l": "../amulet",
         r"^images/icon/weapon/l": "../weapon",
-        # r'^images/icon/item/materialdata/l': '../material'
         r"^images/icon/manacircle": "../manacircle",
+        # r'^images/icon/ability/l/': '../ability',
+        # r'^images/icon/material/l/': '../material',
+        # r'^images/fort/': '../fort',
+        # r'^images/icon/skill/ingamel/': '../skill'
     }
 }
 
 ability_icons = set()
+skill_icons = set()
 material_icons = set()
 fort_icons = set()
 
@@ -48,8 +53,7 @@ def download_all_icons(out, set_icons=None):
         return
     patterns = {"jp": {}}
     for icon_set, prefix, dest in set_icons:
-        for ic in icon_set:
-            patterns["jp"][f"{prefix}{ic}"] = dest
+        patterns["jp"][prefix + "(?:" + "|".join(map(str, icon_set)) + ")"] = dest
     ex.download_and_extract_by_pattern(patterns)
 
 
@@ -57,19 +61,62 @@ def make_bv_id(res, view):
     return f'{res["_BaseId"]}_{res["_VariationId"]:02}'
 
 
-def make_chara_json(res):
-    return {
+def make_chara_json(res, index):
+    result = {
         "NameEN": res.get("_SecondName") or res.get("_Name"),
         "NameJP": res.get("_SecondNameJP") or res.get("_NameJP"),
         "NameCN": res.get("_SecondNameCN") or res.get("_NameCN"),
         "Element": res.get("_ElementalType"),
         "Weapon": res.get("_WeaponType"),
         "Rarity": res.get("_Rarity"),
-        "Spiral": bool(res.get("_MaxLimitBreakCount") == 5),
+        "MaxLimitBreak": res.get("_MaxLimitBreakCount"),
+        "LimitBreak": res["_CharaLimitBreak"],
+        "MCName": res["_ManaCircleName"],
+        "MCEle": res["_PieceMaterialElementId"],
+        "Skills": {},
+        "Abilities": {},
     }
+    result["DefaultLv"] = {
+        "Abilities": {i: res.get(f"_DefaultAbility{i}Level") for i in (1, 2, 3)},
+        "FS": res.get("_DefaultBurstAttackLevel"),
+    }
+    for i in (1, 2, 3):
+        result["Abilities"][i] = {}
+        for j in (1, 2, 3):
+            ab_key = f"_Abilities{i}{j}"
+            if ab := res.get(ab_key):
+                ab = index["AbilityData"].get(ab)
+                ab_icon = ab["_AbilityIconName"]
+                result["Abilities"][i][j] = ab_icon
+                ability_icons.add(ab_icon.lower())
+    exability = index["ExAbilityData"].get(res["_ExAbilityData5"])
+    result["ExAbility"] = exability["_AbilityIconName"]
+    ability_icons.add(exability["_AbilityIconName"].lower())
+    for i in (1, 2):
+        result["Skills"][i] = {}
+        s_key = f"_Skill{i}"
+        skill = index["SkillData"].get(res.get(s_key))
+        for j in (1, 2, 3, 4):
+            s_icon = skill[f"_SkillLv{j}IconName"]
+            result["Skills"][i][j] = s_icon
+            skill_icons.add(s_icon.lower())
+    if (growmat := res.get("_GrowMaterialId")) :
+        result["Grow"] = growmat
+        growend = res.get("_GrowMaterialOnlyEndDate")
+        if growend:
+            result["GrowEnd"] = datetime.strptime(growend + " UTC", "%Y/%m/%d %H:%M:%S %Z").timestamp()
+
+        material_icons.add(growmat)
+    if (unique1 := res.get("_UniqueGrowMaterialId1")) :
+        result["Unique1"] = unique1
+        material_icons.add(unique1)
+    if (unique2 := res.get("_UniqueGrowMaterialId2")) :
+        result["Unique2"] = unique2
+        material_icons.add(unique2)
+    return result
 
 
-def make_dragon_json(res):
+def make_dragon_json(res, index):
     return {
         "NameEN": res.get("_SecondName") or res.get("_Name"),
         "NameJP": res.get("_SecondNameJP") or res.get("_NameJP"),
@@ -87,7 +134,7 @@ def make_base_id(res, view):
     return str(res["_BaseId"])
 
 
-def make_amulet_json(res):
+def make_amulet_json(res, index):
     result = {
         "BaseId": res["_BaseId"],
         "NameEN": res.get("_Name"),
@@ -99,18 +146,18 @@ def make_amulet_json(res):
         "Build": res.get("_AbilityCrestBuildupGroupId"),
         "AbIcon": res["_Abilities13"]["_AbilityIconName"],
     }
-    ability_icons.add(res["_Abilities13"]["_AbilityIconName"])
+    ability_icons.add(res["_Abilities13"]["_AbilityIconName"].lower())
     if uab := res.get("_UnionAbilityGroupId"):
         result["Union"] = uab.get("_Id")
     if res.get("_UniqueBuildupMaterialId"):
         material_icons.add(res.get("_UniqueBuildupMaterialId"))
-        result["UniqueMaterial"] = res.get("_UniqueBuildupMaterialId")
+        result["Unique"] = res.get("_UniqueBuildupMaterialId")
     if res.get("_IsHideChangeImage"):
         result["NoRefine"] = res.get("_IsHideChangeImage")
     return result
 
 
-def make_material_json(res):
+def make_material_json(res, index):
     return {
         "NameEN": res.get("_Name"),
         "NameJP": res.get("_NameJP"),
@@ -119,7 +166,7 @@ def make_material_json(res):
     }
 
 
-def make_weapon_series_json(res):
+def make_weapon_series_json(res, index):
     return {
         "NameEN": res.get("_GroupSeriesName"),
         "NameJP": res.get("_GroupSeriesNameJP"),
@@ -217,7 +264,7 @@ def make_json(out, outfile, view, id_fn, data_fn, avail_fn=None, where=None, ord
             continue
         if process:
             res = view.process_result(res)
-        data[id_fn(res, view)] = data_fn(res)
+        data[id_fn(res, view)] = data_fn(res, view.index)
     if avail_fn:
         avail_fn(data)
         for d in data.copy():
@@ -269,7 +316,7 @@ def make_weapon_jsons(out, index):
             continue
         for i in range(row["_MaxLimitBreakCountByLimitOver2"] + 1):
             key = f"_MaxLimitLevelByLimitBreak{i}"
-            if row[key] == 0:
+            if not row.get(key):
                 continue
             rarity_unbind_level[rarity][i] = {"Level": row[key], "Mats": rarity_level_mats[rarity][row[key]]}
     outfile = "weaponlevel.json"
@@ -283,8 +330,8 @@ def make_weapon_jsons(out, index):
         mats = get_mats_dict(res, range(1, 11), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
         # a hack for 7slot
         if res.get("_BuildupPieceType") == 9:
-            res.get("_BuildupPieceType") = 3
-            res.get("_Step") += 1
+            res["_BuildupPieceType"] = 3
+            res["_Step"] += 1
         # lv_req = res.get("_UnlockConditionLevel", 0)
         # ub_req = res.get("_UnlockConditionLimitBreakCount", 0)
         # rf_req = res.get("_UnlockConditionLimitOverCount", 0)
@@ -321,10 +368,7 @@ def make_weapon_jsons(out, index):
         mats = get_mats_dict(res, range(1, 6), "_CreateEntityId{}", "_CreateEntityQuantity{}")
         passive = None
         if res.get("_WeaponPassiveAbilityGroupId"):
-            passive_ab_group = index["WeaponPassiveAbility"].get(
-                res.get("_WeaponPassiveAbilityGroupId"),
-                by="_WeaponPassiveAbilityGroupId"
-            )
+            passive_ab_group = index["WeaponPassiveAbility"].get(res.get("_WeaponPassiveAbilityGroupId"), by="_WeaponPassiveAbilityGroupId")
             passive = {}
             for p in passive_ab_group:
                 ab = index["AbilityData"].get(p.get("_AbilityId"), full_query=False)
@@ -419,7 +463,7 @@ def make_amulet_jsons(out, index):
     for row in AbilityCrestBuildupLevel(index).get_all():
         mats = get_mats_dict(row, range(1, 4), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
         if uniqc := row.get("_UniqueBuildupMaterialCount"):
-            mats["UNIQUE"] = uniqc
+            mats["Unique"] = uniqc
         rarity = 9 if row.get("_RarityGroup") == 901 else row.get("_RarityGroup")
         rarity_level_mats[rarity][row.get("_Level")] = mats
     rarity_level_mats = dict(rarity_level_mats)
@@ -453,7 +497,7 @@ def make_amulet_jsons(out, index):
     for res in all_res:
         mats = get_mats_dict(res, range(1, 4), "_BuildupMaterialId{}", "_BuildupMaterialQuantity{}")
         if uniqc := res.get("_UniqueBuildupMaterialCount"):
-            mats["UNIQUE"] = uniqc
+            mats["Unique"] = uniqc
         processed[res.get("_AbilityCrestBuildupGroupId")][res.get("_BuildupPieceType")].append(
             {
                 "Step": res.get("_Step"),
@@ -468,8 +512,72 @@ def make_amulet_jsons(out, index):
         json.dump(processed, f)
 
 
+# class ManaPieceType(Enum):
+#     NONE = 0
+#     HP = 10101
+#     ATK = 10102
+#     HP_ATK = 10103
+#     BURSTATTACK = 10201
+#     ABILITY_1 = 10301
+#     ABILITY_2 = 10302
+#     ABILITY_3 = 10303
+#     SKILL_1 = 10401
+#     SKILL_2 = 10402
+#     EXABILITY = 10501
+#     ITEM_1 = 10601
+#     ITEM_2 = 10602
+#     COMBO_1 = 10701
+#     MAX_LEVEL_5 = 10801
+
+
 def make_manacircle_jsons(out, index):
-    pass
+    mc_data = defaultdict(dict)
+    for row in ManaCircle(index).get_all(where="_Seq != 0"):
+        mcn = row["_ManaCircleName"]
+        mcs = row["_Seq"]
+        if mcs not in mc_data[mcn]:
+            mats = {}
+            if (unique1 := row.get("_UniqueGrowMaterialCount1")) :
+                mats["Unique1"] = unique1
+            if (unique2 := row.get("_UniqueGrowMaterialCount2")) :
+                mats["Unique2"] = unique2
+            mc_data[mcn][mcs] = {
+                "Piece": row["_ManaPieceType"],
+                "Story": row.get("_IsReleaseStory", 0),
+                "Mana": row.get("_NecessaryManaPoint", 0),
+                "Hierarchy": row.get("_Hierarchy", 0),
+                "No": row.get("_No", 0),
+                "Step": row.get("_Step", 0),
+                "Mats": mats,
+                "Ele": {},
+            }
+            if (grow := row.get("_GrowMaterialCount")) :
+                mc_data[mcn][mcs]["Grow"] = grow
+        if mce := row.get("_ElementId"):
+            eldwater = row.get("_DewPoint", 0)
+            mats = get_mats_dict(row, range(1, 4), "_MaterialId{}", "_MaterialQuantity{}")
+            if eldwater or mats:
+                mc_data[mcn][mcs]["Ele"][mce] = {
+                    "Eldwater": row.get("_DewPoint", 0),
+                    "Mats": get_mats_dict(row, range(1, 4), "_MaterialId{}", "_MaterialQuantity{}"),
+                }
+    mc_data = dict(mc_data)
+    outfile = "manacircle.json"
+    with open(os.path.join(out, outfile), "w") as f:
+        json.dump(mc_data, f)
+
+    chara_lb = {}
+    for row in CharaLimitBreak(index).get_all():
+        chara_lb[row["_Id"]] = {}
+        for i in range(1, 6):
+            clb = {}
+            clb["Mats"] = get_mats_dict(row, range(1, 6), "_OrbData{}Id" + str(i), "_OrbData{}Num" + str(i))
+            if (grow := row.get(f"_GrowMaterialNum{i}")) :
+                clb["Grow"] = grow
+            chara_lb[row["_Id"]][i] = clb
+    outfile = "charalimitbreak.json"
+    with open(os.path.join(out, outfile), "w") as f:
+        json.dump(chara_lb, f)
 
 
 if __name__ == "__main__":
@@ -482,24 +590,8 @@ if __name__ == "__main__":
     check_target_path(outdir)
 
     playable = "_ElementalType != 99 AND _IsPlayable = 1"
-    make_json(
-        datadir,
-        "chara.json",
-        CharaData(index),
-        make_bv_id,
-        make_chara_json,
-        chara_availability_data,
-        where=playable,
-    )
-    make_json(
-        datadir,
-        "dragon.json",
-        DragonData(index),
-        make_bv_id,
-        make_dragon_json,
-        dragon_availability_data,
-        where=playable,
-    )
+    make_json(datadir, "chara.json", CharaData(index), make_bv_id, make_chara_json, chara_availability_data, where=playable)
+    make_json(datadir, "dragon.json", DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data, where=playable)
     make_json(datadir, "material.json", MaterialData(index), make_id, make_material_json)
 
     make_json(
@@ -523,6 +615,7 @@ if __name__ == "__main__":
         imgdir,
         set_icons=(
             (ability_icons, "images/icon/ability/l/", "../ability"),
+            (skill_icons, "images/icon/skill/l/", "../skill"),
             (material_icons, "images/icon/item/materialdata/l/", "../material"),
             (fort_icons, "images/fort/", "../fort"),
         ),

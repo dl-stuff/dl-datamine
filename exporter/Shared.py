@@ -796,12 +796,6 @@ class FortPlantDetail(DBView):
         #     self.link(res, f'_MaterialsId{i}', 'MaterialData', exclude_falsy=exclude_falsy)
         return res
 
-    def get(self, *args, **kargs):
-        res = super().get(*args, **kargs)
-        if not res:
-            return None
-        return self.process_result(res)
-
 
 if __name__ == "__main__":
     index = DBViewIndex()

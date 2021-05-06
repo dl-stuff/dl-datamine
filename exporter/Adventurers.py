@@ -200,6 +200,11 @@ class CharaData(DBView):
         super().export_one_to_folder(pk, out_dir, ext, condense=True)
 
 
+class CharaLimitBreak(DBView):
+    def __init__(self, index):
+        super().__init__(index, "CharaLimitBreak", override_view=True)
+
+
 class ManaCircle(DBView):
     FIELD_DEF = {
         "MC": (
