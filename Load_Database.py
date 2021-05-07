@@ -85,7 +85,6 @@ if __name__ == "__main__":
             ex.download_and_extract_by_pattern(LABEL_PATTERNS)
         else:
             ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
-        load_aiscript(os.path.join(ex.ex_dir, "jp", "aiscript"))
         # extract_story_function_json(ex)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
@@ -98,4 +97,5 @@ if __name__ == "__main__":
     load_character_motion(db, os.path.join(in_dir, JP, CHARACTERS_MOTION))
     load_dragon_motion(db, os.path.join(in_dir, JP, DRAGON_MOTION))
     load_ui_skill_detail(db, in_dir)
+    load_aiscript(os.path.join(ex.ex_dir, "jp", "aiscript"))
     print(f"total: {monotonic()-start:.4f}s")

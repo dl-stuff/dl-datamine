@@ -7,7 +7,13 @@ from datetime import datetime
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.AssetExtractor import Extractor
-from exporter.Shared import SkillData, AbilityData, MaterialData, FortPlantData, FortPlantDetail
+from exporter.Shared import (
+    SkillData,
+    AbilityData,
+    MaterialData,
+    FortPlantData,
+    FortPlantDetail,
+)
 from exporter.Adventurers import CharaData, ManaCircle, CharaLimitBreak
 from exporter.Dragons import DragonData
 from exporter.Wyrmprints import (
@@ -223,9 +229,7 @@ def chara_availability_data(data):
         where="IsPlayable",
         order_by="Id ASC, VariationId ASC",
     ):
-        data[f'{d["title"]["Id"]}_{int(d["title"]["VariationId"]):02}']["Availability"] = list(
-            map(process_avail("Chara"), d["title"]["Availability"].split(","))
-        )
+        data[f'{d["title"]["Id"]}_{int(d["title"]["VariationId"]):02}']["Availability"] = list(map(process_avail("Chara"), d["title"]["Availability"].split(",")))
 
 
 GACHA_DEW = {3: "150", 4: "2200", 5: "8500"}
@@ -256,7 +260,18 @@ def amulet_availability_data(data):
         data[d["title"]["Id"]]["Availability"] = list(map(process_avail("Amulet"), d["title"]["Availability"].split(",")))
 
 
-def make_json(out, outfile, view, id_fn, data_fn, avail_fn=None, where=None, order="_Id ASC", name_key="_Name", process=False):
+def make_json(
+    out,
+    outfile,
+    view,
+    id_fn,
+    data_fn,
+    avail_fn=None,
+    where=None,
+    order="_Id ASC",
+    name_key="_Name",
+    process=False,
+):
     all_res = view.get_all(where=where, order=order)
     data = {}
     for res in all_res:
@@ -318,7 +333,10 @@ def make_weapon_jsons(out, index):
             key = f"_MaxLimitLevelByLimitBreak{i}"
             if not row.get(key):
                 continue
-            rarity_unbind_level[rarity][i] = {"Level": row[key], "Mats": rarity_level_mats[rarity][row[key]]}
+            rarity_unbind_level[rarity][i] = {
+                "Level": row[key],
+                "Mats": rarity_level_mats[rarity][row[key]],
+            }
     outfile = "weaponlevel.json"
     with open(os.path.join(out, outfile), "w") as f:
         json.dump(dict(rarity_unbind_level), f)
@@ -368,7 +386,10 @@ def make_weapon_jsons(out, index):
         mats = get_mats_dict(res, range(1, 6), "_CreateEntityId{}", "_CreateEntityQuantity{}")
         passive = None
         if res.get("_WeaponPassiveAbilityGroupId"):
-            passive_ab_group = index["WeaponPassiveAbility"].get(res.get("_WeaponPassiveAbilityGroupId"), by="_WeaponPassiveAbilityGroupId")
+            passive_ab_group = index["WeaponPassiveAbility"].get(
+                res.get("_WeaponPassiveAbilityGroupId"),
+                by="_WeaponPassiveAbilityGroupId",
+            )
             passive = {}
             for p in passive_ab_group:
                 ab = index["AbilityData"].get(p.get("_AbilityId"), full_query=False)
@@ -457,7 +478,15 @@ def make_fort_jsons(out, index):
 
 
 def make_amulet_jsons(out, index):
-    make_json(out, "amulet.json", AbilityCrest(index), make_id, make_amulet_json, amulet_availability_data, process=True)
+    make_json(
+        out,
+        "amulet.json",
+        AbilityCrest(index),
+        make_id,
+        make_amulet_json,
+        amulet_availability_data,
+        process=True,
+    )
 
     rarity_level_mats = defaultdict(dict)
     for row in AbilityCrestBuildupLevel(index).get_all():
@@ -486,7 +515,10 @@ def make_amulet_jsons(out, index):
             key = f"_MaxLimitLevelByLimitBreak{i}"
             if row[key] == 0:
                 continue
-            rarity_level[rarity][i] = {"Level": row[key], "Mats": rarity_level_mats[rarity][row[key]]}
+            rarity_level[rarity][i] = {
+                "Level": row[key],
+                "Mats": rarity_level_mats[rarity][row[key]],
+            }
     outfile = "amuletlevel.json"
     with open(os.path.join(out, outfile), "w") as f:
         json.dump(dict(rarity_level), f)
@@ -590,8 +622,24 @@ if __name__ == "__main__":
     check_target_path(outdir)
 
     playable = "_ElementalType != 99 AND _IsPlayable = 1"
-    make_json(datadir, "chara.json", CharaData(index), make_bv_id, make_chara_json, chara_availability_data, where=playable)
-    make_json(datadir, "dragon.json", DragonData(index), make_bv_id, make_dragon_json, dragon_availability_data, where=playable)
+    make_json(
+        datadir,
+        "chara.json",
+        CharaData(index),
+        make_bv_id,
+        make_chara_json,
+        chara_availability_data,
+        where=playable,
+    )
+    make_json(
+        datadir,
+        "dragon.json",
+        DragonData(index),
+        make_bv_id,
+        make_dragon_json,
+        dragon_availability_data,
+        where=playable,
+    )
     make_json(datadir, "material.json", MaterialData(index), make_id, make_material_json)
 
     make_json(

@@ -144,7 +144,13 @@ def get_timeattack_data(quest_id):
 
 
 def prepare_icons():
-    ex = Extractor(ex_dir=OUTPUT_DIR, ex_img_dir=OUTPUT_DIR, stdout_log=False, overwrite=False, mf_mode=0)
+    ex = Extractor(
+        ex_dir=OUTPUT_DIR,
+        ex_img_dir=OUTPUT_DIR,
+        stdout_log=False,
+        overwrite=False,
+        mf_mode=0,
+    )
     ex.download_and_extract_by_pattern(ICON_PATTERNS)
 
 

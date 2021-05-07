@@ -3,7 +3,7 @@ import os
 import re
 
 from loader.Database import DBViewIndex, DBView
-from exporter.Shared import AbilityData, SkillData, PlayerAction, get_valid_filename
+from exporter.Shared import AbilityData, SkillData, PlayerAction, snakey
 
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
@@ -61,9 +61,7 @@ class WeaponBody(DBView):
             return res
         self.link(res, "_WeaponSeriesId", "WeaponBodyGroupSeries")
         if res.get("_WeaponPassiveAbilityGroupId"):
-            res["_WeaponPassiveAbilityGroupId"] = self.index["WeaponPassiveAbility"].get(
-                res["_WeaponPassiveAbilityGroupId"], by="_WeaponPassiveAbilityGroupId"
-            )
+            res["_WeaponPassiveAbilityGroupId"] = self.index["WeaponPassiveAbility"].get(res["_WeaponPassiveAbilityGroupId"], by="_WeaponPassiveAbilityGroupId")
         if res.get("_WeaponType"):
             res["_WeaponType"] = WEAPON_TYPES.get(res["_WeaponType"], res["_WeaponType"])
         if res.get("_ElementalType"):
@@ -93,7 +91,7 @@ class WeaponBody(DBView):
     @staticmethod
     def outfile_name(res, ext=".json"):
         name = "UNKNOWN" if "_Name" not in res else res["_Name"]
-        return get_valid_filename(f'{res["_Id"]:02}_{name}{ext}')
+        return snakey(f'{res["_Id"]:02}_{name}{ext}')
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "weapons")

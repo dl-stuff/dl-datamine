@@ -5,7 +5,6 @@ import json
 import re
 import itertools
 from collections import defaultdict
-from unidecode import unidecode
 from tqdm import tqdm
 from pprint import pprint
 import argparse
@@ -14,7 +13,7 @@ from ctypes import c_float
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.Actions import CommandType
-from exporter.Shared import ActionCondition, ActionParts, PlayerAction, AbilityData, ActionPartsHitLabel
+from exporter.Shared import ActionCondition, ActionParts, PlayerAction, AbilityData, ActionPartsHitLabel, snakey
 from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
@@ -122,10 +121,6 @@ AURA_TYPE_BUFFARGS = {
     AuraType.DEFENSE: ("def", "buff"),
 }
 DUMMY_PART = {"_seconds": 0}
-
-
-def snakey(name):
-    return re.sub(r"[^0-9a-zA-Z ]", "", unidecode(name.replace("&", "and")).strip()).replace(" ", "_")
 
 
 def ele_bitmap(n):
@@ -263,7 +258,10 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 part_hitattrs.append(value)
         is_msl = True
         if (blt := part.get("_bulletNum", 0)) > 1 and "_hitAttrLabel" in part_hitattr_map and not "extra" in part_hitattr_map["_hitAttrLabel"]:
-            for hattr in (part_hitattr_map["_hitAttrLabel"], *part_hitattr_map["_hitAttrLabelSubList"]):
+            for hattr in (
+                part_hitattr_map["_hitAttrLabel"],
+                *part_hitattr_map["_hitAttrLabelSubList"],
+            ):
                 last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
                 if need_copy:
                     part_hitattrs.append(last_copy)
@@ -307,7 +305,10 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             else:
                 gen = loopnum
             gen += 1
-            ref_attrs = [part_hitattr_map["_hitAttrLabel"], *part_hitattr_map["_hitAttrLabelSubList"]]
+            ref_attrs = [
+                part_hitattr_map["_hitAttrLabel"],
+                *part_hitattr_map["_hitAttrLabelSubList"],
+            ]
             is_msl = False
         gen_attrs = []
         timekey = "msl" if is_msl else "iv"
@@ -421,7 +422,12 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             ]
             aura_values = []
             for i in range(1, 7):
-                aura_values.append([fr(aura_data.get(f"_Rate{i:02}")), aura_data.get(f"_Duration{i:02}")])
+                aura_values.append(
+                    [
+                        fr(aura_data.get(f"_Rate{i:02}")),
+                        aura_data.get(f"_Duration{i:02}"),
+                    ]
+                )
             aura_args.append(aura_values)
             attr["amp"] = aura_args
         except KeyError:
@@ -833,7 +839,13 @@ def convert_fs(burst, marker=None, cancel=None):
                 fsconf["fs"] = fsconf["fs1"]
                 del fsconf["fs1"]
         else:
-            fsconf["fs"] = hit_attr_adj(burst, startup, fsconf["fs"], re.compile(r".*_LV02$"), skip_nohitattr=False)
+            fsconf["fs"] = hit_attr_adj(
+                burst,
+                startup,
+                fsconf["fs"],
+                re.compile(r".*_LV02$"),
+                skip_nohitattr=False,
+            )
             if fsconf["fs"]:
                 (
                     fsconf["fs"]["interrupt"],
@@ -1073,10 +1085,11 @@ class SkillProcessHelper:
                 hitattr = ab.get(f"_VariousId{a}str")
                 if not hitattr:
                     actcond = ab.get(f"_VariousId{a}a")
-                    if (condtype == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (
-                        condtype == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")
-                    ):
-                        sconf["sp_regen"] = float_ceil(sconf["sp"], -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"))
+                    if (condtype == AbilityCondition.SP1_LESS and actcond.get("_AutoRegeneS1")) or (condtype == AbilityCondition.SP2_LESS and actcond.get("_UniqueRegeneSp01")):
+                        sconf["sp_regen"] = float_ceil(
+                            sconf["sp"],
+                            -actcond.get("_SlipDamageRatio") / actcond.get("_SlipDamageIntervalSec"),
+                        )
                         continue
                     hitattr = {"_ActionCondition1": ab.get(f"_VariousId{a}a")}
                 if not (attr := convert_hitattr(hitattr, DUMMY_PART, action, set(), meta=self, skill=skill)):
@@ -1119,7 +1132,17 @@ class SkillProcessHelper:
             for ab, hitattr in self.ab_alt_attrs.get(seq, []):
                 attr = {}
                 condtype = ab.get("_ConditionType")
-                if not (attr := convert_hitattr(hitattr, DUMMY_PART, action, set(), meta=self, skill=skill, from_ab=True)):
+                if not (
+                    attr := convert_hitattr(
+                        hitattr,
+                        DUMMY_PART,
+                        action,
+                        set(),
+                        meta=self,
+                        skill=skill,
+                        from_ab=True,
+                    )
+                ):
                     continue
                 if (cooltime := ab.get("_CoolTime")) :
                     attr["cd"] = cooltime
@@ -1259,7 +1282,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                 for part in dragon["_Skill1"]["_ActionId1"]["_Parts"]:
                     part["DEBUG_GLUCA_FLAG"] = True
                 res["_ModeId2"] = {
-                    "_UniqueComboId": {"_ActionId": dragon["_DefaultSkill"], "_MaxComboNum": dragon["_ComboMax"]},
+                    "_UniqueComboId": {
+                        "_ActionId": dragon["_DefaultSkill"],
+                        "_MaxComboNum": dragon["_ComboMax"],
+                    },
                     "_Skill1Id": dragon["_Skill1"],
                     "_Skill2Id": dragon["_Skill2"],
                 }
@@ -1291,7 +1317,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     #     continue
                 if not mode_name:
                     try:
-                        mode_name = "_" + unidecode(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
+                        mode_name = snakey(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
                     except:
                         if res.get("_ModeChangeType") == 3 and m == 2:
                             mode_name = "_ddrive"
@@ -1866,7 +1892,12 @@ def ab_aff_res(**kwargs):
 
 def ab_psalm(**kwargs):
     ab = kwargs.get("ab")
-    return ["psalm", ab["_BaseCrestGroupId"], ab["_TriggerBaseCrestGroupCount"], int(kwargs.get("upval"))]
+    return [
+        "psalm",
+        ab["_BaseCrestGroupId"],
+        ab["_TriggerBaseCrestGroupCount"],
+        int(kwargs.get("upval")),
+    ]
 
 
 def ab_eledmg(**kwargs):
@@ -1961,7 +1992,11 @@ def convert_exability(ab):
         if (convert_a := ABILITY_CONVERT.get(atype)) :
             try:
                 res = convert_a(
-                    ab=ab, target=ab.get(f"_TargetAction{i}"), upval=ab.get(f"_AbilityType{i}UpValue0"), var_a=ab.get(f"_VariousId{i}"), ex=True
+                    ab=ab,
+                    target=ab.get(f"_TargetAction{i}"),
+                    upval=ab.get(f"_AbilityType{i}UpValue0"),
+                    var_a=ab.get(f"_VariousId{i}"),
+                    ex=True,
                 )
             except:
                 res = None
@@ -2184,11 +2219,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        where_str = (
-            "_Rarity = 5 AND _IsPlayable = 1 AND (_SellDewPoint = 8500 OR _Id in ("
-            + ",".join(map(str, DrgConf.EXTRA_DRAGONS))
-            + ")) AND _Id = _EmblemId"
-        )
+        where_str = "_Rarity = 5 AND _IsPlayable = 1 AND (_SellDewPoint = 8500 OR _Id in (" + ",".join(map(str, DrgConf.EXTRA_DRAGONS)) + ")) AND _Id = _EmblemId"
         # where_str = '_IsPlayable = 1'
         all_res = self.get_all(where=where_str)
         out_dir = os.path.join(out_dir, "drg")

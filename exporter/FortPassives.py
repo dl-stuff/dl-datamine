@@ -3,9 +3,7 @@ from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
 COUNT_WEAPON_BONUS = "SELECT _WeaponType, SUM(_WeaponPassiveEffAtk) AS _Bonus FROM WeaponBody GROUP BY _WeaponType"
 
-COUNT_ADV_BY_MAX_LIMIT_BREAK = (
-    "SELECT _ElementalType, COUNT(_Id) as _Count FROM CharaData WHERE _MaxLimitBreakCount=? AND _IsPlayable GROUP BY _ElementalType"
-)
+COUNT_ADV_BY_MAX_LIMIT_BREAK = "SELECT _ElementalType, COUNT(_Id) as _Count FROM CharaData WHERE _MaxLimitBreakCount=? AND _IsPlayable GROUP BY _ElementalType"
 COUNT_DRG = "SELECT _ElementalType, COUNT(_Id) as _Count FROM DragonData WHERE _IsPlayable GROUP BY _ElementalType"
 
 ALBUM_BONUS_ADV = {4: 0.2, 5: 0.3}

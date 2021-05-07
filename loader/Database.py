@@ -285,8 +285,8 @@ class DBView:
         if len(self.references) > 0 or override_view:
             self.open()
 
-    def process_result(self, *args, **kargs):
-        return args[0]
+    def process_result(self, res, **kargs):
+        return res
 
     @staticmethod
     def outfile_name(res, ext=".json"):
@@ -297,7 +297,17 @@ class DBView:
         if (idx := res.get(key)) and (linked := self.index[view].get(idx, **kwargs)):
             res[key] = linked
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=True):
+    def get(
+        self,
+        pk,
+        by=None,
+        fields=None,
+        order=None,
+        mode=DBManager.EXACT,
+        expand_one=True,
+        full_query=True,
+        **kwargs,
+    ):
         if order and "." not in order:
             order = self.name + "." + order
         res = self.database.select(self.name, pk, by, fields, order, mode)
@@ -305,6 +315,8 @@ class DBView:
             res = [self.remove_falsy_fields(r) for r in res]
         if expand_one and len(res) == 1:
             res = res[0]
+        if res and full_query:
+            return self.process_result(res, **kwargs)
         return res
 
     def get_all(self, where=None, order=None):

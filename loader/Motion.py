@@ -12,9 +12,7 @@ MOTION_FIELDS = {
     "stopTime": DBTableMetadata.REAL,
     "duration": DBTableMetadata.REAL,
 }
-CHARACTER_MOTION = DBTableMetadata(
-    "CharacterMotion", pk="name", field_type=MOTION_FIELDS
-)
+CHARACTER_MOTION = DBTableMetadata("CharacterMotion", pk="name", field_type=MOTION_FIELDS)
 CHARACTER_REF = re.compile(r"[A-Za-z]{3}_(.*)_(\d{8})", flags=re.IGNORECASE)
 
 DRAGON_MOTION = DBTableMetadata("DragonMotion", pk="name", field_type=MOTION_FIELDS)
@@ -74,9 +72,7 @@ def build_motion(data, ref_pattern, state_ref):
         db_data["state"], db_data["ref"] = None, None
     db_data["startTime"] = data["m_MuscleClip"]["m_StartTime"]
     db_data["stopTime"] = data["m_MuscleClip"]["m_StopTime"]
-    db_data["duration"] = (
-        data["m_MuscleClip"]["m_StopTime"] - data["m_MuscleClip"]["m_StartTime"]
-    )
+    db_data["duration"] = data["m_MuscleClip"]["m_StopTime"] - data["m_MuscleClip"]["m_StartTime"]
     return db_data
 
 

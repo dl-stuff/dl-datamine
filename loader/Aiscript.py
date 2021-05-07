@@ -2,7 +2,11 @@ import json
 import os
 from enum import Enum
 from tqdm import tqdm
-from loader.Database import check_target_path
+import subprocess
+
+from loader.Database import check_target_path, DBViewIndex
+from exporter.Shared import snakey
+from exporter.Enemy import EnemyAction
 
 OUTPUT = "out/_aiscript"
 
@@ -114,22 +118,40 @@ class Compare(Enum):
 
 def s(v):
     if isinstance(v, str):
-        if v[0] == "_":
-            Root.GLOBAL_VAR.add(v)
-            return v
-        else:
-            return f"self.var_{v}"
+        if v == "true":
+            return "True"
+        elif v == "false":
+            return "False"
+        snek = snakey(v)
+        if snek[0] != "_":
+            snek += "_"
+        return f"self._{snakey(v)}"
     else:
         return v
 
 
+def fmt_binary_opt(opt):
+    def _fmt(v):
+        var_name = v[0]
+        var_value = v[1]
+        if isinstance(var_name, str) and var_name[0] == "_":
+            Root.add_inst_var(var_name, var_value)
+        else:
+            var_name, var_value = var_value, var_name
+            if isinstance(var_name, str) and var_name[0] == "_":
+                Root.add_inst_var(var_name, var_value)
+        return f"{s(var_name)} {opt} {s(var_value)}"
+
+    return _fmt
+
+
 FMT_COMPARE = {
-    Compare.largeEqual: lambda v: f"{s(v[0])} <= {s(v[1])}",
-    Compare.smallEqual: lambda v: f"{s(v[0])} >= {s(v[1])}",
-    Compare.repudiation: lambda v: f"{s(v[0])} != {s(v[1])}",
-    Compare.equal: lambda v: f"{s(v[0])} == {s(v[1])}",
-    Compare.large: lambda v: f"{s(v[0])} < {s(v[1])}",
-    Compare.small: lambda v: f"{s(v[0])} > {s(v[1])}",
+    Compare.largeEqual: fmt_binary_opt("<="),
+    Compare.smallEqual: fmt_binary_opt(">="),
+    Compare.repudiation: fmt_binary_opt("!="),
+    Compare.equal: fmt_binary_opt("=="),
+    Compare.large: fmt_binary_opt("<"),
+    Compare.small: fmt_binary_opt(">"),
 }
 
 
@@ -168,19 +190,28 @@ def fmt_null(inst):
 
 def fmt_def(inst):
     name = inst.params[0].values[0]
-    return f"\n{INDENT*inst.depth}def {name}(self):"
+    return f"\n{INDENT*inst.depth}def _{name}(self):"
 
 
 def fmt_set(inst):
     name = inst.params[0].values[0]
     value = inst.params[1].values[0]
+    Root.SET_VALUES[name] = value
     return f"{INDENT*inst.depth}{s(name)} = {s(value)}"
 
 
-def fmt_actionset(inst):
+def fmt_actionset(inst, boost=False):
     key = inst.params[0].values[0]
     name = inst.params[1].values[0]
-    return f"{INDENT*inst.depth}{s(name)} = _action_set['{key}']"
+    # return f"{INDENT*inst.depth}self._act[{key!r}] = self.actionset[{key!r}]"
+    if boost:
+        return f"{INDENT*inst.depth}self._init_act({key!r}, {name!r}, boost={boost!r})"
+    else:
+        return f"{INDENT*inst.depth}self._init_act({key!r}, {name!r})"
+
+
+def fmt_actionsetboost(inst):
+    return fmt_actionset(inst, boost=True)
 
 
 def fmt_rand(inst):
@@ -222,7 +253,7 @@ def fmt_end(inst):
 def fmt_func(inst):
     name = inst.params[0].values[0]
     # fn_params = ', '.join(map(lambda fp: fp.py_str(comment=False), inst.function_params))
-    return f"{INDENT*inst.depth}self.{name}()"
+    return f"{INDENT*inst.depth}{s(name)}()"
 
 
 def fmt_jump(inst):
@@ -232,7 +263,7 @@ def fmt_jump(inst):
 
 def fmt_settarget(inst):
     target = Target(inst.params[0].values[0])
-    return f"{INDENT*inst.depth}self.next_target = {target}"
+    return f"{INDENT*inst.depth}self.target({target})"
 
 
 def fmt_add(inst):
@@ -249,31 +280,29 @@ def fmt_sub(inst):
 
 def fmt_timer(inst):
     value = inst.params[0].values[0]
-    if value == "true":
-        return f"{INDENT*inst.depth}RecTimer.on()"
-    else:
-        return f"{INDENT*inst.depth}RecTimer.off()"
+    return f"{INDENT*inst.depth}self.rec_timer({s(value)})"
 
 
 def fmt_alivenum(inst):
     value = inst.params[0].values[0]
     name = inst.params[1].values[0]
-    return f"{INDENT*inst.depth}{s(name)} = alive({value})"
+    return f"{INDENT*inst.depth}{s(name)} = self.alive({value})"
 
 
 def fmt_move(inst):
     action = Move(inst.params[0].values[0])
-    return f"{INDENT*inst.depth}move({action})"
+    return f"{INDENT*inst.depth}self.move({action})"
 
 
 def fmt_turn(inst):
     action = Turn(inst.params[0].values[0])
-    return f"{INDENT*inst.depth}turn({action})"
+    return f"{INDENT*inst.depth}self.turn({action})"
 
 
 def fmt_action(inst):
     name = inst.params[0].values[0]
-    return f"{INDENT*inst.depth}action({s(name)})"
+    Root.ACTION_LITERALS[name] = None
+    return f"{INDENT*inst.depth}self.action({name!r})"
 
 
 def fmt_cleardmgcnt(inst):
@@ -282,7 +311,7 @@ def fmt_cleardmgcnt(inst):
 
 
 def fmt_wake(inst):
-    return f"{INDENT*inst.depth}wake()"
+    return f"{INDENT*inst.depth}self.wake()"
 
 
 def fmt_orderalivefarther(inst):
@@ -295,45 +324,48 @@ def fmt_ordercloser(inst):
 
 def fmt_unusualposture(inst):
     value = inst.params[0].values[0]
-    if value == "true":
-        return f"{INDENT*inst.depth}UnusualPosture.on()"
-    else:
-        return f"{INDENT*inst.depth}UnusualPosture.off()"
+    return f"{INDENT*inst.depth}self.unusual_posture({s(value)})"
 
 
 def fmt_gmsetturn(inst):
     value = inst.params[0].values[0]
-    return f"{INDENT*inst.depth}self.Turn = {s(value)}"
+    return f"{INDENT*inst.depth}self.turn_count = {s(value)}"
 
 
 def fmt_gmsetturnevent(inst):
     value = inst.params[0].values[0]
-    return f"{INDENT*inst.depth}self.turn_event = _event['{value}']"
+    return f"{INDENT*inst.depth}self.turn_event({s(value)})"
 
 
 def fmt_gmcompleteturnevent(inst):
-    return f"{INDENT*inst.depth}self.turn_event = None"
+    return f"{INDENT*inst.depth}self.turn_event('complete')"
 
 
 def fmt_gmsetsuddenevent(inst):
     value = inst.params[0].values[0]
-    return f"{INDENT*inst.depth}self.sudden_event = _event['{value}']"
+    return f"{INDENT*inst.depth}self.sudden_event({s(value)})"
 
 
 def fmt_gmsetbanditevent(inst):
     value = inst.params[0].values[0]
-    return f"{INDENT*inst.depth}self.bandit_event = _event['{value}']"
+    return f"{INDENT*inst.depth}self.bandit_event({s(value)})"
 
 
 def fmt_rechprate(inst):
-    return f"{INDENT*inst.depth}recHPRate()"
+    return f"{INDENT*inst.depth}self.rec_hp_rate()"
 
 
 def fmt_unitnumincircle(inst):
     variable = s(inst.params[0].values[0])
     minimum = s(inst.params[1].values[0])
     maximum = s(inst.params[2].values[0])
-    return f"{INDENT*inst.depth}if {minimum} <= {variable} <= {maximum}:"
+    return f"{INDENT*inst.depth}if not ({minimum} <= {variable} <= {maximum}):\n{INDENT*(inst.depth+1)}return"
+
+
+def fmt_multiply(inst):
+    name = inst.params[0].values[0]
+    value = inst.params[1].values[0]
+    return f"{INDENT*inst.depth}{s(name)} *= {s(value)}"
 
 
 FMT_PYTHON = {
@@ -368,28 +400,46 @@ FMT_PYTHON = {
     Command.GM_SetSuddenEvent: fmt_gmsetsuddenevent,
     Command.GM_SetBanditEvent: fmt_gmsetbanditevent,
     Command.RecHpRate: fmt_rechprate,
-    Command.FromActionSetBoost: fmt_actionset,
+    Command.FromActionSetBoost: fmt_actionsetboost,
     Command.UnitNumInCircle: fmt_unitnumincircle,
+    Command.Mul: fmt_multiply,
 }
 
 
 class Root:
     HEADER = """import random
 from enum import Enum
-from .._aiscript import *
+from .. import *
 
-_action_set = {}
 _event = {}
 """
+    PYINIT = f"""
+    def __init__(self, params):
+        super().__init__(params)
+        {s('init')}()
+"""
     NAME = None
-    GLOBAL_VAR = set()
+    INST_VAR = {}
+    INST_PATTERN = """        {name} = None
+        {name}_values = ({values})"""
+    SET_VALUES = {}
+    ACTION_LITERALS = {}
 
     def __init__(self, name):
         self.NAME = name
         self.depth = 0
         self.idx = 0
         self.children = []
-        Root.GLOBAL_VAR = set()
+        Root.INST_VAR = {}
+        Root.SET_VALUES = {}
+        Root.ACTION_LITERALS = {}
+
+    @staticmethod
+    def add_inst_var(v, value=None):
+        try:
+            Root.INST_VAR[v].add(value)
+        except KeyError:
+            Root.INST_VAR[v] = {value}
 
     def add_child(self, child):
         self.children.append(child)
@@ -397,11 +447,31 @@ _event = {}
     def __repr__(self):
         return "\n".join(map(str, self.children))
 
-    def py_str(self, comment=False):
+    def py_str(self, enemy_actions=None):
         children = "\n".join(map(lambda c: c.py_str(), self.children))
-        global_str = " = None\n".join(sorted(list(Root.GLOBAL_VAR)))
-        # return f'{Root.HEADER}\nclass {self.NAME}:\n{children}\n{Root.FOOTER}{global_str} = None\n'
-        return f"{Root.HEADER}{global_str} = None\n\nclass {self.NAME}:\n{children}"
+        literal_str = ""
+        if enemy_actions:
+            literals = {}
+            for act in Root.ACTION_LITERALS.keys():
+                try:
+                    literals[act] = enemy_actions.get(int(Root.SET_VALUES[act]))
+                except (KeyError, ValueError):
+                    pass
+            if literals:
+                literal_str = f"\nACTION_LITERALS = {literals!r}"
+
+        inst_var_str = []
+        for name, values in sorted(Root.INST_VAR.items()):
+            converted_values = set()
+            for v in values:
+                try:
+                    float(v)
+                    converted_values.add(str(v))
+                except ValueError:
+                    converted_values.add(f"getattr(self, {v!r}, {v!r})")
+            inst_var_str.append(Root.INST_PATTERN.format(name=s(name), values=", ".join(converted_values)))
+        inst_var_str = "\n".join(inst_var_str)
+        return f"{Root.HEADER}{literal_str}\n\nclass {self.NAME}(AiRunner):{Root.PYINIT}{inst_var_str}\n{children}"
 
 
 class Param:
@@ -512,7 +582,7 @@ def link_instructions(instructions, root, offset=0, limit=None):
     return offset
 
 
-def load_aiscript_file(file_path):
+def load_aiscript_file(file_path, enemy_actions):
     name = None
     instructions = []
     depth = 0
@@ -527,15 +597,22 @@ def load_aiscript_file(file_path):
             instructions.append(inst)
     root = Root(name)
     link_instructions(instructions, root)
-    with open(os.path.join(OUTPUT, f"{name}.py"), "w") as bolb:
-        bolb.write(root.py_str())
+    with open(os.path.join(OUTPUT, f"{name}.py"), "w") as fn:
+        fn.write(root.py_str(enemy_actions))
 
 
-def load_aiscript(path):
+def load_aiscript(path, reformat=True):
     check_target_path(OUTPUT)
+    enemy_actions = EnemyAction(DBViewIndex())
     for root, _, files in os.walk(path):
         for file_name in tqdm(files, desc="aiscript"):
-            load_aiscript_file(os.path.join(root, file_name))
+            load_aiscript_file(os.path.join(root, file_name), enemy_actions)
+    if reformat:
+        print("\nReformatting...", flush=True)
+        try:
+            subprocess.call(["black", "--quiet", "--line-length", "200", OUTPUT])
+        except subprocess.CalledProcessError:
+            print("Python black not installed")
 
 
 if __name__ == "__main__":

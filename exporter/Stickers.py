@@ -20,9 +20,7 @@ STICKER_PATTERN = {
     },
 }
 OUT_DIR = "_stickers"
-LIBCGSS = os.path.join(
-    pathlib.Path(__file__).parent.absolute(), "..", "..", "libcgss", "acb2wavs.exe"
-)
+LIBCGSS = os.path.join(pathlib.Path(__file__).parent.absolute(), "..", "..", "libcgss", "acb2wavs.exe")
 LIBCGSS_ARGS = ("-b", "000002b2", "-a", "e7889cad", "-n")
 ARROW_STICKERS = (
     "11102.png",
@@ -45,9 +43,7 @@ def download_sticker_assets():
         os.remove(os.path.join(voice_dir, "vo_chr_stamp.acb"))
         os.remove(os.path.join(voice_dir, "vo_chr_stamp.awb"))
         external_dir = os.path.join(voice_dir, "_acb_vo_chr_stamp.acb", "external")
-        for wav in os.listdir(
-            os.path.join(voice_dir, "_acb_vo_chr_stamp.acb", "external")
-        ):
+        for wav in os.listdir(os.path.join(voice_dir, "_acb_vo_chr_stamp.acb", "external")):
             shutil.copy(os.path.join(external_dir, wav), voice_dir)
         shutil.rmtree(os.path.join(voice_dir, "_acb_vo_chr_stamp.acb"))
 

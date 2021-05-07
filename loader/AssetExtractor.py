@@ -734,9 +734,7 @@ class Extractor:
         download_list = []
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
-                download_list.extend(
-                    [(*ts, extract, region) for ts in self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)]
-                )
+                download_list.extend([(*ts, extract, region) for ts in self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)])
         self.pool_download_and_extract(download_list)
 
     def download_and_extract_by_pattern(self, label_patterns):

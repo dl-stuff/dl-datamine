@@ -4,47 +4,9 @@ import os
 from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBView, DBManager, check_target_path
-from exporter.Shared import AbilityData, SkillData, PlayerAction
+from exporter.Shared import AbilityData, SkillData, PlayerAction, snakey
 
 from exporter.Mappings import CLASS_TYPES
-
-
-class AmuletData(DBView):
-    """deprecated as of 2.0"""
-
-    def __init__(self, index):
-        super().__init__(
-            index,
-            "AmuletData",
-            labeled_fields=["_Name", "_Text1", "_Text2", "_Text3", "_Text4", "_Text5"],
-        )
-
-    def process_result(self, res, full_query=True, full_abilities=False):
-        if "_AmuletType" in res:
-            res["_AmuletType"] = CLASS_TYPES.get(res["_AmuletType"], res["_AmuletType"])
-        inner = (1, 2, 3) if full_abilities else (3,)
-        outer = (1, 2, 3)
-        for i in outer:
-            for j in inner:
-                k = f"_Abilities{i}{j}"
-                if k in res and res[k]:
-                    res[k] = self.index["AbilityData"].get(res[k], full_query=full_query)
-        return res
-
-    def get(self, pk, by="_Name", fields=None, full_query=True, full_abilities=False):
-        res = super().get(pk, by=by, fields=fields)
-        if not full_query:
-            return res
-        return self.process_result(res, full_query, full_abilities)
-
-    @staticmethod
-    def outfile_name(res, ext=".json"):
-        name = "UNKNOWN" if "_Name" not in res else res["_Name"]
-        return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
-
-    def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        out_dir = os.path.join(out_dir, "wyrmprints")
-        super().export_all_to_folder(out_dir, ext, full_query=True, full_abilities=False)
 
 
 class UnionAbility(DBView):
@@ -53,21 +15,8 @@ class UnionAbility(DBView):
 
     def process_result(self, res):
         for i in (1, 2, 3, 4, 5):
-            k = f"_AbilityId{i}"
-            if (ab := res.get(k)) :
-                res[k] = self.index["AbilityData"].get(ab, full_query=True)
+            self.link(res, f"_AbilityId{i}", "AbilityData")
         return res
-
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=True):
-        res = super().get(
-            pk,
-            by=by,
-            fields=fields,
-            order=order,
-            mode=mode,
-            expand_one=expand_one,
-        )
-        return self.process_result(res)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         processed_res = [self.process_result(res) for res in self.get_all()]
@@ -127,8 +76,7 @@ class AbilityCrest(DBView):
     def outfile_name(res, ext=".json"):
         name = "UNKNOWN" if "_Name" not in res else res["_Name"]
         # FIXME: do better name sanitation here
-        name = name.replace('"', "")
-        return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
+        return snakey(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "wyrmprints")

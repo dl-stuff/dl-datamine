@@ -4,7 +4,13 @@ from operator import itemgetter
 
 from loader.Database import DBViewIndex, DBView, DBManager
 from loader.Actions import CommandType
-from exporter.Shared import AbilityData, SkillData, PlayerAction, ActionCondition
+from exporter.Shared import (
+    AbilityData,
+    SkillData,
+    PlayerAction,
+    ActionCondition,
+    snakey,
+)
 from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
 
 MODE_CHANGE_TYPES = {1: "Skill", 2: "Hud", 3: "Dragon", 4: "Buff", 5: "Ability"}
@@ -67,7 +73,17 @@ class CharaModeData(DBView):
 
 class CharaData(DBView):
     def __init__(self, index):
-        super().__init__(index, "CharaData", labeled_fields=["_Name", "_SecondName", "_CvInfo", "_CvInfoEn", "_ProfileText"])
+        super().__init__(
+            index,
+            "CharaData",
+            labeled_fields=[
+                "_Name",
+                "_SecondName",
+                "_CvInfo",
+                "_CvInfoEn",
+                "_ProfileText",
+            ],
+        )
 
     @staticmethod
     def condense_stats(res):
@@ -174,11 +190,11 @@ class CharaData(DBView):
         return res
 
     def get(self, pk, fields=None, full_query=True, condense=True):
-        res = super().get(pk, by="_SecondName", fields=fields, mode=DBManager.LIKE)
+        res = super().get(pk, by="_SecondName", fields=fields, mode=DBManager.LIKE, full_query=False)
         if not res:
-            res = super().get(pk, by="_Name", fields=fields, mode=DBManager.LIKE)
+            res = super().get(pk, by="_Name", fields=fields, mode=DBManager.LIKE, full_query=False)
         if not res:
-            res = super().get(pk, by="_Id", fields=fields, mode=DBManager.LIKE)
+            res = super().get(pk, by="_Id", fields=fields, mode=DBManager.LIKE, full_query=False)
         if not full_query:
             return res
         return self.process_result(res, condense=condense)
@@ -188,7 +204,7 @@ class CharaData(DBView):
         name = "UNKNOWN" if "_Name" not in res else res["_Name"] if "_SecondName" not in res else res["_SecondName"]
         if res["_ElementalType"] == 99:
             return f'{res["_Id"]:02}_{name}{ext}'
-        return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
+        return snakey(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         where = "_ElementalType != 99 OR _Id=19900004"

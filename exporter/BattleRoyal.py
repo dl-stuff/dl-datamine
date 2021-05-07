@@ -3,7 +3,7 @@ import json
 from tqdm import tqdm
 
 from loader.Database import DBViewIndex, DBView, check_target_path
-from exporter.Shared import get_valid_filename
+from exporter.Shared import snakey
 from exporter.Adventurers import CharaData
 from exporter.Dragons import DragonData
 
@@ -22,9 +22,6 @@ class BattleRoyalCharaSkin(DBView):
         filtered_res["_SpecialSkillId"] = res["_SpecialSkillId"]
         return filtered_res
 
-    def get(self, *args, **kwargs):
-        return self.process_result(super().get(*args, **kwargs))
-
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         where = "_SpecialSkillId != 0"
         out_dir = os.path.join(out_dir, "_br")
@@ -34,7 +31,7 @@ class BattleRoyalCharaSkin(DBView):
         for res in tqdm(all_res, desc="_br"):
             res = self.process_result(res)
             sorted_res[res["_Id"]] = res
-        out_name = get_valid_filename(f"_chara_skin.json")
+        out_name = snakey(f"_chara_skin.json")
         output = os.path.join(out_dir, out_name)
         with open(output, "w", newline="", encoding="utf-8") as fp:
             json.dump(sorted_res, fp, indent=2, ensure_ascii=False, default=str)
@@ -51,15 +48,12 @@ class BattleRoyalUnit(DBView):
         return f'{res["_Id"]}_{name}{ext}'
 
     def process_result(self, res, **kwargs):
-        self.link(res, "_BaseCharaDataId", "CharaData", **kwargs)
+        self.link(res, "_BaseCharaDataId", "CharaData", condense=False)
         # self.link(res, "_DragonDataId", "DragonData", **kwargs)
         self.link(res, "_SkillId", "SkillData", **kwargs)
         for ab in range(1, 11):
             self.link(res, f"_ItemAbility{ab:02}", "AbilityData", **kwargs)
         return res
-
-    def get(self, *args, **kwargs):
-        return self.process_result(super().get(*args, **kwargs))
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "_br")

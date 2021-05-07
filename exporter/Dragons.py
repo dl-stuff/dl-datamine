@@ -3,7 +3,7 @@ import os
 from tabulate import tabulate
 
 from loader.Database import DBViewIndex, DBView, DBDict, DBManager
-from exporter.Shared import AbilityData, SkillData, PlayerAction
+from exporter.Shared import AbilityData, SkillData, PlayerAction, snakey
 
 
 class DragonMotion(DBView):
@@ -55,13 +55,25 @@ class DragonData(DBView):
 
     def get(self, pk, by=None, fields=None, full_query=True, full_abilities=False):
         if by is None:
-            res = super().get(pk, by="_SecondName", fields=fields, mode=DBManager.LIKE)
+            res = super().get(
+                pk,
+                by="_SecondName",
+                fields=fields,
+                mode=DBManager.LIKE,
+                full_query=False,
+            )
             if not res:
-                res = super().get(pk, by="_Name", fields=fields, mode=DBManager.LIKE)
+                res = super().get(pk, by="_Name", fields=fields, mode=DBManager.LIKE, full_query=False)
                 if not res:
-                    res = super().get(pk, by="_Id", fields=fields, mode=DBManager.LIKE)
+                    res = super().get(
+                        pk,
+                        by="_Id",
+                        fields=fields,
+                        mode=DBManager.LIKE,
+                        full_query=False,
+                    )
         else:
-            res = super().get(pk, by=by, fields=fields, mode=DBManager.LIKE)
+            res = super().get(pk, by=by, fields=fields, mode=DBManager.LIKE, full_query=False)
         if not full_query:
             return res
         return self.process_result(res, full_abilities=full_abilities)
@@ -71,7 +83,7 @@ class DragonData(DBView):
         name = "UNKNOWN" if "_Name" not in res else res["_Name"] if "_SecondName" not in res else res["_SecondName"]
         if (emblem := res.get("_EmblemId")) and emblem != res["_Id"]:
             return f'{res["_Id"]:02}_{name}{ext}'
-        return f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}'
+        return snakey(f'{res["_BaseId"]}_{res["_VariationId"]:02}_{name}{ext}')
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "dragons")

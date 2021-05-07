@@ -4,9 +4,7 @@ import json
 
 from loader.AssetExtractor import Extractor
 
-DEPENDENCIES = {
-    "jp": {r"^images/ingame/ui": None, r"^prefabs/ingame/ingamebuffui": None}
-}
+DEPENDENCIES = {"jp": {r"^images/ingame/ui": None, r"^prefabs/ingame/ingamebuffui": None}}
 PATH_ID_FILE = "./_icons/jp/images_ingame/_path_id.json"
 INGAME_UI_FILE = "./_icons/jp/prefabs_ingame/InGameBuffUI.json"
 COMBINED_MAP_FILE = "./_icons/icons.json"
@@ -28,11 +26,7 @@ def make_buff_icon_mapping():
         for icon_type, data in json.load(fp)[0].items():
             if not icon_type.endswith("Icon"):
                 continue
-            ingame_ui[icon_type] = {
-                idx: path_id_map.get(str(entry["m_PathID"]))
-                for idx, entry in enumerate(data)
-                if entry["m_FileID"]
-            }
+            ingame_ui[icon_type] = {idx: path_id_map.get(str(entry["m_PathID"])) for idx, entry in enumerate(data) if entry["m_FileID"]}
 
     nosprite_icons = set()
     for icon_type, icon_map in ingame_ui.items():

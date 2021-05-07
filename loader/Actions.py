@@ -191,7 +191,12 @@ class CommandType(ShortEnum):
     RESERVE_100 = 181
 
 
-HIT_LABEL_FIELDS = ("_hitLabel", "_hitAttrLabel", "_hitAttrLabelSubList", "_abHitAttrLabel")
+HIT_LABEL_FIELDS = (
+    "_hitLabel",
+    "_hitAttrLabel",
+    "_hitAttrLabelSubList",
+    "_abHitAttrLabel",
+)
 # KAT_CHR_07_H01_LV01_CHLV02
 
 # HIT_LABEL_LV_CHLV = re.compile(r".*(_LV\d{2})(_CHLV\d{2})?.*")

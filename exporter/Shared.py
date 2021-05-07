@@ -4,6 +4,7 @@ import re
 import os
 from collections import defaultdict
 from tqdm import tqdm
+from unidecode import unidecode
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
 from loader.Actions import CommandType
@@ -27,8 +28,11 @@ from exporter.Mappings import (
 )
 
 
-def get_valid_filename(s):
-    return re.sub(r"(?u)[^-\w. ]", "", s)
+SNAKEY_PATTERN = re.compile(r"[^0-9a-zA-Z._ ]")
+
+
+def snakey(name):
+    return SNAKEY_PATTERN.sub("", unidecode(name.replace("&", "and")).strip()).replace(" ", "_")
 
 
 class ActionCondition(DBView):
@@ -58,12 +62,6 @@ class ActionCondition(DBView):
             self.seen_skills = set()
         return res
 
-    def get(self, key, fields=None):
-        res = super().get(key, fields=fields)
-        if not res:
-            return None
-        return self.process_result(res)
-
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', full_actions=False)
         out_dir = os.path.join(out_dir, "_act_cond")
@@ -79,7 +77,7 @@ class ActionCondition(DBView):
             except:
                 sorted_res[0].append(res)
         for group_name, res_list in sorted_res.items():
-            out_name = get_valid_filename(f"{group_name}00000000{ext}")
+            out_name = snakey(f"{group_name}00000000{ext}")
             output = os.path.join(out_dir, out_name)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
@@ -102,10 +100,6 @@ class ActionGrant(DBView):
         res["_TargetAction"] = AbilityTargetAction(res["_TargetAction"])
         self.link(res, "_GrantCondition", "ActionCondition")
         return res
-
-    def get(self, pk, by=None, fields=None, order=None):
-        res = super().get(pk, by=by, fields=fields, order=order)
-        return self.process_result(res)
 
 
 class AbilityData(DBView):
@@ -292,12 +286,6 @@ class AbilityData(DBView):
             res["_WeaponType"] = WEAPON_TYPES.get(wep, wep)
         return res
 
-    def get(self, key, fields=None, full_query=True):
-        res = super().get(key, fields=fields)
-        if not full_query:
-            return res
-        return self.process_result(res)
-
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         processed_res = [self.process_result(res) for res in self.get_all()]
         with open(os.path.join(out_dir, f"_abilities{ext}"), "w", newline="", encoding="utf-8") as fp:
@@ -394,10 +382,6 @@ class AuraData(DBView):
             pass
         return res
 
-    def get(self, pk, **kwargs):
-        res = super().get(pk, **kwargs)
-        return self.process_result(res)
-
 
 class PlayerActionHitAttribute(DBView):
     def __init__(self, index):
@@ -422,10 +406,6 @@ class PlayerActionHitAttribute(DBView):
                     r[ks] = KILLER_STATE[r[ks]]
         return res
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=True):
-        res = super().get(pk, by, fields, order, mode, expand_one=expand_one)
-        return self.process_result(res)
-
     S_PATTERN = re.compile(r"S\d+")
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
@@ -445,7 +425,7 @@ class PlayerActionHitAttribute(DBView):
             except:
                 sorted_res[res["_Id"]].append(res)
         for group_name, res_list in sorted_res.items():
-            out_name = get_valid_filename(f"{group_name}{ext}")
+            out_name = snakey(f"{group_name}{ext}")
             output = os.path.join(out_dir, out_name)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
@@ -497,9 +477,9 @@ class ActionPartsHitLabel(DBView):
                 result_dict[source] = self.index["PlayerActionHitAttribute"].process_result(result_dict[source])
         return result_dict
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT):
-        res = super().get(pk, by=by, fields=fields, order=order, mode=mode, expand_one=False)
-        return self.process_result(res)
+    def get(self, pk, **kwargs):
+        kwargs["expand_one"] = False
+        return super().get(pk, **kwargs)
 
 
 class ActionParts(DBView):
@@ -579,7 +559,10 @@ class ActionParts(DBView):
                         "_count": int(count),
                         "_padding4": padding4,
                     }
-                elif condtype in (PartConditionType.ShikigamiLevel, PartConditionType.ActionContainerHitCount):
+                elif condtype in (
+                    PartConditionType.ShikigamiLevel,
+                    PartConditionType.ActionContainerHitCount,
+                ):
                     comp, count, padding3, padding4 = json.loads(r["_conditionValue"])
                     r["_conditionValue"] = {
                         "_compare": PartConditionComparisonType(comp),
@@ -590,13 +573,13 @@ class ActionParts(DBView):
 
         return action_parts
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, hide_ref=True):
-        action_parts = super().get(pk, by=by, fields=fields, order=order, mode=mode, expand_one=False)
-        return self.process_result(action_parts, hide_ref=hide_ref)
-
     @staticmethod
     def remove_falsy_fields(res):
         return DBDict(filter(lambda x: bool(x[1]) or x[0] in ("_seconds", "_seq"), res.items()))
+
+    def get(self, pk, **kwargs):
+        kwargs["expand_one"] = False
+        return super().get(pk, **kwargs)
 
 
 class PlayerAction(DBView):
@@ -614,11 +597,7 @@ class PlayerAction(DBView):
             player_action["_BurstMarkerId"] = marker
         else:
             try:
-                if (
-                    player_action.get("_EnhancedBurstAttackOffsetFlag")
-                    or action_parts[0]["_motionState"].startswith("charge_13")
-                    or action_parts[0]["_motionState"].startswith("charge_12_c")
-                ):
+                if player_action.get("_EnhancedBurstAttackOffsetFlag") or action_parts[0]["_motionState"].startswith("charge_13") or action_parts[0]["_motionState"].startswith("charge_12_c"):
                     guess_burst_id = pa_id + PlayerAction.BURST_MARKER_DISPLACEMENT
                     if marker := self.get(guess_burst_id):
                         player_action["_BurstMarkerId"] = marker
@@ -629,13 +608,6 @@ class PlayerAction(DBView):
         if (casting := player_action.get("_CastingAction")) :
             player_action["_CastingAction"] = self.get(casting)
         return player_action
-
-    def get(self, pk, fields=None, full_query=True):
-        player_action = super().get(pk, fields=fields)
-        if not full_query or not player_action:
-            return player_action
-        # PlayerAction.REF.add(pk)
-        return self.process_result(player_action)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', full_actions=False)
@@ -655,7 +627,7 @@ class PlayerAction(DBView):
             # if res['_Id'] not in PlayerAction.REF:
             #     sorted_res['UNUSED'].append(res)
         for group_name, res_list in sorted_res.items():
-            out_name = get_valid_filename(f"{group_name}{ext}")
+            out_name = snakey(f"{group_name}{ext}")
             output = os.path.join(out_dir, out_name)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
@@ -670,9 +642,9 @@ class SkillChainData(DBView):
             r["_Skill"] = self.index["SkillData"].get(r["_Id"], full_chainSkill=False)
         return res
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=False):
-        res = super().get(pk, by=by, fields=fields, order=order, mode=mode, expand_one=expand_one)
-        return self.process_result(res)
+    def get(self, pk, **kwargs):
+        kwargs["expand_one"] = False
+        return super().get(pk, **kwargs)
 
 
 class SkillDetail(DBView):
@@ -716,18 +688,21 @@ class SkillData(DBView):
             data[a_id] = view.get(data[a_id], **kargs)
         return data
 
-    def process_result(self, skill_data, full_query=True, full_abilities=False, full_transSkill=True, full_chainSkill=True):
+    def process_result(
+        self,
+        skill_data,
+        full_query=True,
+        full_abilities=False,
+        full_transSkill=True,
+        full_chainSkill=True,
+    ):
         if not skill_data:
             return
         if not full_query:
             return skill_data
         # Actions
         skill_data = self.get_all_from(self.index["PlayerAction"], "_ActionId", skill_data)
-        if (
-            "_AdvancedSkillLv1" in skill_data
-            and skill_data["_AdvancedSkillLv1"]
-            and (adv_act := self.index["PlayerAction"].get(skill_data["_AdvancedActionId1"]))
-        ):
+        if "_AdvancedSkillLv1" in skill_data and skill_data["_AdvancedSkillLv1"] and (adv_act := self.index["PlayerAction"].get(skill_data["_AdvancedActionId1"])):
             skill_data["_AdvancedActionId1"] = adv_act
 
         # Abilities
@@ -767,10 +742,6 @@ class SkillData(DBView):
 
         return skill_data
 
-    def get(self, pk, fields=None, full_query=True, **kwargs):
-        skill_data = super().get(pk, fields=fields)
-        return self.process_result(skill_data, full_query=full_query, **kwargs)
-
 
 class MaterialData(DBView):
     def __init__(self, index):
@@ -779,7 +750,16 @@ class MaterialData(DBView):
 
 class FortPlantData(DBView):
     def __init__(self, index):
-        super().__init__(index, "FortPlantData", labeled_fields=["_Name", "_Description", "_EventDescription", "_EventMenuDescription"])
+        super().__init__(
+            index,
+            "FortPlantData",
+            labeled_fields=[
+                "_Name",
+                "_Description",
+                "_EventDescription",
+                "_EventMenuDescription",
+            ],
+        )
 
     def process_result(self, res):
         self.link(res, "_DetailId", "FortPlantDetail")
