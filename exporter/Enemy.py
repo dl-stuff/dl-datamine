@@ -15,6 +15,8 @@ from loader.Database import (
 from exporter.Shared import ActionCondition, snakey
 from exporter.Mappings import AFFLICTION_TYPES, TRIBE_TYPES, ELEMENTS
 
+AISCRIPT_INIT_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "AiscriptInit.py")
+
 
 class EnemyAbilityType(ShortEnum):
     NONE = 0
@@ -182,17 +184,36 @@ class EnemyParam(DBView):
         14: 13,
         15: 14,
     }
+    DO_FULL_ACTIONS = ("AGITO_ABS", "DIABOLOS")
 
     def __init__(self, index):
         super().__init__(index, "EnemyParam")
+
+    PARAM_GROUP = re.compile(r"([^\d]+)_\d{2}_\d{2}_E_?\d{2}")
+
+    @staticmethod
+    def general_param_group(res):
+        try:
+            param_group = res["_ParamGroupName"]
+            if (match := EnemyParam.PARAM_GROUP.match(param_group)) :
+                return match.group(1)
+            else:
+                return param_group.split("_", 1)[0]
+        except KeyError:
+            return "UNKNOWN"
 
     def process_result(self, res, full_actions=False):
         if "_DataId" in res and res["_DataId"]:
             if (data := self.index["EnemyData"].get(res["_DataId"])) :
                 res["_DataId"] = data
-        if full_actions:
-            if "_ActionSet" in res and res["_ActionSet"]:
-                res["_ActionSet"] = self.index["EnemyActionSet"].get(res["_ActionSet"])
+        if full_actions or EnemyParam.general_param_group(res) in EnemyParam.DO_FULL_ACTIONS:
+            seen_actsets = set()
+            for actset_key in ("_ActionSet", "_ActionSetBoost", "_ActionSetFire", "_ActionSetWater", "_ActionSetWind", "_ActionSetLight", "_ActionSetDark"):
+                if not (actset_id := res.get(actset_key)) or actset_id in seen_actsets:
+                    continue
+                seen_actsets.add(actset_id)
+                self.link(res, actset_key, "EnemyActionSet")
+
         for ab in ("_Ability01", "_Ability02", "_Ability03", "_Ability04", "_BerserkAbility"):
             self.link(res, ab, "EnemyAbility")
         resists = {}
@@ -211,22 +232,13 @@ class EnemyParam(DBView):
             res["_DropDpPattern"] = self.DP_PATTERN.get(res["_DropDpPattern"], res["_DropDpPattern"])
         return res
 
-    PARAM_GROUP = re.compile(r"([^\d]+)_\d{2}_\d{2}_E_?\d{2}")
-
     @staticmethod
     def outfile_name(res, ext):
         return snakey(f'{res["_Id"]:02}_{res.get("_ParamGroupName", "UNKNOWN")}{ext}')
 
     @staticmethod
     def outfile_name_with_subdir(res, ext=".json", aiscript_dir="./out/_aiscript", enemies_dir="./out/enemies"):
-        try:
-            subdir = res["_ParamGroupName"].split("_", 1)[0]
-            if (match := EnemyParam.PARAM_GROUP.match(res["_ParamGroupName"])) :
-                subdir = match.group(1)
-            else:
-                subdir = res["_ParamGroupName"].split("_", 1)[0]
-        except KeyError:
-            subdir = "UNKNOWN"
+        subdir = EnemyParam.general_param_group(res)
         try:
             name = res["_DataId"]["_BookId"]["_Name"]
         except KeyError:
@@ -251,6 +263,12 @@ class EnemyParam(DBView):
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         aiscript_dir = os.path.join(out_dir, "_aiscript")
         out_dir = os.path.join(out_dir, "enemies")
+        aiscript_init_link = os.path.join(out_dir, "__init__.py")
+        try:
+            os.link(AISCRIPT_INIT_PATH, aiscript_init_link)
+        except FileExistsError:
+            os.remove(aiscript_init_link)
+            os.link(AISCRIPT_INIT_PATH, aiscript_init_link)
         all_res = self.get_all()
         check_target_path(out_dir)
         misc_data = defaultdict(list)

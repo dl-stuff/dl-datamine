@@ -28,11 +28,15 @@ from exporter.Mappings import (
 )
 
 
-SNAKEY_PATTERN = re.compile(r"[^0-9a-zA-Z._ ]")
+SNAKEY_PATTERN = re.compile(r"[^0-9a-zA-Z_ ]")
 
 
 def snakey(name):
-    return SNAKEY_PATTERN.sub("", unidecode(name.replace("&", "and")).strip()).replace(" ", "_")
+    name, ext = os.path.splitext(name)
+    snakey = SNAKEY_PATTERN.sub("", unidecode(name.replace("&", "and")).strip()).replace(" ", "_")
+    if ext not in ("", "."):
+        return snakey + ext
+    return snakey
 
 
 class ActionCondition(DBView):
