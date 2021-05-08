@@ -1,5 +1,6 @@
 from enum import Enum
 from functools import wraps
+from pprint import pprint
 
 
 class Move(Enum):
@@ -83,35 +84,18 @@ class Order(Enum):
     AliveFarther = 2
 
 
-INDENT = "    "
+INDENT = ""
 
 
-LOGFMT_DEFAULT = "{indent}{func}({args}, {kwargs}) = {retval}".format
-
-
-def log_call(logfmt=LOGFMT_DEFAULT, indent=False):
-    def real_decorator(function):
-        @wraps(function)
-        def wrapper(*args, **kwargs):
-            # ai_runner._logs.append((function, args[1:], kwargs))
-            runner = args[0]
-            idt = INDENT * runner._m.depth
-            if indent:
-                runner._m.depth += 1
-            retval = function(*args, **kwargs)
-            if runner._m.verbose == 2 or (runner._m.verbose == 1 and logfmt != LOGFMT_DEFAULT):
-                runner._m.logs.append(logfmt(indent=idt, func=function.__name__, args=args, kwargs=kwargs, retval=retval))
-            if indent:
-                runner._m.depth += 1
-            return retval
-
-        return wrapper
-
-    return real_decorator
+def logfmt_funcdef_call(indent="", func=None, args=None, kwargs=None, retval=None):
+    return f"{indent}Begin {func}:"
 
 
 def logfmt_funcdef(indent="", func=None, args=None, kwargs=None, retval=None):
-    return f"{indent}Begin {func}:"
+    if retval is None:
+        return f"{indent}Returned from {func}"
+    else:
+        return f"{indent}Returned from {func}: {retval}"
 
 
 def logfmt_target(indent="", func=None, args=None, kwargs=None, retval=None):
@@ -126,15 +110,73 @@ def logfmt_turn(indent="", func=None, args=None, kwargs=None, retval=None):
     return f"{indent}Turn towards {args[1].name}"
 
 
+def fmt_hitattr(hitattr, sep=": "):
+    if not isinstance(hitattr, dict):
+        return None
+    hitattr_lines = []
+    for key, value in hitattr.items():
+        if isinstance(value, dict):
+            value = ", ".join(fmt_hitattr(value, sep="="))
+        hitattr_lines.append(f"{key}{sep}{value}")
+    return hitattr_lines
+
+
 def logfmt_action(indent="", func=None, args=None, kwargs=None, retval=None):
-    return f"{indent}Do action {args[1]}"
+    if retval:
+        action_lines = [f"{indent}Do action {args[1]}"]
+        for key, value in retval.items():
+            if key.startswith("_Name"):
+                action_lines.append(f"{key}: {value}")
+        action_group = retval.get("_ActionGroupName")
+        if isinstance(action_group, dict):
+            for key, value in action_group.items():
+                if key.startswith("_HitAttrId"):
+                    difficulty = key.replace("_HitAttrId", "")
+                    if fmt_hitattr_lines := fmt_hitattr(value):
+                        action_lines.append(f"Hit {difficulty}:")
+                        action_lines.extend(fmt_hitattr_lines)
+                    else:
+                        action_lines.extend(f"Hit {difficulty}: {value}")
+        return f"\n{indent}".join(action_lines)
+    else:
+        return f"{indent}Do action {args[1]}"
+
+
+def logfmt_init_runtime_var(indent="", func=None, args=None, kwargs=None, retval=None):
+    return f"{indent}Set runtime variable self.{args[1]} to {args[2][0]}"
+
+
+LOGFMT_DEFAULT = "{indent}{func}({args}, {kwargs}) = {retval}".format
+
+
+def log_call(logfmt=LOGFMT_DEFAULT, indent=False):
+    def real_decorator(function):
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            # ai_runner._logs.append((function, args[1:], kwargs))
+            runner = args[0]
+            do_logging = runner._m.verbose == 2 or (runner._m.verbose == 1 and logfmt == logfmt_action)
+            idt = INDENT * runner._m.depth
+            if do_logging and logfmt == logfmt_funcdef:
+                runner._m.logs.append(logfmt_funcdef_call(indent=idt, func=function.__name__, args=args, kwargs=kwargs))
+            if indent:
+                runner._m.depth += 1
+            retval = function(*args, **kwargs)
+            if indent:
+                runner._m.depth -= 1
+            if do_logging:
+                runner._m.logs.append(logfmt(indent=idt, func=function.__name__, args=args, kwargs=kwargs, retval=retval))
+            return retval
+
+        return wrapper
+
+    return real_decorator
 
 
 class AiRunnerMeta:
     def __init__(self, params):
-        self.depth = 0
-        self.logs = []
-        self.verbose = 2  # 0 no log, 1, log non-default, 2, log all
+        self.reset_logs()
+        self.verbose = 1  # 0 no log, 1, log actions only, 2, log all
         self.params = params
         self.action_set = {}
         for boost, act_set in ((False, params.get("_ActionSet")), (True, params.get("_ActionSetBoost"))):
@@ -147,6 +189,14 @@ class AiRunnerMeta:
                 self.action_set[(boost, act)] = act_data
         self.action_reg = {}
 
+    def print_logs(self):
+        for line in self.logs:
+            print(line)
+
+    def reset_logs(self):
+        self.depth = 0
+        self.logs = []
+
 
 class AiRunner:
     def __init__(self, params):
@@ -155,8 +205,9 @@ class AiRunner:
     def init(self):
         pass
 
+    @log_call(logfmt_init_runtime_var)
     def init_runtime_var(self, name, values):
-        pass
+        setattr(self, name, values[0])
 
     def init_action(self, act, name, boost=False):
         act_data = self._m.action_set.get((boost, act))
@@ -179,39 +230,30 @@ class AiRunner:
         pass
 
     @log_call(logfmt_action)
-    def action(seklf, name):
+    def action(self, name):
+        act_data = self._m.action_reg.get(name)
+        return act_data or None
+
+    @log_call()
+    def wake(self):
         pass
 
-    @log_call()
-    def wake():
+    def alive_num(self, kind, limit):
+        setattr(self, kind, limit)
+
+    def rec_timer(self, status):
         pass
 
-    @log_call()
-    def recHPRate():
+    def unusual_posture(self, status):
         pass
 
-    @log_call()
-    def alive(limit):
-        return limit
-
-    @log_call()
-    def rec_timer(status):
+    def turn_event(self, value=None):
         pass
 
-    @log_call()
-    def unusual_posture(status):
+    def sudden_event(self, value):
         pass
 
-    @log_call()
-    def turn_event(value=None):
-        pass
-
-    @log_call()
-    def sudden_event(value):
-        pass
-
-    @log_call()
-    def bandit_event(value):
+    def bandit_event(self, value):
         pass
 
 

@@ -776,8 +776,6 @@ class FortPlantDetail(DBView):
 
     def process_result(self, res):
         self.link(res, "_NextAssetGroup", "FortPlantDetail")
-        # for i in (1, 2, 3, 4, 5):
-        #     self.link(res, f'_MaterialsId{i}', 'MaterialData', exclude_falsy=exclude_falsy)
         return res
 
 

@@ -78,29 +78,26 @@ def s(v, prefix="self."):
         return v
 
 
-def fmt_binary_opt(opt):
-    def _fmt(v):
-        var_name = v[0]
-        var_value = v[1]
-        if isinstance(var_name, str) and var_name[0] == "_":
-            Root.add_rt_var(var_name, var_value)
-        else:
-            var_name, var_value = var_value, var_name
-            if isinstance(var_name, str) and var_name[0] == "_":
-                Root.add_rt_var(var_name, var_value)
-        return f"{s(var_name)} {opt} {s(var_value)}"
-
-    return _fmt
-
-
 FMT_COMPARE = {
-    Compare.largeEqual: fmt_binary_opt("<="),
-    Compare.smallEqual: fmt_binary_opt(">="),
-    Compare.repudiation: fmt_binary_opt("!="),
-    Compare.equal: fmt_binary_opt("=="),
-    Compare.large: fmt_binary_opt("<"),
-    Compare.small: fmt_binary_opt(">"),
+    Compare.largeEqual: "<=",
+    Compare.smallEqual: ">=",
+    Compare.repudiation: "!=",
+    Compare.equal: "==",
+    Compare.large: "<",
+    Compare.small: ">",
 }
+
+
+def fmt_binary_opt(opt, v):
+    var_name = v[0]
+    var_value = v[1]
+    if isinstance(var_name, str) and var_name[0] == "_":
+        Root.add_rt_var(var_name, var_value, opt)
+    else:
+        var_name, var_value = var_value, var_name
+        if isinstance(var_name, str) and var_name[0] == "_":
+            Root.add_rt_var(var_name, var_value, opt)
+    return f"{s(var_name)} {FMT_COMPARE[opt]} {s(var_value)}"
 
 
 INDENT = "    "
@@ -153,12 +150,11 @@ def get_condition(inst):
     condition = []
     for param in inst.params:
         try:
-            condition.append(FMT_COMPARE[param.compare](param.values))
-        except KeyError:
+            condition.append(fmt_binary_opt(param.compare, param.values))
+        except IndexError:
             cond = inst.params[0].values[0]
             if isinstance(cond, str) and cond[0] == "_":
-                Root.add_rt_var(cond, True)
-                Root.add_rt_var(cond, False)
+                Root.add_rt_var(cond)
             condition.append(s(cond))
     return " and ".join(condition)
 
@@ -215,7 +211,7 @@ def fmt_timer(inst):
 def fmt_alivenum(inst):
     value = inst.params[0].values[0]
     name = inst.params[1].values[0]
-    return f"{INDENT*inst.depth}{s(name)} = self.alive({value})"
+    return f"{INDENT*inst.depth}self.alive_num({s(name, prefix='')!r}, {value!r})"
 
 
 def fmt_move(inst):
@@ -281,7 +277,7 @@ def fmt_gmsetbanditevent(inst):
 
 
 def fmt_rechprate(inst):
-    return f"{INDENT*inst.depth}self.rec_hp_rate()"
+    return f"{INDENT*inst.depth}self._recHpRate = 1"
 
 
 def fmt_unitnumincircle(inst):
@@ -366,12 +362,36 @@ class Runner(AiRunner):
         Root.SET_VALUES = {}
         Root.ACTION_LITERALS = {}
 
+    # class Compare(Enum):
+    #     largeEqual = 0
+    #     smallEqual = 1
+    #     repudiation = 2
+    #     equal = 3
+    #     large = 4
+    #     small = 5
+    #     none = 6
+
     @staticmethod
-    def add_rt_var(v, value=None):
+    def add_rt_var(v, value=None, opt=None):
+        if v not in Root.RT_VAR:
+            Root.RT_VAR[v] = set()
+        if value is None and opt is None:
+            Root.RT_VAR[v].add(True)
+            Root.RT_VAR[v].add(False)
         try:
-            Root.RT_VAR[v].add(value)
-        except KeyError:
-            Root.RT_VAR[v] = {value}
+            value = float(value)
+            if opt in (Compare.largeEqual, Compare.small):
+                Root.RT_VAR[v].add(value - 0.0001)
+            elif opt in (Compare.smallEqual, Compare.large):
+                Root.RT_VAR[v].add(value + 0.0001)
+            elif opt in (Compare.repudiation, Compare.equal):
+                if value == 0:
+                    Root.RT_VAR[v].add(1)
+                else:
+                    Root.RT_VAR[v].add(-value)
+        except (TypeError, ValueError):
+            pass
+        Root.RT_VAR[v].add(value)
 
     def add_child(self, child):
         self.children.append(child)
@@ -402,6 +422,10 @@ class Runner(AiRunner):
             #         converted_values.add(str(v))
             #     except ValueError:
             #         converted_values.add(f"partial(getattr, self, {v!r})")
+            try:
+                values = tuple(sorted(values))
+            except TypeError:
+                values = tuple(values)
             rt_var_str.append(Root.RT_PATTERN.format(name=s(name, prefix=""), values=values))
         rt_var_str = "\n".join(rt_var_str)
         # rt_list_str = "" if not rt_var_str else f"    RUNTIME_VARS = {tuple(Root.RT_VAR.keys())}\n"
