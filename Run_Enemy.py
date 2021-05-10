@@ -13,13 +13,13 @@ def load_enemy_runner(enemy_path, outdir="out"):
         return emodule.Runner, parameters
 
 
-def run_enemy(runner_class, parameters, iterations=20):
+def run_enemy(runner_class, parameters, iterations=50):
     runner = runner_class(parameters)
     for _ in range(iterations):
-        runner._m.reset_logs()
+        # runner._m.reset_logs()
         runner.updateAttack()
-        runner._m.print_logs()
-        print("=" * 120)
+        # runner._m.print_logs()
+    runner._m.action_cycle_check()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from enum import Enum
 from functools import wraps
 from pprint import pprint
+from collections import Counter
 
 
 class Move(Enum):
@@ -110,33 +111,67 @@ def logfmt_turn(indent="", func=None, args=None, kwargs=None, retval=None):
     return f"{indent}Turn towards {args[1].name}"
 
 
-def fmt_hitattr(hitattr, sep=": "):
+def fmt_hitattr_simple(hitattr, sep=": "):
     if not isinstance(hitattr, dict):
         return None
     hitattr_lines = []
     for key, value in hitattr.items():
         if isinstance(value, dict):
-            value = ", ".join(fmt_hitattr(value, sep="="))
+            value = ", ".join(fmt_hitattr_simple(value, sep="="))
         hitattr_lines.append(f"{key}{sep}{value}")
     return hitattr_lines
+
+
+FMT_HITATTR = {
+    "_DamageAdjustment": "deal {value:.0%} damage",
+    "_HpDrainRate2": "recover {value}x of dealt damage as HP",
+}
+
+
+def fmt_hitattr_actcond(actcond):
+    if aff := actcond.get("_Type"):
+        duration = actcond.get("_DurationSec")
+        rate = actcond.get("_Rate", 0)
+        if min_duration := actcond.get("_MinDurationSec"):
+            return f"inflict {aff} for {min_duration}-{duration}s with {rate/100:.0%} chance"
+        else:
+            dot_rate = actcond.get("_SlipDamageRatio")
+            return f"inflict {aff} for {duration}s with {rate/100:.0%} chance, dealing {dot_rate:.2%} of HP every second"
+
+
+def fmt_hitattr_for_hoomans(hitattr):
+    if not isinstance(hitattr, dict):
+        return None
+    hitattr_lines = []
+    for key, fmt in FMT_HITATTR.items():
+        if (value := hitattr.get(key)) :
+            hitattr_lines.append(fmt.format(value=value))
+    if (actcond := hitattr.get("_ActionCondition")) :
+        if (actcond_str := fmt_hitattr_actcond(actcond)) :
+            hitattr_lines.append(actcond_str)
+    if len(hitattr_lines) > 1:
+        return ", ".join(hitattr_lines[:-1]) + " and " + hitattr_lines[-1]
+    if len(hitattr_lines) == 1:
+        return hitattr_lines
+    return None
 
 
 def logfmt_action(indent="", func=None, args=None, kwargs=None, retval=None):
     if retval:
         action_lines = [f"{indent}Do action {args[1]}"]
         for key, value in retval.items():
-            if key.startswith("_Name"):
+            if key.startswith("_Name") and value != "ENEMY_SKILL_0":
                 action_lines.append(f"{key}: {value}")
-        action_group = retval.get("_ActionGroupName")
-        if isinstance(action_group, dict):
-            for key, value in action_group.items():
-                if key.startswith("_HitAttrId"):
-                    difficulty = key.replace("_HitAttrId", "")
-                    if fmt_hitattr_lines := fmt_hitattr(value):
-                        action_lines.append(f"Hit {difficulty}:")
-                        action_lines.extend(fmt_hitattr_lines)
-                    else:
-                        action_lines.extend(f"Hit {difficulty}: {value}")
+        # action_group = retval.get("_ActionGroupName")
+        # if isinstance(action_group, dict):
+        #     for key, value in action_group.items():
+        #         if key.startswith("_HitAttrId"):
+        #             difficulty = key.replace("_HitAttrId", "")
+        #             if fmt_hitattr_line := fmt_hitattr_for_hoomans(value):
+        #                 action_lines.append(f"Hit {difficulty}:")
+        #                 action_lines.append(fmt_hitattr_line)
+        #             else:
+        #                 action_lines.extend(f"Hit {difficulty}: {value}")
         return f"\n{indent}".join(action_lines)
     else:
         return f"{indent}Do action {args[1]}"
@@ -176,9 +211,11 @@ def log_call(logfmt=LOGFMT_DEFAULT, indent=False):
 class AiRunnerMeta:
     def __init__(self, params):
         self.reset_logs()
+        self.action_seq = []
         self.verbose = 1  # 0 no log, 1, log actions only, 2, log all
         self.params = params
         self.action_set = {}
+        self.value_seq = {}
         for boost, act_set in ((False, params.get("_ActionSet")), (True, params.get("_ActionSetBoost"))):
             if not isinstance(act_set, dict):
                 continue
@@ -197,6 +234,28 @@ class AiRunnerMeta:
         self.depth = 0
         self.logs = []
 
+    def action_cycle_check(self):
+        start = 0
+        maxlen = len(self.action_seq)
+        bestest = self.action_seq, 1, 0
+        for start in range(0, maxlen):
+            accumulator = Counter()
+            length = 1
+            c_slice = tuple(self.action_seq[start : start + length])
+            while start + length * (accumulator[c_slice] + 1) <= maxlen:
+                n_slice = tuple(self.action_seq[start + length * accumulator[c_slice] : start + length * (accumulator[c_slice] + 1)])
+                if n_slice == c_slice:
+                    accumulator[c_slice] += 1
+                else:
+                    length += 1
+                    c_slice = tuple(self.action_seq[start : start + length])
+                    accumulator[c_slice] = 1
+            c_best = accumulator.most_common(1)
+            if len(c_best) > 0 and c_best[0][1] > bestest[1]:
+                bestest = (*c_best[0], start)
+        seq, freq, start = bestest
+        pprint(self.action_seq)
+
 
 class AiRunner:
     def __init__(self, params):
@@ -207,7 +266,18 @@ class AiRunner:
 
     @log_call(logfmt_init_runtime_var)
     def init_runtime_var(self, name, values):
-        setattr(self, name, values[0])
+        self._m.value_seq[name] = 0
+
+        def cycling_value_getter(self):
+            next_value = values[self._m.value_seq[name]]
+            # self._m.value_seq[name] += 1
+            # if self._m.value_seq[name] >= len(values):
+            #     self._m.value_seq[name] = 0
+            if isinstance(next_value, str):
+                next_value = getattr(self, next_value, next_value)
+            return next_value
+
+        setattr(self.__class__, name, property(cycling_value_getter))
 
     def init_action(self, act, name, boost=False):
         act_data = self._m.action_set.get((boost, act))
@@ -232,6 +302,7 @@ class AiRunner:
     @log_call(logfmt_action)
     def action(self, name):
         act_data = self._m.action_reg.get(name)
+        self._m.action_seq.append(name)
         return act_data or None
 
     @log_call()

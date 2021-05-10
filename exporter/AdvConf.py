@@ -1043,8 +1043,8 @@ class SkillProcessHelper:
         if isinstance((chainskills := skill.get("_ChainGroupId")), list):
             for idx, cs in enumerate(chainskills):
                 cskill = cs["_Skill"]
-                activate = cs.get("_ActivateCondition")
-                if activate and cskill["_Id"] not in self.all_chara_skills:
+                activate = cs.get("_ActivateCondition", 0)
+                if cskill["_Id"] not in self.all_chara_skills:
                     self.chara_skills[cskill["_Id"]] = (
                         f"s{seq}_chain{activate}",
                         seq,
