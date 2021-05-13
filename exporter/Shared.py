@@ -607,6 +607,21 @@ class PlayerAction(DBView):
                         player_action["_BurstMarkerId"] = marker
             except:
                 pass
+            try:
+                offset_flag = "{0:b}".format(player_action["_EnhancedBurstAttackOffsetFlag"])
+                idx = 0
+                subactions = []
+                if len(offset_flag) > 5:
+                    while offset_flag[idx] == "1" and idx < len(offset_flag):
+                        idx += 1
+                        sub_id = pa_id + idx * 100
+                        if sub_a := self.get(sub_id):
+                            subactions.append(sub_a)
+                    if subactions:
+                        player_action["_EnhancedBurstSubActions"] = subactions
+                player_action["_EnhancedBurstAttackOffsetFlag"] = offset_flag
+            except KeyError:
+                pass
         if (nextact := player_action.get("_NextAction")) :
             player_action["_NextAction"] = self.get(nextact)
         if (casting := player_action.get("_CastingAction")) :
