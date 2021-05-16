@@ -44,11 +44,12 @@ class DBTableMetadata:
         self.pk = pk
         self.field_type = field_type
 
-    def init_from_row(self, row, auto_pk=False):
+    def init_from_row(self, row, auto_pk=False, extra_fields={}):
         self.field_type = {}
         if auto_pk:
             self.pk = self.DBID
             self.field_type[self.DBID] = DBTableMetadata.INT + DBTableMetadata.PK + DBTableMetadata.AUTO
+        self.field_type.update(extra_fields)
         for k, v in row.items():
             if isinstance(v, int):
                 self.field_type[k] = DBTableMetadata.INT
@@ -133,9 +134,9 @@ class DBManager:
         for entry in data:
             if tbl.pk == DBTableMetadata.DBID or entry[tbl.pk]:
                 for field in tbl.blob_fields:
-                    if entry[field]:
+                    if entry.get(field):
                         entry[field] = json.dumps(entry[field])
-                yield tuple(entry.values())
+                yield tuple(entry.get(field) for field in tbl.field_type.keys())
 
     def query_one(self, query, param, d_type):
         cursor = self.conn.cursor()
@@ -183,7 +184,7 @@ class DBManager:
         self.conn.commit()
 
     INSERT = "INSERT"
-    REPLACE = "REPLACE"
+    REPLACE = "INSERT OR REPLACE"
 
     def insert_one(self, table, data, mode="INSERT"):
         tbl = self.check_table(table)
