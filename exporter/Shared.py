@@ -435,14 +435,14 @@ class PlayerActionHitAttribute(DBView):
                 json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
 
 
-class CharacterMotion(DBView):
+class MotionData(DBView):
     def __init__(self, index):
-        super().__init__(index, "CharacterMotion")
+        super().__init__(index, "MotionData")
 
     def get_by_state_ref(self, state, ref):
         tbl = self.database.check_table(self.name)
-        query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref=?;"
-        return self.database.query_many(query=query, param=(state, ref), d_type=DBDict)
+        query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.name=? OR ({self.name}.state=? AND {self.name}.ref=?);"
+        return self.database.query_many(query=query, param=(state, state, ref), d_type=DBDict)
 
 
 class ActionPartsHitLabel(DBView):
@@ -543,10 +543,11 @@ class ActionParts(DBView):
                 ms = r["_motionState"]
                 animation = []
                 if self.animation_reference is not None:
-                    animation = self.index[self.animation_reference[0]].get_by_state_ref(ms, self.animation_reference[1])
-                if not animation:
-                    animation = self.index["CharacterMotion"].get(ms)
+                    animation = self.index["MotionData"].get_by_state_ref(ms, self.animation_reference)
                 if animation:
+                    for anim in animation:
+                        del anim["pathID"]
+                        del anim["ref"]
                     if len(animation) == 1:
                         r["_animation"] = animation[0]
                     else:

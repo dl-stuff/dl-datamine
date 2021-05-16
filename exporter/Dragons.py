@@ -6,16 +6,6 @@ from loader.Database import DBViewIndex, DBView, DBDict, DBManager
 from exporter.Shared import AbilityData, SkillData, PlayerAction, snakey
 
 
-class DragonMotion(DBView):
-    def __init__(self, index):
-        super().__init__(index, "DragonMotion")
-
-    def get_by_state_ref(self, state, ref):
-        tbl = self.database.check_table(self.name)
-        query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref=?;"
-        return self.database.query_many(query=query, param=(state, ref), d_type=DBDict)
-
-
 class DragonData(DBView):
     ACTIONS = ["_AvoidActionFront", "_AvoidActionBack", "_Transform"]
 
@@ -28,10 +18,10 @@ class DragonData(DBView):
 
     def process_result(self, res, full_abilities=False):
         if "_AnimFileName" in res and res["_AnimFileName"]:
-            anim_key = int(res["_AnimFileName"][1:].replace("_", ""))
+            anim_key = res["_AnimFileName"].replace("_", "")
         else:
-            anim_key = int(f'{res["_BaseId"]}{res["_VariationId"]:02}')
-        self.index["ActionParts"].animation_reference = ("DragonMotion", anim_key)
+            anim_key = f'd{res["_BaseId"]}{res["_VariationId"]:02}'
+        self.index["ActionParts"].animation_reference = anim_key
         for s in ("_Skill1", "_Skill2", "_SkillFinalAttack"):
             try:
                 res[s] = self.index["SkillData"].get(res[s], full_abilities=full_abilities)

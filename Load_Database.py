@@ -9,7 +9,7 @@ from loader.Database import DBManager
 
 from loader.Master import load_master, load_json
 from loader.Actions import load_actions
-from loader.Motion import load_character_motion, load_dragon_motion
+from loader.Motion import load_motions
 from loader.Aiscript import load_aiscript
 from loader.UISkillDetail import load_ui_skill_detail
 
@@ -19,8 +19,6 @@ CN = "cn"
 
 MASTER = "master"
 ACTIONS = "actions"
-CHARACTERS_MOTION = "characters_motion"
-DRAGON_MOTION = "dragon_motion"
 
 TEXT_LABEL = "TextLabel.json"
 LABEL_PATTERNS_EN = {
@@ -35,10 +33,10 @@ LABEL_PATTERNS_JP = {
     r"^master$": "master",
     r"^actions$": "actions",
     r"^aiscript$": "aiscript",
-    r"^characters/motion": "characters_motion",
-    r"characters/motion/animationclips$": "characters_motion",
-    r"^dragon/motion": "dragon_motion",
-    r"^assets/_gluonresources/meshes/dragon": "dragon_motion",
+    r"^characters/motion": "motion",
+    r"characters/motion/animationclips$": "motion",
+    r"^dragon/motion": "motion",
+    r"^assets/_gluonresources/meshes/dragon": "motion",
     r"^ui/skilldetail/skilldetail": "skilldetail",
 }
 LABEL_PATTERNS = {
@@ -85,6 +83,7 @@ if __name__ == "__main__":
             ex.download_and_extract_by_pattern(LABEL_PATTERNS)
         else:
             ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
+        load_aiscript(os.path.join(ex.ex_dir, "jp", "aiscript"))
         # extract_story_function_json(ex)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))
@@ -94,8 +93,6 @@ if __name__ == "__main__":
     os.makedirs("out", exist_ok=True)
     with open("./out/_action_schema.json", "w") as f:
         json.dump(schema_map, f, indent=4, sort_keys=True)
-    load_character_motion(db, os.path.join(in_dir, JP, CHARACTERS_MOTION))
-    load_dragon_motion(db, os.path.join(in_dir, JP, DRAGON_MOTION))
+    load_motions(db, os.path.join(in_dir, JP))
     load_ui_skill_detail(db, in_dir)
-    load_aiscript(os.path.join(ex.ex_dir, "jp", "aiscript"))
     print(f"total: {monotonic()-start:.4f}s")

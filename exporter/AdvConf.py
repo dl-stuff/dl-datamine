@@ -1227,10 +1227,7 @@ class AdvConf(CharaData, SkillProcessHelper):
     }
 
     def process_result(self, res, condense=True, all_levels=False):
-        self.index["ActionParts"].animation_reference = (
-            "CharacterMotion",
-            int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'),
-        )
+        self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
         self.reset_meta()
 
         ab_lst = []
@@ -1297,10 +1294,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id")
                 del conf["dragonform"]["d"]
             # dum
-            self.index["ActionParts"].animation_reference = (
-                "CharacterMotion",
-                int(f'{res["_BaseId"]:06}{res["_VariationId"]:02}'),
-            )
+            self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
 
         for m in range(1, 5):
             if (mode := res.get(f"_ModeId{m}")) :

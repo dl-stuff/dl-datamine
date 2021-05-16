@@ -2,6 +2,7 @@ import json
 import os
 import errno
 import shutil
+from functools import partial
 
 import aiohttp
 import asyncio
@@ -238,10 +239,15 @@ def process_json(tree):
     return tree
 
 
-def write_json(f, data):
+def write_json(f, data, with_pathid=True, ref=None):
     data.read_type_tree()
     tree = data.type_tree
-    json.dump(process_json(tree), f, indent=2)
+    if with_pathid:
+        tree["pathID"] = data.path_id
+        tree["ref"] = ref
+    else:
+        tree = process_json(tree)
+    json.dump(tree, f, indent=2)
 
 
 def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
@@ -327,6 +333,44 @@ def unpack_MonoBehaviour(data, dest, stdout_log=False):
         write_json(f, data)
 
 
+def find_ref(container):
+    ref = os.path.splitext(os.path.basename(container))[0]
+    if len(ref) < 4:
+        ref = None
+    elif ref[3] == "_":
+        ref = ref.split("_")[-1]
+        if len(ref) != 8:
+            ref = None
+    elif ref[0] == "d":
+        parts = ref.split("_")
+        if len(parts[0]) == 9:
+            ref = parts[0]
+        else:
+            ref = parts[0] + parts[1]
+    return ref
+
+
+def unpack_Animation(obj, ex_target, stdout_log=False):
+    obj_type_str = str(obj.type)
+    data = obj.read()
+    ref = None
+    if obj.container is not None:
+        ref = find_ref(obj.container)
+    else:
+        for asset in obj.assets_file.objects.values():
+            if asset.container is not None:
+                ref = find_ref(asset.container)
+                if ref is not None:
+                    break
+    dest = f"{ex_target}/{obj_type_str}.{data.name}.json"
+    if stdout_log:
+        print(obj_type_str, dest, flush=True)
+    check_target_path(dest)
+
+    with open(dest, "w", encoding="utf8", newline="") as f:
+        write_json(f, data, with_pathid=True, ref=ref)
+
+
 def unpack_TextAsset(data, dest, stdout_log=False):
     if stdout_log:
         print("TextAsset", dest, flush=True)
@@ -391,6 +435,8 @@ def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
             else:
                 dest = os.path.join(ex_dir, dest)
                 method(data, dest, stdout_log)
+    if obj_type_str in UNPACK_ANIM:
+        unpack_Animation(obj, os.path.join(ex_dir, ex_target), stdout_log)
     # elif stdout_log:
     #     print(f'Unsupported type {obj_type_str}')
 
@@ -401,9 +447,9 @@ UNPACK = {
     "MonoBehaviour": unpack_MonoBehaviour,
     "TextAsset": unpack_TextAsset,
     "GameObject": unpack_GameObject,
-    "AnimationClip": unpack_MonoBehaviour,
-    "AnimatorOverrideController": unpack_MonoBehaviour,
 }
+
+UNPACK_ANIM = ("AnimationClip", "AnimatorController", "AnimatorOverrideController")
 
 wyrmprint_alpha = Image.new("RGBA", (1024, 1024), color=(0, 0, 0, 255))
 ImageDraw.Draw(wyrmprint_alpha).rectangle([212, 26, 811, 997], fill=(255, 255, 255, 255), outline=None)
@@ -785,7 +831,10 @@ if __name__ == "__main__":
 
     IMAGE_PATTERNS = {
         "jp": {
-            r"^images/outgame/unitdetail/chara/": None,
+            r"^characters/motion": "motion",
+            r"characters/motion/animationclips$": "motion",
+            r"^dragon/motion": "motion",
+            r"^assets/_gluonresources/meshes/dragon": "motion",
         }
     }
 
@@ -815,5 +864,5 @@ if __name__ == "__main__":
             ex = Extractor(mf_mode=1)
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
-        ex = Extractor(ex_dir="./_images", stdout_log=False, overwrite=False, mf_mode=0)
+        ex = Extractor(ex_dir="./_ex_sim", stdout_log=False, overwrite=False, mf_mode=0)
         ex.download_and_extract_by_pattern(IMAGE_PATTERNS)

@@ -116,6 +116,18 @@ class DBManager:
         self.conn.close()
         self.conn = None
 
+    def transfer(self, new_db_file, table_list):
+        self.conn.execute(f"ATTACH DATABASE '{new_db_file}' AS target;")
+        self.conn.commit()
+        for table in table_list:
+            meta = self.check_table(table)
+            self.conn.execute(f"DROP TABLE IF EXISTS target.{table}")
+            self.conn.execute(f"CREATE TABLE target.{table} ({meta.field_types});")
+            self.conn.execute(f"INSERT INTO target.{table} SELECT * FROM main.{table};")
+            self.conn.commit()
+        self.conn.execute(f"DETACH DATABASE target;")
+        self.conn.commit()
+
     @staticmethod
     def list_dict_values(data, tbl):
         for entry in data:

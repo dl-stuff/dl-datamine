@@ -1,108 +1,114 @@
 import json
 import os
-import re
+from glob import glob
 from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata
 
 MOTION_FIELDS = {
-    "name": DBTableMetadata.TEXT + DBTableMetadata.PK,
+    "pathID": DBTableMetadata.INT + DBTableMetadata.PK,
+    "name": DBTableMetadata.TEXT,
+    "ref": DBTableMetadata.TEXT,
     "state": DBTableMetadata.TEXT,
-    "ref": DBTableMetadata.INT,
-    "startTime": DBTableMetadata.REAL,
-    "stopTime": DBTableMetadata.REAL,
+    # "startTime": DBTableMetadata.REAL,
+    # "stopTime": DBTableMetadata.REAL,
     "duration": DBTableMetadata.REAL,
 }
-CHARACTER_MOTION = DBTableMetadata("CharacterMotion", pk="name", field_type=MOTION_FIELDS)
-CHARACTER_REF = re.compile(r"[A-Za-z]{3}_(.*)_(\d{8})", flags=re.IGNORECASE)
-
-DRAGON_MOTION = DBTableMetadata("DragonMotion", pk="name", field_type=MOTION_FIELDS)
-DRAGON_REF = re.compile(r"d(\d{8})_(\d{3})_\d{2}", flags=re.IGNORECASE)
+MOTION_DATA = DBTableMetadata("MotionData", pk="name", field_type=MOTION_FIELDS)
 
 
-def chara_state_ref(res):
-    state = res.group(1) if len(res.group(1)) > 1 else None
-    ref = res.group(2)
-    if "_" not in state:
-        return state, ref
-    s1, sn = state.split("_", 1)
-    if s1 == "SKL":
-        state = f"skill_unique_{sn}"
-    elif s1 == "CMB":
-        state = f'combo_{sn.lower().replace("0", "")}'
-    return state, ref
+def get_ref(name):
+    if name[0] == "D":
+        return name.split("_")[0].lower()
+    last_part = name.split("_")[-1]
+    if len(last_part) == 8:
+        return last_part
+    return None
 
 
-# 000 idle
-# 002 walk
-# 003 dash
-# 004 stop dash
-# 020 roll
-# 030 transform
-# 04x combo
-# 060 skill
+def load_base_controller(filename, all_controllers):
+    with open(filename, "r") as fn:
+        try:
+            data = json.load(fn)
+        except json.decoder.JSONDecodeError:
+            return
+        path_id = data["pathID"]
+        tos = {int(k): v for k, v in data["m_TOS"].items()}
+        clip_idx_to_pathid = [int(clip["m_PathID"]) for idx, clip in enumerate(data["m_AnimationClips"])]
+        clip_pathid_to_state = {}
 
-DRAGON_STATE = {
-    "000": "idle",
-    "002": "walk",
-    "003": "dash",
-    "004": "stop",
-    "020": "roll",
-    "030": "transform",
-    "060": "skill_01",
-}
+        controller = data["m_Controller"]
+        # ignoring attachment layers
+        for layer in controller["m_LayerArray"]:
+            smid = layer["data"]["m_StateMachineIndex"]
+            for sm_const in controller["m_StateMachineArray"][smid]["data"]["m_StateConstantArray"]:
+                sm_name = tos[sm_const["data"]["m_NameID"]]
+                for blend_tree in sm_const["data"]["m_BlendTreeConstantArray"]:
+                    for node in blend_tree["data"]["m_NodeArray"]:
+                        clip_pathid = clip_idx_to_pathid[node["data"]["m_ClipID"]]
+                        if not clip_pathid in clip_pathid_to_state:
+                            clip_pathid_to_state[clip_pathid] = sm_name
 
-
-def dragon_state_ref(res):
-    state = res.group(2)
-    ref = res.group(1)
-    if state in DRAGON_STATE:
-        state = DRAGON_STATE[state]
-    elif state[1] == "4":
-        state = f"combo_{int(state[2])+1}"
-    return state, ref
+        all_controllers[path_id] = clip_pathid_to_state
 
 
-def build_motion(data, ref_pattern, state_ref):
+def load_override_controller(filename, all_controllers):
+    with open(filename, "r") as fn:
+        try:
+            data = json.load(fn)
+        except json.decoder.JSONDecodeError:
+            return
+        path_id = data["pathID"]
+        controller_path_id = data["m_Controller"]["m_PathID"]
+        clip_pathid_to_state = {}
+        for clip in data["m_Clips"]:
+            original_pathid = clip["m_OriginalClip"]["m_PathID"]
+            override_pathid = clip["m_OverrideClip"]["m_PathID"]
+            if original_pathid != override_pathid:
+                try:
+                    clip_pathid_to_state[override_pathid] = all_controllers[controller_path_id][original_pathid]
+                except Exception as e:
+                    print(filename)
+                    raise e
+
+        all_controllers[path_id] = clip_pathid_to_state
+
+
+def build_motion(data, clip_pathid_to_state):
     db_data = {}
+    db_data["pathID"] = data["pathID"]
     db_data["name"] = data["name"]
-    res = ref_pattern.match(data["name"])
-    if res:
-        db_data["state"], db_data["ref"] = state_ref(res)
-    else:
-        db_data["state"], db_data["ref"] = None, None
-    db_data["startTime"] = data["m_MuscleClip"]["m_StartTime"]
-    db_data["stopTime"] = data["m_MuscleClip"]["m_StopTime"]
+    db_data["ref"] = data["ref"]
+    db_data["state"] = clip_pathid_to_state.get(data["pathID"], None)
+    # db_data["startTime"] = data["m_MuscleClip"]["m_StartTime"]
+    # db_data["stopTime"] = data["m_MuscleClip"]["m_StopTime"]
     db_data["duration"] = data["m_MuscleClip"]["m_StopTime"] - data["m_MuscleClip"]["m_StartTime"]
     return db_data
 
 
-def load_motion(db, path, meta, ref_pattern, state_ref):
+def load_motions(db, ex_dir):
+    all_controllers = {}
+    for anim_ctrl in glob(f"{ex_dir}/motion/AnimatorController.*.json"):
+        load_base_controller(anim_ctrl, all_controllers)
+    for anim_ctrl_override in glob(f"{ex_dir}/motion/AnimatorOverrideController.*.json"):
+        load_override_controller(anim_ctrl_override, all_controllers)
+    clip_pathid_to_state = {}
+    for value in all_controllers.values():
+        clip_pathid_to_state.update(value)
+
     motions = []
-    db.drop_table(meta.name)
-    db.create_table(meta)
-    for root, _, files in os.walk(path):
-        for file_name in tqdm(files, desc="motion"):
-            file_path = os.path.join(root, file_name)
-            try:
-                with open(file_path) as f:
-                    data = json.load(f)
-                    motions.append(build_motion(data, ref_pattern, state_ref))
-            except (KeyError, TypeError, json.decoder.JSONDecodeError):
-                pass
-    db.insert_many(meta.name, motions)
-
-
-def load_character_motion(db, path):
-    load_motion(db, path, CHARACTER_MOTION, CHARACTER_REF, chara_state_ref)
-
-
-def load_dragon_motion(db, path):
-    load_motion(db, path, DRAGON_MOTION, DRAGON_REF, dragon_state_ref)
+    db.drop_table(MOTION_DATA.name)
+    db.create_table(MOTION_DATA)
+    for anim_clip in tqdm(glob(f"{ex_dir}/motion/AnimationClip.*.json"), desc="motion"):
+        try:
+            with open(anim_clip) as f:
+                data = json.load(f)
+                motions.append(build_motion(data, clip_pathid_to_state))
+        except json.decoder.JSONDecodeError:
+            pass
+    db.insert_many(MOTION_DATA.name, motions)
 
 
 if __name__ == "__main__":
-    from loader.Database import DBManager
-
     db = DBManager()
-    load_character_motion(db, "./_ex_sim/jp/characters_motion")
-    load_dragon_motion(db, "./_ex_sim/jp/dragon_motion")
+    all_controllers = {}
+    load_motions(db, "_ex_sim/jp")
