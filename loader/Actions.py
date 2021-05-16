@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from glob import glob
 from tqdm import tqdm
 from loader.Database import DBManager, DBTableMetadata, ShortEnum
 import re
@@ -532,68 +533,42 @@ def log_schema_keys(schema_map, data, command_type):
 
 def load_actions(db, path):
     schema_map = {}
-    file_filter = re.compile(r"PlayerAction_([0-9]+)\.json")
     db.drop_table(ACTION_PART.name)
     db.create_table(ACTION_PART)
     db.drop_table(ACTION_PART_HIT_LABEL.name)
     db.create_table(ACTION_PART_HIT_LABEL)
     sorted_data = []
     sorted_hitlabel_data = []
-    for root, _, files in os.walk(path):
-        for file_name in tqdm(files, desc="action"):
-            if file_name == "ActionPartsList.json":
-                table = "ActionPartsList"
-                db.drop_table(table)
-                with open(os.path.join(root, file_name)) as f:
-                    raw = json.load(f)
-                    for r in raw:
-                        resource_fn = os.path.basename(r["_resourcePath"])
-                        try:
-                            r["_host"], r["_Id"] = resource_fn.split("_")
-                            r["_Id"] = int(r["_Id"])
-                        except:
-                            r["_host"], r["_Id"] = None, 0
-                    row = next(iter(raw))
-                    pk = "_resourcePath"
-                    meta = DBTableMetadata(table, pk=pk)
-                    meta.init_from_row(row)
-                    db.create_table(meta)
-                    db.insert_many(table, raw)
-            else:
-                res = file_filter.match(file_name)
-                if res:
-                    ref = res.group(1)
-                    with open(os.path.join(root, file_name)) as f:
-                        raw = json.load(f)
-                        # action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
-                        action = []
-                        seq = 0
-                        for gameObject in raw:
-                            actdata = gameObject.get("_data")
-                            if not actdata:
-                                continue
-                            action.append(actdata)
-                            if (additional := actdata.get("_additionalCollision")) and actdata.get("_addNum"):
-                                for i, act in enumerate(additional):
-                                    if i >= actdata["_addNum"]:
-                                        break
-                                    act["_seconds"] += actdata["_seconds"]
-                                    action.append(act)
-                                # action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
-                        for seq, data in enumerate(action):
-                            try:
-                                command_type = CommandType(data["commandType"])
-                            except TypeError:
-                                command_type = data["commandType"]
-                                print(f"Unknown command type {command_type} in {file_name}")
-                            log_schema_keys(schema_map, data, command_type)
-                            if command_type in PROCESSORS.keys():
-                                builder = PROCESSORS[command_type]
-                                db_data, hitlabel_data = builder(ACTION_PART, ref, seq, data)
-                                if db_data is not None:
-                                    sorted_data.append(db_data)
-                                if hitlabel_data:
-                                    sorted_hitlabel_data.extend(hitlabel_data)
+    for filepath in tqdm(glob(path + "/PlayerAction*"), desc="action"):
+        ref = os.path.splitext(filepath.split("_")[-1])[0]
+        with open(filepath) as f:
+            raw = json.load(f)
+            # action = [gameObject['_data'] for gameObject in raw if '_data' in gameObject.keys()]
+            action = []
+            seq = 0
+            for actdata in raw:
+                action.append(actdata)
+                if (additional := actdata.get("_additionalCollision")) and actdata.get("_addNum"):
+                    for i, act in enumerate(additional):
+                        if i >= actdata["_addNum"]:
+                            break
+                        act["_seconds"] += actdata["_seconds"]
+                        action.append(act)
+                    # action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
+            for seq, data in enumerate(action):
+                try:
+                    command_type = CommandType(data["commandType"])
+                except TypeError:
+                    command_type = data["commandType"]
+                    print(f"Unknown command type {command_type} in {filepath}")
+                log_schema_keys(schema_map, data, command_type)
+                if command_type in PROCESSORS.keys():
+                    builder = PROCESSORS[command_type]
+                    db_data, hitlabel_data = builder(ACTION_PART, ref, seq, data)
+                    if db_data is not None:
+                        sorted_data.append(db_data)
+                    if hitlabel_data:
+                        sorted_hitlabel_data.extend(hitlabel_data)
     db.insert_many(ACTION_PART.name, sorted_data)
     db.insert_many(ACTION_PART_HIT_LABEL.name, sorted_hitlabel_data)
     return schema_map

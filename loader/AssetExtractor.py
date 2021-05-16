@@ -384,7 +384,7 @@ def unpack_TextAsset(data, dest, stdout_log=False):
             f.write(data.script)
 
 
-def unpack_GameObject(data, destination_folder, stdout_log):
+def unpack_GameObject(data, destination_folder, stdout_log=False):
     dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
     if stdout_log:
         print("GameObject", dest, flush=True)
@@ -397,7 +397,7 @@ def unpack_GameObject(data, destination_folder, stdout_log):
             if stdout_log:
                 print("- MonoBehaviour", subdata.name, flush=True)
             subdata.read_type_tree()
-            json_data = subdata.type_tree
+            json_data = subdata.type_tree.get("_data")
             if json_data:
                 mono_list.append(json_data)
         elif obj_type_str == "GameObject":
@@ -831,10 +831,7 @@ if __name__ == "__main__":
 
     IMAGE_PATTERNS = {
         "jp": {
-            r"^characters/motion": "motion",
-            r"characters/motion/animationclips$": "motion",
-            r"^dragon/motion": "motion",
-            r"^assets/_gluonresources/meshes/dragon": "motion",
+            r"^actions$": "actions",
         }
     }
 
