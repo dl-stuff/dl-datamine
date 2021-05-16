@@ -2020,7 +2020,7 @@ def convert_all_ability(ab_lst, skip_abtype=tuple()):
 class WpConf(AbilityCrest):
     HDT_PRINT = {
         "name": "High Dragon Print",
-        "icon": "HDT",
+        "icon": "400072_02",
         "hp": 83,
         "att": 20,
         "rarity": 1,

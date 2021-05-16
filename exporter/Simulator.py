@@ -20,6 +20,7 @@ SIM_TABLE_LIST = (
     "TextLabel",
     "PlayerAction",
     "PlayerActionHitAttribute",
+    "UnionAbility",
 )
 
 
@@ -35,4 +36,4 @@ def transfer_actions(actions_dir, dl_sim_act_dir):
 
 if __name__ == "__main__":
     transfer_sim_db("../dl9/conf.sqlite")
-    transfer_actions("./_ex_sim/jp/actions", "../dl9/actions")
+    transfer_actions("./_ex_sim/jp/actions", "../dl9/actions/data")
