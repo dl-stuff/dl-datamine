@@ -4,7 +4,6 @@
 *.lnk
 *.txt
 *.sqlite
-*.sh
 
 /manifest/parse.py
 /manifest/DL_DecryptManifest.exe

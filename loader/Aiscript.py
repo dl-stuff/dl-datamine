@@ -374,24 +374,24 @@ class Runner(AiRunner):
     @staticmethod
     def add_rt_var(v, value=None, opt=None):
         if v not in Root.RT_VAR:
-            Root.RT_VAR[v] = set()
+            Root.RT_VAR[v] = []
         if value is None and opt is None:
-            Root.RT_VAR[v].add(True)
-            Root.RT_VAR[v].add(False)
+            Root.RT_VAR[v].append(True)
+            Root.RT_VAR[v].append(False)
         try:
             value = float(value)
             if opt in (Compare.largeEqual, Compare.small):
-                Root.RT_VAR[v].add(value - 0.0001)
+                Root.RT_VAR[v].append(value - 0.0001)
             elif opt in (Compare.smallEqual, Compare.large):
-                Root.RT_VAR[v].add(value + 0.0001)
+                Root.RT_VAR[v].append(value + 0.0001)
             elif opt in (Compare.repudiation, Compare.equal):
                 if value == 0:
-                    Root.RT_VAR[v].add(1)
+                    Root.RT_VAR[v].append(1)
                 else:
-                    Root.RT_VAR[v].add(-value)
+                    Root.RT_VAR[v].append(-value)
         except (TypeError, ValueError):
             pass
-        Root.RT_VAR[v].add(value)
+        Root.RT_VAR[v].append(value)
 
     def add_child(self, child):
         self.children.append(child)
@@ -415,18 +415,8 @@ class Runner(AiRunner):
 
         rt_var_str = []
         for name, values in sorted(Root.RT_VAR.items()):
-            # converted_values = set()
-            # for v in values:
-            #     try:
-            #         float(v)
-            #         converted_values.add(str(v))
-            #     except ValueError:
-            #         converted_values.add(f"partial(getattr, self, {v!r})")
-            try:
-                values = tuple(sorted(values))
-            except TypeError:
-                values = tuple(values)
-            rt_var_str.append(Root.RT_PATTERN.format(name=s(name, prefix=""), values=values))
+            # ensure ordering
+            rt_var_str.append(Root.RT_PATTERN.format(name=s(name, prefix=""), values=tuple({v: None for v in values}.keys())))
         rt_var_str = "\n".join(rt_var_str)
         # rt_list_str = "" if not rt_var_str else f"    RUNTIME_VARS = {tuple(Root.RT_VAR.keys())}\n"
 
