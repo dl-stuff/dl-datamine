@@ -32,6 +32,7 @@ def flatten_data(data, table, parent_keys=None):
         return flattened
     if not isinstance(data, dict):
         return {}
+
     row = next(iter(data.values()))
     pk = "_Id" if "_Id" in row else next(iter(row))
     if isinstance(row, dict) and pk.startswith("_"):

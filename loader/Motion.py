@@ -32,7 +32,7 @@ def load_base_controller(filename, all_controllers):
         except json.decoder.JSONDecodeError:
             return
         path_id = data["pathID"]
-        tos = {int(k): v for k, v in data["m_TOS"].items()}
+        tos = {int(k): v for k, v in data["m_TOS"]}
         clip_idx_to_pathid = [int(clip["m_PathID"]) for idx, clip in enumerate(data["m_AnimationClips"])]
         clip_pathid_to_state = {}
 
@@ -76,7 +76,7 @@ def load_override_controller(filename, all_controllers):
 def build_motion(data, clip_pathid_to_state):
     db_data = {}
     db_data["pathID"] = data["pathID"]
-    db_data["name"] = data["name"]
+    db_data["name"] = data["m_Name"]
     db_data["ref"] = data["ref"]
     db_data["state"] = clip_pathid_to_state.get(data["pathID"], None)
     # db_data["startTime"] = data["m_MuscleClip"]["m_StartTime"]

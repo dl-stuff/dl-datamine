@@ -23,7 +23,7 @@ def make_buff_icon_mapping():
 
     with open(INGAME_UI_FILE, "r") as fp:
         ingame_ui = {}
-        for icon_type, data in json.load(fp)[0].items():
+        for icon_type, data in json.load(fp).items():
             if not icon_type.endswith("Icon"):
                 continue
             ingame_ui[icon_type] = {idx: path_id_map.get(str(entry["m_PathID"])) for idx, entry in enumerate(data) if entry["m_FileID"]}

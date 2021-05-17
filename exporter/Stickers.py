@@ -34,7 +34,7 @@ ARROW_STICKERS = (
 
 
 def download_sticker_assets():
-    ex = Extractor(ex_dir=OUT_DIR, ex_img_dir=OUT_DIR, stdout_log=False)
+    ex = Extractor(ex_dir=OUT_DIR, ex_img_dir=OUT_DIR)
     ex.download_and_extract_by_pattern(STICKER_PATTERN)
     for region in ("jp", "en"):
         voice_dir = os.path.join(OUT_DIR, region, "voices")

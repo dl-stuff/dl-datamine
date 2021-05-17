@@ -1,7 +1,6 @@
 import os
 import argparse
 from time import monotonic
-from tqdm import tqdm
 import json
 
 from loader.AssetExtractor import Extractor
@@ -44,10 +43,6 @@ LABEL_PATTERNS = {
     EN: LABEL_PATTERNS_EN,
     CN: LABEL_PATTERNS_CN,
 }
-IMAGE_PATTERNS = {
-    r"^images/icon": "icon",
-    r"^images/outgame": "outgame",
-}
 
 
 def extract_story_function_json(ex):
@@ -70,20 +65,17 @@ if __name__ == "__main__":
     parser.add_argument("-m_hash", help="Use", action="store_true")
     parser.add_argument("-o", type=str, help="output file", default="dl.sqlite")
     args = parser.parse_args()
-    # if args.do_images:
-    #     ex = Extractor(MANIFEST_JP, MANIFEST_EN, ex_dir='images', stdout_log=True)
-    #     ex.download_and_extract_by_pattern(IMAGE_PATTERNS, region='jp')
     start = monotonic()
 
     dl_dir = "./_dl_sim"
-    in_dir = "_ex_sim"
+    in_dir = "./_ex_sim"
     if args.do_prep:
-        ex = Extractor(dl_dir=dl_dir, ex_dir=in_dir, stdout_log=False, overwrite=True)
+        ex = Extractor(dl_dir=dl_dir, ex_dir=in_dir, ex_img_dir=None, overwrite=True)
         if not os.path.isdir(in_dir):
             ex.download_and_extract_by_pattern(LABEL_PATTERNS)
         else:
             ex.download_and_extract_by_pattern_diff(LABEL_PATTERNS)
-        load_aiscript(os.path.join(ex.ex_dir, "jp", "aiscript"))
+        load_aiscript(os.path.join(in_dir, "jp", "aiscript"))
         # extract_story_function_json(ex)
     db = DBManager(args.o)
     load_master(db, os.path.join(in_dir, EN, MASTER))

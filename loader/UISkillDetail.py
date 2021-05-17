@@ -40,7 +40,7 @@ def build_skilldetail_row(root, fn):
             }
 
 
-def load_ui_skill_detail(db, path, stdout_log=False):
+def load_ui_skill_detail(db, path):
     skilldetails = {}
     for region in ("en", "jp", "cn"):
         for root, _, files in os.walk(os.path.join(path, region, "skilldetail")):

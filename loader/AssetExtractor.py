@@ -1,26 +1,24 @@
 import json
 import os
 import errno
-import shutil
-from functools import partial
-
-import aiohttp
-import asyncio
+import sys
+from time import monotonic
 
 import urllib.request
 import multiprocessing
 
 import re
-from tqdm import tqdm
+
+# from tqdm import tqdm
 from queue import SimpleQueue
 from collections import defaultdict
+from itertools import chain
+from functools import partial
 
 from PIL import Image, ImageDraw
-from UnityPy import AssetsManager
+from UnityPy import Environment
 
-from UnityPy.export.SpriteHelper import get_triangles
-from UnityPy.classes.Sprite import SpritePackingRotation, SpritePackingMode
-from UnityPy.enums import TextureFormat
+from UnityPy.export.SpriteHelper import get_triangles, SpritePackingRotation, SpritePackingMode
 
 MANIFESTS = {
     "jp": "manifest/assetbundle.manifest.json",
@@ -212,13 +210,14 @@ class ParsedManifest(dict):
         pprint(removed_keys)
 
 
-def check_target_path(target):
-    if not os.path.exists(os.path.dirname(target)):
-        try:
-            os.makedirs(os.path.dirname(target))
-        except OSError as exc:  # Guard against race condition
-            if exc.errno != errno.EEXIST:
-                raise
+def check_target_path(target, is_dir=False):
+    if not is_dir:
+        target = os.path.dirname(target)
+    try:
+        os.makedirs(target, exist_ok=True)
+    except OSError as exc:  # Guard against race condition
+        if exc.errno != errno.EEXIST:
+            raise
 
 
 def merge_path_dir(path):
@@ -239,98 +238,80 @@ def process_json(tree):
     return tree
 
 
-def write_json(f, data, with_pathid=True, ref=None):
-    data.read_type_tree()
-    tree = data.type_tree
-    if with_pathid:
-        tree["pathID"] = data.path_id
-        tree["ref"] = ref
-    else:
-        tree = process_json(tree)
-    json.dump(tree, f, indent=2)
-
-
-def unpack_Texture2D(data, dest, texture_2d, stdout_log=False):
-    if stdout_log:
-        print("Texture2D", dest, flush=True)
+def serialize_memoryview(value):
     try:
-        tpl = (dest, data.image, data.m_TextureFormat)
-        try:
-            texture_2d[data.path_id]["root"] = tpl
-        except KeyError:
-            texture_2d[data.path_id] = {}
-            texture_2d[data.path_id]["root"] = tpl
-    except:
+        return str(value.hex())
+    except AttributeError:
+        return str(value)
+
+
+def unpack_TypeTree(obj, dest, ex_paths, obj_by_pathid, name=None):
+    data = obj.read()
+    result = data.type_tree.to_dict()
+    try:
+        name = str(obj.type) + "." + data.name.replace("/", "_")
+    except AttributeError:
+        print(result)
         pass
+    with open(os.path.join(dest, name + ".json"), "w", encoding="utf8", newline="") as fn:
+        json.dump(result, fn, indent=2, default=serialize_memoryview)
 
 
-SPRITE_ROTATION = {
-    SpritePackingRotation.kSPRFlipHorizontal: Image.FLIP_TOP_BOTTOM,
-    SpritePackingRotation.kSPRFlipVertical: Image.FLIP_LEFT_RIGHT,
-    SpritePackingRotation.kSPRRotate180: Image.ROTATE_180,
-    SpritePackingRotation.kSPRRotate90: Image.ROTATE_270,
-}
+def unpack_MonoBehaviour(obj, dest, ex_paths, obj_by_pathid, name=None, process=True):
+    data = obj.read()
+    if data.path_id in ex_paths:
+        return
+    name = name or data.name or data.m_Script.get_obj().read().name
+    result = data.type_tree.to_dict()
+    if process:
+        result = process_json(result)
+        if not result:
+            return
+    with open(os.path.join(dest, name + ".json"), "w", encoding="utf8", newline="") as fn:
+        json.dump(result, fn, indent=2)
+    ex_paths.add(data.path_id)
 
 
-def unpack_Sprite(data, dest, texture_2d, stdout_log=False):
-    if stdout_log:
-        print("Sprite", dest, flush=True)
-
-    m_Sprite = data
-    atlas = None
-    if m_Sprite.m_SpriteAtlas:
-        atlas = m_Sprite.m_SpriteAtlas.read()
-    elif m_Sprite.m_AtlasTags:
-        # looks like the direct pointer is empty, let's try to find the Atlas via its name
-        for obj in m_Sprite.assets_file.objects.values():
-            if obj.type == "SpriteAtlas":
-                atlas = obj.read()
-                if atlas.name == m_Sprite.m_AtlasTags[0]:
-                    break
-                atlas = None
-    if atlas:
-        sprite_atlas_data = atlas.render_data_map[m_Sprite.m_RenderDataKey]
-    else:
-        sprite_atlas_data = m_Sprite.m_RD
-
-    rect = sprite_atlas_data.textureRect
-    rect_size = (int(rect.right - rect.left), int(rect.bottom - rect.top))
-
-    rotation = None
-    settings_raw = sprite_atlas_data.settingsRaw
-    if settings_raw.packed == 1:
-        try:
-            rotation = SPRITE_ROTATION[settings_raw.packingRotation]
-        except:
-            pass
-
-    mask = None
-    if settings_raw.packingMode == SpritePackingMode.kSPMTight:
-        mask = Image.new("1", rect_size, color=0)
-        draw = ImageDraw.ImageDraw(mask)
-        for triangle in get_triangles(m_Sprite):
-            draw.polygon(triangle, fill=1)
-
-    s_tuple = (dest, rect, rotation, mask, m_Sprite.path_id)
+def unpack_TextAsset(obj, dest, ex_paths, obj_by_pathid):
+    data = obj.read()
+    if data.path_id in ex_paths:
+        return
+    dest = os.path.join(dest, data.name)
     try:
-        texture_2d[sprite_atlas_data.texture.path_id]["sprites"].append(s_tuple)
-    except KeyError:
-        try:
-            texture_2d[sprite_atlas_data.texture.path_id]["sprites"] = [s_tuple]
-        except KeyError:
-            texture_2d[sprite_atlas_data.texture.path_id] = {}
-            texture_2d[sprite_atlas_data.texture.path_id]["sprites"] = [s_tuple]
+        with open(dest, "w", encoding="utf8", newline="") as f:
+            f.write(data.text)
+    except UnicodeDecodeError:
+        with open(dest, "wb") as f:
+            f.write(data.script)
+    ex_paths.add(data.path_id)
 
 
-def unpack_MonoBehaviour(data, dest, stdout_log=False):
-    if stdout_log:
-        print("MonoBehaviour", dest, flush=True)
-    dest, _ = os.path.splitext(dest)
-    dest += ".json"
-    check_target_path(dest)
-
-    with open(dest, "w", encoding="utf8", newline="") as f:
-        write_json(f, data)
+def unpack_GameObject(obj, dest, ex_paths, obj_by_pathid):
+    data = obj.read()
+    component_monos = []
+    for component in data.m_Components:
+        if component.type == "MonoBehaviour":
+            mono_data = component.read()
+            mono_json_data = mono_data.type_tree.to_dict().get("_data")
+            if not mono_json_data:
+                try:
+                    mono_name = mono_data.m_Script.get_obj().read().name
+                    if data.name != mono_name:
+                        mono_name = f"{data.name}.{mono_name}"
+                    elif not mono_name:
+                        mono_name = data.name
+                except AttributeError:
+                    mono_name = data.name
+                unpack_MonoBehaviour(component, dest, ex_paths, obj_by_pathid, name=mono_name, process=False)
+                continue
+            component_monos.append(mono_json_data)
+            ex_paths.add(mono_data.path_id)
+        # else:
+        #     unpack_TypeTree(component, dest, ex_paths, obj_by_pathid, name=data.name)
+    if component_monos:
+        check_target_path(dest)
+        with open(os.path.join(dest, data.name + ".json"), "w", encoding="utf8", newline="") as fn:
+            json.dump(component_monos, fn, indent=2)
 
 
 def find_ref(container):
@@ -350,9 +331,11 @@ def find_ref(container):
     return ref
 
 
-def unpack_Animation(obj, ex_target, stdout_log=False):
-    obj_type_str = str(obj.type)
+def unpack_Animation(obj, dest, ex_paths, obj_by_pathid):
     data = obj.read()
+    if data.path_id in ex_paths:
+        return
+    obj_type_str = str(obj.type)
     ref = None
     if obj.container is not None:
         ref = find_ref(obj.container)
@@ -362,297 +345,196 @@ def unpack_Animation(obj, ex_target, stdout_log=False):
                 ref = find_ref(asset.container)
                 if ref is not None:
                     break
-    dest = f"{ex_target}/{obj_type_str}.{data.name}.json"
-    if stdout_log:
-        print(obj_type_str, dest, flush=True)
-    check_target_path(dest)
+    dest = f"{dest}/{obj_type_str}.{data.name}.json"
+    tree = data.type_tree.to_dict()
+    tree["pathID"] = data.path_id
+    tree["ref"] = ref
+    with open(dest, "w", encoding="utf8", newline="") as fn:
+        json.dump(tree, fn, indent=2)
+    ex_paths.add(data.path_id)
 
-    with open(dest, "w", encoding="utf8", newline="") as f:
-        write_json(f, data, with_pathid=True, ref=ref)
+
+def other_tex_env(material, mat_paths):
+    for key, tex_env in material.m_SavedProperties.m_TexEnvs.items():
+        try:
+            data = tex_env.m_Texture.get_obj().read()
+            if data.path_id not in mat_paths:
+                yield key, data.image, data.name
+        except AttributeError:
+            continue
 
 
-def unpack_TextAsset(data, dest, stdout_log=False):
-    if stdout_log:
-        print("TextAsset", dest, flush=True)
-    check_target_path(dest)
-
+def tex_env_img(obj_by_pathid, material, mat_paths, ex_paths, key, image_only=True):
     try:
-        with open(dest, "w", encoding="utf8", newline="") as f:
-            f.write(data.text)
-    except UnicodeDecodeError:
-        with open(dest, "wb") as f:
-            f.write(data.script)
-
-
-def unpack_GameObject(data, destination_folder, stdout_log=False):
-    dest = os.path.join(destination_folder, os.path.splitext(data.name)[0])
-    if stdout_log:
-        print("GameObject", dest, flush=True)
-    dest += ".json"
-    mono_list = []
-    for idx, obj in enumerate(data.components):
-        obj_type_str = str(obj.type)
-        if obj_type_str == "MonoBehaviour":
-            subdata = obj.read()
-            if stdout_log:
-                print("- MonoBehaviour", subdata.name, flush=True)
-            subdata.read_type_tree()
-            json_data = subdata.type_tree.get("_data")
-            if json_data:
-                mono_list.append(json_data)
-        elif obj_type_str == "GameObject":
-            subdata = obj.read()
-            UNPACK[obj_type_str](subdata, os.path.join(dest, "{:02}".format(idx)))
-        # elif stdout_log:
-        #     print(f'Unsupported type {obj_type_str}')
-    if len(mono_list) > 0:
-        check_target_path(dest)
-        with open(dest, "w", encoding="utf8", newline="") as f:
-            json.dump(mono_list, f, indent=2)
-
-
-IMAGE_TYPES = {"Texture2D", "Sprite"}
-
-
-def unpack(obj, ex_target, ex_dir, ex_img_dir, texture_2d, stdout_log=False):
-    obj_type_str = str(obj.type)
-    if (ex_dir is None and obj_type_str not in IMAGE_TYPES) or (ex_img_dir is None and obj_type_str in IMAGE_TYPES):
-        if stdout_log:
-            print(f"Skipped {ex_target}")
+        # this will work 1day i belieeeeeve
+        # data = material.m_SavedProperties.m_TexEnvs[key].m_Texture.get_obj().read()
+        path_id = material.m_SavedProperties.m_TexEnvs[key].m_Texture.path_id
+        if path_id in ex_paths:
+            return None
+        data = obj_by_pathid[path_id].read()
+        mat_paths.add(path_id)
+        if image_only:
+            return data.image
+        return data
+    except (KeyError, AttributeError):
         return None
-    if obj_type_str in UNPACK:
-        data = obj.read()
-        dest = None
-        method = UNPACK[obj_type_str]
-        if obj_type_str == "GameObject":
-            dest = ex_target
-        elif data.name:
-            dest = os.path.join(ex_target, data.name)
-        if dest:
-            if obj_type_str in IMAGE_TYPES:
-                dest = os.path.join(ex_img_dir, dest)
-                method(data, dest, texture_2d, stdout_log)
-            else:
-                dest = os.path.join(ex_dir, dest)
-                method(data, dest, stdout_log)
-    if obj_type_str in UNPACK_ANIM:
-        unpack_Animation(obj, os.path.join(ex_dir, ex_target), stdout_log)
-    # elif stdout_log:
-    #     print(f'Unsupported type {obj_type_str}')
 
 
-UNPACK = {
-    "Texture2D": unpack_Texture2D,
-    "Sprite": unpack_Sprite,
-    "MonoBehaviour": unpack_MonoBehaviour,
-    "TextAsset": unpack_TextAsset,
-    "GameObject": unpack_GameObject,
-}
-
-UNPACK_ANIM = ("AnimationClip", "AnimatorController", "AnimatorOverrideController")
-
-wyrmprint_alpha = Image.new("RGBA", (1024, 1024), color=(0, 0, 0, 255))
-ImageDraw.Draw(wyrmprint_alpha).rectangle([212, 26, 811, 997], fill=(255, 255, 255, 255), outline=None)
-wyrmprint_alpha = wyrmprint_alpha.convert("L")
-
-
-def merge_YCbCr(Y_img, Cb_img, Cr_img):
-    _, _, _, Y = Y_img.convert("RGBA").split()
-    Cb = Cb_img.convert("L").resize(Y_img.size, Image.ANTIALIAS)
-    Cr = Cr_img.convert("L").resize(Y_img.size, Image.ANTIALIAS)
+def merge_YCbCr(y_img, cb_img, cr_img):
+    # Sometimes MonoBehavior can carry the mapping instead of Material
+    _, _, _, Y = y_img.convert("RGBA").split()
+    Cb = cb_img.convert("L").resize(y_img.size, Image.ANTIALIAS)
+    Cr = cr_img.convert("L").resize(y_img.size, Image.ANTIALIAS)
     return Image.merge("YCbCr", (Y, Cb, Cr)).convert("RGBA")
 
 
-def merge_categorized(all_categorized_images, stdout_log=False):
-    for dest, sorted_images in tqdm(all_categorized_images.items(), desc="merge_categorized"):
-        try:
-            image = None
-            if "color" in sorted_images:
-                image = sorted_images["color"]
-                a = None
-                for alpha in ("alpha", "A", "alphaA8"):
-                    try:
-                        alpha_img = sorted_images[alpha]
-                        if alpha_img.mode == "RGB" or alpha_img.getextrema()[3][0] == 255:
-                            a = alpha_img.convert("L")
-                        else:
-                            _, _, _, a = alpha_img.split()
-                    except KeyError:
-                        continue
-                if a:
-                    image.putalpha(a)
-                dest = os.path.splitext(dest)[0] + IMG_EXT
-                check_target_path(dest)
-                save_img(image, dest)
-                if stdout_log:
-                    print(f"Merged RGBA {dest}")
+def unpack_Material(obj, dest, ex_paths, obj_by_pathid):
+    data = obj.read()
+    mat_paths = set()
 
-            if "Y" in sorted_images:
-                image = merge_YCbCr(sorted_images["Y"], sorted_images["Cb"], sorted_images["Cr"])
-                if "alpha" in sorted_images:
-                    a = sorted_images["alpha"].convert("L")
-                # elif sorted_images['Y'].size == (1024, 1024):
-                #     a = wyrmprint_alpha
-                else:
-                    a = None
-                if a:
-                    image.putalpha(a)
-                check_target_path(dest)
-                dest = os.path.splitext(dest)[0] + IMG_EXT
-                save_img(image, dest)
-                if stdout_log:
-                    print(f"Merged YCbCr {dest}")
-            if image is not None:
-                try:
-                    flipped = image.transpose(Image.FLIP_TOP_BOTTOM)
-                    for s_dest, s_box, flip, mask, _ in sorted_images["sprites"]:
-                        s_img = flipped.crop((s_box.left, s_box.top, s_box.right, s_box.bottom))
-                        if flip is not None:
-                            s_img = s_img.transpose(flip)
-                        s_img = s_img.transpose(Image.FLIP_TOP_BOTTOM)
-                        if mask is not None:
-                            s_img = Image.composite(s_img, Image.new(s_img.mode, s_img.size, color=0), mask)
-                        s_dest = os.path.splitext(s_dest)[0] + IMG_EXT
-                        check_target_path(s_dest)
-                        save_img(s_img, s_dest)
-                        if stdout_log:
-                            print(f"Merged Sprite {s_dest}")
-                except KeyError:
-                    pass
-        except Exception as e:
-            print(dest, sorted_images.keys())
-            print(str(e))
+    # unpack_TypeTree(obj, dest, ex_paths, obj_by_pathid)
+
+    get_tex = partial(tex_env_img, obj_by_pathid, data, mat_paths, ex_paths)
+
+    m_data = get_tex("_MainTex", image_only=False)
+    if not m_data:
+        return
+    m_img, m_name = m_data.image, m_data.name
+
+    # _MaskAlphaTex is probably always path_id = 0
+    if (a_img := get_tex("_AlphaTex")) or (a_img := get_tex("_MaskAlphaTex")):
+        if a_img.mode == "RGB" or a_img.getextrema()[3][0] == 255:
+            alpha = a_img.convert("L")
+        else:
+            _, _, _, alpha = a_img.split()
+        m_img.putalpha(alpha)
+    if (y_img := get_tex("_TexY")) and (cb_img := get_tex("_TexCb")) and (cr_img := get_tex("_TexCr")):
+        save_img(merge_YCbCr(y_img, cb_img, cr_img), os.path.join(dest, f"{m_name}{IMG_EXT}"))
+
+    # for key, env_img, env_img_name in other_tex_env(data, mat_paths):
+    #     save_img(env_img, os.path.join(dest, f"{data.name}{key}.{env_img_name}{IMG_EXT}"))
+
+    save_img(m_img, os.path.join(dest, f"{m_name}{IMG_EXT}"))
+
+    obj_by_pathid[m_data.path_id] = m_img
+
+    ex_paths.update(mat_paths)
 
 
-def merge_indexed(all_indexed_images, stdout_log=False, combine_all=True):
-    for dest, images in tqdm(all_indexed_images.items(), desc="merge_categorized"):
-        alpha = images["a"]
-        color = images["c"]
-        dest = os.path.splitext(dest)[0]
-        try:
-            with open(dest + ".json", "r") as f:
-                data = json.load(f)
-        except FileNotFoundError:
-            continue
-        mapping = data["partsTextureIndexTable"]
-        position = data["partsDataTable"][0]["position"]
-        size = data["partsDataTable"][0]["size"]
-        box = [
-            int(position["x"] - size["x"] / 2),
-            int(position["y"] - size["y"] / 2),
-            int(position["x"] + size["x"] / 2),
-            int(position["y"] + size["y"] / 2),
-        ]
-        layer1 = {}
-        layer2 = {}
-        for entry in mapping:
-            c_idx = entry["colorIndex"]
-            a_idx = entry["alphaIndex"]
-            c_dict = color[c_idx]
-            a_dict = alpha[a_idx]
-            merged = merge_YCbCr(c_dict["Y"], c_dict["Cb"], c_dict["Cr"])
-            # merged.putalpha(a_dict['alpha'].convert('L'))
-            if "alpha" in a_dict:
-                mask = a_dict["alpha"].convert("L")
-            else:
-                mask = None
-            if a_idx <= 0:
-                layer1[f"{c_idx:03}{a_idx:03}"] = merged, mask
-            else:
-                layer2[f"{c_idx:03}{a_idx:03}"] = merged, mask
-            # save_img(merged, f'{dest}_c{c_idx:03}a{a_idx:03}{IMG_EXT}')
-        if combine_all:
-            base = Image.open(f"{dest}_base{IMG_EXT}")
-            # for l1_key, l1_img in layer1.items():
-            #     for l2_key, l2_img in layer2.items():
-            #         base.paste(l1_img[0], box=box, mask=l1_img[1])
-            #         base.paste(l2_img[0], box=box, mask=l2_img[1])
-            #         save_img(base, f'{dest}_{l1_key}_{l2_key}{IMG_EXT}')
-            for l1, l2 in zip(layer1.items(), layer2.items()):
-                l1_key, l1_img = l1
-                l2_key, l2_img = l2
-                base.paste(l1_img[0], box=box, mask=l1_img[1])
-                base.paste(l2_img[0], box=box, mask=l2_img[1])
-                merged_dest = os.path.join(
-                    os.path.dirname(dest),
-                    "merged",
-                    f"{os.path.basename(dest)}_{l1_key}_{l2_key}{IMG_EXT}",
-                )
-                check_target_path(merged_dest)
-                save_img(base, merged_dest)
-            if stdout_log:
-                print(f"Merged expressions {dest}")
-        for layer in (layer1, layer2):
-            for key, img in layer.items():
-                if img[1]:
-                    img[0].putalpha(img[1])
-                save_img(img[0], f"{dest}_{key}{IMG_EXT}")
-                if stdout_log:
-                    print(f"Saved {dest}_{key}")
+def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
+    data = obj.read()
+    if data.path_id in ex_paths:
+        return
+    save_img(data.image, os.path.join(dest, f"{data.name}{IMG_EXT}"))
+    ex_paths.add(data.path_id)
 
 
-IMAGE_CATEGORY = re.compile(r"(.+?)_(sprite|C|alpha|alphaA8|A|Y|Cb|Cr)$")
-IMAGE_ALPHA_INDEX = re.compile(r"(.+?)_parts_([a-z])(\d{3})_(sprite|alpha|alphaA8|A|Y|Cb|Cr)$")
+SPRITE_ROTATION = {
+    SpritePackingRotation.kSPRFlipHorizontal: Image.FLIP_TOP_BOTTOM,
+    SpritePackingRotation.kSPRFlipVertical: Image.FLIP_LEFT_RIGHT,
+    SpritePackingRotation.kSPRRotate180: Image.ROTATE_180,
+    SpritePackingRotation.kSPRRotate90: Image.ROTATE_270,
+}
 
 
-def merge_images(image_list, stdout_log=False, do_indexed=True):
-    all_categorized_images = defaultdict(lambda: {})
-    all_indexed_images = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: {})))
-    for images in tqdm(image_list, desc="images"):
-        if images is None:
-            continue
-        sprite_path_id_map = defaultdict(lambda: {})
-        for _, data in images.items():
-            dest, img, tx_format = data["root"]
-            res = IMAGE_ALPHA_INDEX.match(dest)
-            if res:
-                dest, designation, index, category = res.groups()
-                all_indexed_images[dest][designation][int(index)][category] = img
-                continue
-            res = IMAGE_CATEGORY.match(dest)
-            if res:
-                destination, category = res.groups()
-                if category == "C":
-                    category = "color"
-                if category in ("alphaA8", "A") and tx_format not in (
-                    TextureFormat.RGBA32,
-                    TextureFormat.Alpha8,
-                    TextureFormat.ETC_RGB4,
-                ):
-                    destination = dest
-                    category = "color"
-                all_categorized_images[destination][category] = img
-                continue
-            all_categorized_images[dest]["color"] = img
-            if "sprites" in data:
-                all_categorized_images[dest]["sprites"] = data["sprites"]
-                for sprite in data["sprites"]:
-                    dest = sprite[0]
-                    path_id = sprite[4]
-                    sprite_path_id_map[os.path.dirname(dest)][path_id] = os.path.basename(dest)
+def unpack_Sprite(obj, dest, ex_paths, obj_by_pathid):
+    # see UnityPy.SpriteHelper.get_image_from_sprite
+    data = obj.read()
+    if data.path_id in ex_paths:
+        return
 
-    if all_categorized_images:
-        merge_categorized(all_categorized_images, stdout_log=stdout_log)
-    if do_indexed and all_indexed_images:
-        merge_indexed(all_indexed_images, stdout_log=stdout_log)
-    if sprite_path_id_map:
-        for dest_dir, path_id_map in sprite_path_id_map.items():
-            with open(os.path.join(dest_dir, "_path_id.json"), "w") as fp:
-                json.dump(path_id_map, fp, indent=4)
+    atlas = data.m_RD
+    texture = obj_by_pathid[atlas.texture.path_id]
+    if not isinstance(texture, Image.Image):
+        return
+    texture_rect = atlas.textureRect
+    settings_raw = atlas.settingsRaw
+
+    texture = texture.transpose(Image.FLIP_TOP_BOTTOM)
+    sprite_img = texture.crop((texture_rect.x, texture_rect.y, texture_rect.x + texture_rect.width, texture_rect.y + texture_rect.height))
+
+    if settings_raw.packed == 1:
+        # DL sprites are pmuch never packed=1
+        sprite_img = sprite_img.transpose(SPRITE_ROTATION[settings_raw.packingRotation])
+
+    if settings_raw.packingMode == SpritePackingMode.kSPMTight:
+        mask = Image.new("1", sprite_img.size, color=0)
+        draw = ImageDraw.ImageDraw(mask)
+        for triangle in get_triangles(data):
+            draw.polygon(triangle, fill=1)
+        if sprite_img.mode == "RGBA":
+            empty_img = Image.new(sprite_img.mode, sprite_img.size, color=0)
+            sprite_img = Image.composite(sprite_img, empty_img, mask)
+        else:
+            sprite_img.putalpha(mask)
+
+    sprite_img = sprite_img.transpose(Image.FLIP_TOP_BOTTOM)
+    save_img(sprite_img, os.path.join(dest, f"{data.name}{IMG_EXT}"))
+    ex_paths.add(data.path_id)
+    obj_by_pathid[data.path_id] = data.name
+
+
+IMAGE_TYPES = ("Texture2D", "Material", "Sprite")
+UNPACK_PRIORITY = {
+    "GameObject": 10,
+    "Material": 9,
+}
+
+
+def get_unpack_priority(obj):
+    return UNPACK_PRIORITY.get(str(obj.type), 0)
+
+
+UNPACK = {
+    "MonoBehaviour": unpack_MonoBehaviour,
+    "GameObject": unpack_GameObject,
+    "TextAsset": unpack_TextAsset,
+    "AnimationClip": unpack_Animation,
+    "AnimatorController": unpack_Animation,
+    "AnimatorOverrideController": unpack_Animation,
+    "Texture2D": unpack_Texture2D,
+    "Sprite": unpack_Sprite,
+    "Material": unpack_Material,
+    # "AssetBundle": unpack_TypeTree,
+}
 
 
 ### multiprocessing ###
-def mp_download_extract(
-    target,
-    source_list,
-    extract,
-    region,
-    dl_dir,
-    overwrite,
-    ex_dir,
-    ex_img_dir,
-    stdout_log,
-):
+def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
+    unity_env = Environment()
+    unity_env.load_files(dl_filelist)
+    ex_paths = set()
+
+    obj_by_pathid = {}
+    for asset in unity_env.assets:
+        for obj in asset.get_objects():
+            # print(obj.type, obj.read().name, obj.read().path_id)
+            obj_by_pathid[obj.read().path_id] = obj
+
+    ex_dest = None if ex_dir is None else os.path.join(ex_dir, ex_target)
+    img_dest = None if ex_img_dir is None else os.path.join(ex_img_dir, ex_target)
+    print_counter = 0
+    for obj in sorted(obj_by_pathid.values(), key=get_unpack_priority, reverse=True):
+        if (dest := img_dest if obj.type in IMAGE_TYPES else ex_dest) is None:
+            continue
+        try:
+            method = UNPACK[str(obj.type)]
+            check_target_path(dest, is_dir=True)
+            method(obj, dest, ex_paths, obj_by_pathid)
+        except KeyError:
+            pass
+        if print_counter == 0:
+            print("=", end="", flush=True)
+            print_counter = 10
+        print_counter -= 1
+
+    path_id_to_string = {pathid: sprite for pathid, sprite in obj_by_pathid.items() if isinstance(sprite, str)}
+    if path_id_to_string:
+        with open(os.path.join(img_dest, "_path_id.json"), "w") as fn:
+            json.dump(path_id_to_string, fn, indent=2)
+
+
+def mp_download(target, source_list, extract, region, dl_dir, overwrite):
     base_dl_target = os.path.join(dl_dir, region, target)
     check_target_path(base_dl_target)
 
@@ -665,55 +547,27 @@ def mp_download_extract(
         if overwrite or not os.path.exists(dl_target):
             try:
                 urllib.request.urlretrieve(source.url, dl_target)
+                print("-", end="", flush=True)
             except Exception as e:
                 print(f"\n{e}")
                 continue
+        else:
+            print(".", end="", flush=True)
         downloaded.append(dl_target)
-        print(".", end="", flush=True)
 
-    if not downloaded:
-        return None
-
-    if extract is None:
-        extract = os.path.dirname(target).replace("/", "_")
-    ex_target = os.path.join(region, extract)
-    if ex_dir and source.raw:
-        ex_target = os.path.join(ex_dir, ex_target)
-        os.makedirs(ex_target, exist_ok=True)
-        for dl_target in downloaded:
-            shutil.copy(dl_target, ex_target)
-            print("-", end="", flush=True)
-        return None
-    texture_2d = {}
-    for dl_target in downloaded:
-        am = AssetsManager(dl_target)
-        for asset in am.assets.values():
-            for obj in asset.objects.values():
-                unpack(
-                    obj,
-                    ex_target,
-                    ex_dir,
-                    ex_img_dir,
-                    texture_2d,
-                    stdout_log=stdout_log,
-                )
-        print("-", end="", flush=True)
-    return texture_2d
+    if downloaded:
+        if extract is None:
+            extract = os.path.dirname(target).replace("/", "_")
+        ex_target = os.path.join(region, extract)
+        return [(ex_target, dl_target) for dl_target in downloaded]
+    return None
 
 
 ### multiprocessing ###
 
 
 class Extractor:
-    def __init__(
-        self,
-        dl_dir="./_download",
-        ex_dir="./_extract",
-        ex_img_dir="./_images",
-        mf_mode=0,
-        overwrite=False,
-        stdout_log=False,
-    ):
+    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", mf_mode=0, overwrite=False):
         self.pm = {}
         self.pm_old = {}
         for region, manifest in MANIFESTS.items():
@@ -723,20 +577,16 @@ class Extractor:
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
         self.extract_list = []
-        self.stdout_log = stdout_log
         self.mf_mode = mf_mode
         self.overwrite = overwrite
 
     ### multiprocessing ###
-    def pool_download_and_extract(self, download_list, extract=None, region=None):
+    def pool_download_and_extract(self, download_list, region=None):
         if not download_list:
             return
         NUM_WORKERS = multiprocessing.cpu_count()
-        EX_RE = len(download_list[0]) == 2
-
-        print(f"Processing {len(download_list)}", flush=True)
         pool = multiprocessing.Pool(processes=NUM_WORKERS)
-        if EX_RE:
+        if region is None:
             dl_args = [
                 (
                     target,
@@ -745,11 +595,9 @@ class Extractor:
                     region,
                     self.dl_dir,
                     self.overwrite,
-                    self.ex_dir,
-                    self.ex_img_dir,
-                    self.stdout_log,
                 )
-                for target, source in download_list
+                for region, extract, matched in download_list
+                for target, source in matched
             ]
         else:
             dl_args = [
@@ -760,19 +608,27 @@ class Extractor:
                     region,
                     self.dl_dir,
                     self.overwrite,
-                    self.ex_dir,
-                    self.ex_img_dir,
-                    self.stdout_log,
                 )
-                for target, source, extract, region in download_list
+                for extract, matched in download_list
+                for target, source in matched
             ]
-        results = list(filter(None, pool.starmap(mp_download_extract, dl_args)))
+        print(f"Download {len(dl_args)}", flush=True)  # tqdm(dl_args, desc="download", total=len(dl_args))
+        downloaded = list(filter(None, pool.starmap(mp_download, dl_args)))
         pool.close()
         pool.join()
-        print("\n", flush=True)
 
-        if results:
-            merge_images(results, self.stdout_log)
+        sorted_downloaded = defaultdict(list)
+        for ex_target, dl_target in chain(*downloaded):
+            sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
+
+        pool = multiprocessing.Pool(processes=NUM_WORKERS)
+        ex_args = [(self.ex_dir, self.ex_img_dir, ex_target, dl_targets) for ex_target, dl_targets in sorted_downloaded.items()]
+        print(f"\nExtract {tuple(sorted_downloaded.keys())}", flush=True)
+        # tqdm(ex_args, desc="extract", total=len(ex_args))
+        pool.starmap(mp_extract, ex_args)
+        pool.close()
+        pool.join()
+        print("", flush=True)
 
     ### multiprocessing ###
 
@@ -780,14 +636,20 @@ class Extractor:
         download_list = []
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
-                download_list.extend([(*ts, extract, region) for ts in self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)])
+                matched = self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)
+                if not matched:
+                    continue
+                download_list.append((region, extract, matched))
         self.pool_download_and_extract(download_list)
 
     def download_and_extract_by_pattern(self, label_patterns):
         download_list = []
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
-                download_list.extend([(*ts, extract, region) for ts in self.pm[region].get_by_pattern(pat, mode=self.mf_mode)])
+                matched = self.pm[region].get_by_pattern(pat, mode=self.mf_mode)
+                if not matched:
+                    continue
+                download_list.append((region, extract, matched))
         self.pool_download_and_extract(download_list)
 
     def download_and_extract_by_diff(self, region="jp"):
@@ -797,42 +659,15 @@ class Extractor:
     def report_diff(self, region="jp"):
         self.pm[region].report_diff(self.pm_old[region])
 
-    def extract_target(self, dl_target, ex_target, texture_2d):
-        am = AssetsManager(dl_target)
-        for asset in am.assets.values():
-            for obj in asset.objects.values():
-                unpack(
-                    obj,
-                    ex_target,
-                    self.ex_dir,
-                    self.ex_img_dir,
-                    texture_2d,
-                    stdout_log=self.stdout_log,
-                )
-
-    def local_extract(self, input_dir):
-        result = []
-        for root, _, files in os.walk(input_dir):
-            for file_name in tqdm(files, desc="local"):
-                _, ext = os.path.splitext(file_name)
-                if len(ext) > 0:
-                    if self.stdout_log:
-                        print("Skipped", file_name)
-                    continue
-                texture_2d = {}
-                self.extract_target(os.path.join(root, file_name), "local", texture_2d)
-                if texture_2d:
-                    result.append(texture_2d)
-        merge_images(result, self.stdout_log)
-
 
 if __name__ == "__main__":
-    import sys
-
-    IMAGE_PATTERNS = {
-        "jp": {
-            r"^actions$": "actions",
-        }
+    EX_PATTERNS = {
+        "en": {
+            r"^master$": "master",
+        },
+        "cn": {
+            r"^master$": "master",
+        },
     }
 
     if len(sys.argv) > 1:
@@ -846,13 +681,7 @@ if __name__ == "__main__":
                 for region, manifest in MANIFESTS.items():
                     ex.download_and_extract_by_diff(region=region)
         elif sys.argv[1] == "apk":
-            ex = Extractor(
-                ex_dir="_ex_apk",
-                ex_img_dir="_im_apk",
-                stdout_log=False,
-                overwrite=False,
-                mf_mode=1,
-            )
+            ex = Extractor(ex_dir="_ex_apk", ex_img_dir="_im_apk", overwrite=False)
             ex.local_extract("_apk")
         elif sys.argv[1] == "report":
             ex = Extractor()
@@ -861,5 +690,6 @@ if __name__ == "__main__":
             ex = Extractor(mf_mode=1)
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
-        ex = Extractor(ex_dir="./_ex_sim", stdout_log=False, overwrite=False, mf_mode=0)
-        ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
+        # ex_dir="./_ex_sim",
+        ex = Extractor(ex_dir="./_ex_sim", overwrite=False, mf_mode=0)
+        ex.download_and_extract_by_pattern(EX_PATTERNS)

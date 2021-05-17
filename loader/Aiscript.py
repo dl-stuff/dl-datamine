@@ -550,7 +550,7 @@ def load_aiscript_file(file_path, enemy_actions=None):
             raw = json.load(f)
         except json.decoder.JSONDecodeError:
             return
-        name = raw["name"]
+        name = raw["m_Name"]
         for idx, container in enumerate(raw["_containers"]):
             inst = Instruction(idx, container, depth=depth)
             instructions.append(inst)

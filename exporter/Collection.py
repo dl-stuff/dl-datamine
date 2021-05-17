@@ -53,7 +53,7 @@ fort_icons = set()
 
 
 def download_all_icons(out, set_icons=None):
-    ex = Extractor(ex_dir=None, ex_img_dir=out, stdout_log=False)
+    ex = Extractor(ex_dir=None, ex_img_dir=out)
     ex.download_and_extract_by_pattern(IMAGE_PATTERNS)
     if not set_icons:
         return
