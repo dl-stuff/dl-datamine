@@ -15,7 +15,7 @@ def make_buff_icon_mapping():
         shutil.rmtree("./_icons")
     except FileNotFoundError:
         pass
-    ex = Extractor(ex_img_dir="./_icons", ex_dir="./_icons", mf_mode=1)
+    ex = Extractor(ex_img_dir="./_icons", ex_dir="./_icons")
     ex.download_and_extract_by_pattern(DEPENDENCIES)
 
     with open(PATH_ID_FILE, "r") as fp:

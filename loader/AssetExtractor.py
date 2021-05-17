@@ -3,6 +3,8 @@ import os
 import errno
 import sys
 from time import monotonic
+from pprint import pprint
+import shutil
 
 import urllib.request
 import multiprocessing
@@ -35,7 +37,14 @@ IMG_ARGS = {
 
 
 def save_img(img, dest):
+    check_target_path(dest)
     img.save(dest, **IMG_ARGS[IMG_EXT])
+
+
+def save_json(data, dest):
+    check_target_path(dest)
+    with open(dest, "w", encoding="utf8", newline="") as fn:
+        json.dump(data, fn, indent=2)
 
 
 class ParsedManifestFlat(dict):
@@ -97,6 +106,8 @@ class AssetEntry:
 
 class SimpleAssetEntry:
     def __init__(self, asset_entry):
+        self.name = asset_entry.name
+        self.hash = asset_entry.hash
         self.url = asset_entry.url
         self.raw = asset_entry.raw
 
@@ -112,81 +123,29 @@ class ParsedManifest(dict):
                 self[asset["name"]] = AssetEntry(asset)
         for asset in tree["rawAssets"]:
             self[asset["name"]] = AssetEntry(asset, raw=True)
-        for asset in self.values():
-            asset.map_dependencies(self)
-
-    DO_NOT_EXPAND = {"shader"}
-
-    @staticmethod
-    def expand_dependencies(targets):
-        q = SimpleQueue()
-        seen = set()
-        results = {}
-        for k, v in targets:
-            q.put((k, v))
-        while not q.empty():
-            k, v = q.get()
-            if k not in ParsedManifest.DO_NOT_EXPAND and v.name not in seen:
-                seen.add(v.name)
-                try:
-                    results[k].append(v)
-                except:
-                    results[k] = [v]
-                if v.dependencies:
-                    for dep in v.dependencies:
-                        q.put((k, dep))
-        return list(results.items())
-
-    @staticmethod
-    def link_dependencies(targets):
-        results = {}
-        has_dep = []
-        for k, v in targets:
-            if v.dependents:
-                has_dep.append(v)
-            else:
-                results[k] = [v]
-        for v in has_dep:
-            found = False
-            for dep in v.dependents:
-                if dep.name in results:
-                    results[dep.name].append(v)
-                    found = True
-            if not found:
-                results[v.name] = [v]
-        return list(results.items())
 
     @staticmethod
     def flatten(targets):
-        return [(k, [SimpleAssetEntry(v)]) for k, v in targets]
+        return [(k, SimpleAssetEntry(v)) for k, v in targets]
 
-    @staticmethod
-    def _get_by(targets, mode):
-        if mode == 2:
-            return ParsedManifest.expand_dependencies(targets)
-        elif mode == 1:
-            return ParsedManifest.link_dependencies(targets)
-        else:
-            return ParsedManifest.flatten(targets)
-
-    def get_by_pattern(self, pattern, mode=0):
+    def get_by_pattern(self, pattern):
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(lambda x: pattern.search(x[0]), self.items())
-        return ParsedManifest._get_by(targets, mode)
+        return ParsedManifest.flatten(targets)
 
-    def get_by_diff(self, other, mode=0):
+    def get_by_diff(self, other):
         targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
-        return ParsedManifest._get_by(targets, mode)
+        return ParsedManifest.flatten(targets)
 
-    def get_by_pattern_diff(self, pattern, other, mode=0):
+    def get_by_pattern_diff(self, pattern, other):
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(
             lambda x: pattern.search(x[0]) and (x[0] not in other.keys() or x[1] != other[x[0]]),
             self.items(),
         )
-        return ParsedManifest._get_by(targets, mode)
+        return ParsedManifest.flatten(targets)
 
     def report_diff(self, other):
         added_keys = set()
@@ -200,7 +159,6 @@ class ParsedManifest(dict):
         for key in other.keys():
             if key not in self:
                 removed_keys.add(key)
-        from pprint import pprint
 
         print("===========ADDED===========")
         pprint(added_keys)
@@ -253,8 +211,8 @@ def unpack_TypeTree(obj, dest, ex_paths, obj_by_pathid, name=None):
     except AttributeError:
         print(result)
         pass
-    with open(os.path.join(dest, name + ".json"), "w", encoding="utf8", newline="") as fn:
-        json.dump(result, fn, indent=2, default=serialize_memoryview)
+    dest = os.path.join(dest, name + ".json")
+    save_json(result, dest)
 
 
 def unpack_MonoBehaviour(obj, dest, ex_paths, obj_by_pathid, name=None, process=True):
@@ -267,8 +225,8 @@ def unpack_MonoBehaviour(obj, dest, ex_paths, obj_by_pathid, name=None, process=
         result = process_json(result)
         if not result:
             return
-    with open(os.path.join(dest, name + ".json"), "w", encoding="utf8", newline="") as fn:
-        json.dump(result, fn, indent=2)
+    dest = os.path.join(dest, name + ".json")
+    save_json(result, dest)
     ex_paths.add(data.path_id)
 
 
@@ -277,6 +235,7 @@ def unpack_TextAsset(obj, dest, ex_paths, obj_by_pathid):
     if data.path_id in ex_paths:
         return
     dest = os.path.join(dest, data.name)
+    check_target_path(dest)
     try:
         with open(dest, "w", encoding="utf8", newline="") as f:
             f.write(data.text)
@@ -309,9 +268,8 @@ def unpack_GameObject(obj, dest, ex_paths, obj_by_pathid):
         # else:
         #     unpack_TypeTree(component, dest, ex_paths, obj_by_pathid, name=data.name)
     if component_monos:
-        check_target_path(dest)
-        with open(os.path.join(dest, data.name + ".json"), "w", encoding="utf8", newline="") as fn:
-            json.dump(component_monos, fn, indent=2)
+        dest = os.path.join(dest, data.name + ".json")
+        save_json(component_monos, dest)
 
 
 def find_ref(container):
@@ -349,8 +307,7 @@ def unpack_Animation(obj, dest, ex_paths, obj_by_pathid):
     tree = data.type_tree.to_dict()
     tree["pathID"] = data.path_id
     tree["ref"] = ref
-    with open(dest, "w", encoding="utf8", newline="") as fn:
-        json.dump(tree, fn, indent=2)
+    save_json(tree, dest)
     ex_paths.add(data.path_id)
 
 
@@ -372,6 +329,8 @@ def tex_env_img(obj_by_pathid, material, mat_paths, ex_paths, key, image_only=Tr
         if path_id in ex_paths:
             return None
         data = obj_by_pathid[path_id].read()
+        if not data.m_Width or not data.m_Height:
+            return None
         mat_paths.add(path_id)
         if image_only:
             return data.image
@@ -424,6 +383,8 @@ def unpack_Material(obj, dest, ex_paths, obj_by_pathid):
 def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
     data = obj.read()
     if data.path_id in ex_paths:
+        return
+    if not data.m_Width or not data.m_Height:
         return
     save_img(data.image, os.path.join(dest, f"{data.name}{IMG_EXT}"))
     ex_paths.add(data.path_id)
@@ -509,7 +470,8 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
     for asset in unity_env.assets:
         for obj in asset.get_objects():
             # print(obj.type, obj.read().name, obj.read().path_id)
-            obj_by_pathid[obj.read().path_id] = obj
+            if UNPACK.get(str(obj.type)):
+                obj_by_pathid[obj.read().path_id] = obj
 
     ex_dest = None if ex_dir is None else os.path.join(ex_dir, ex_target)
     img_dest = None if ex_img_dir is None else os.path.join(ex_img_dir, ex_target)
@@ -517,12 +479,9 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
     for obj in sorted(obj_by_pathid.values(), key=get_unpack_priority, reverse=True):
         if (dest := img_dest if obj.type in IMAGE_TYPES else ex_dest) is None:
             continue
-        try:
-            method = UNPACK[str(obj.type)]
-            check_target_path(dest, is_dir=True)
-            method(obj, dest, ex_paths, obj_by_pathid)
-        except KeyError:
-            pass
+        method = UNPACK[str(obj.type)]
+        check_target_path(dest, is_dir=True)
+        method(obj, dest, ex_paths, obj_by_pathid)
         if print_counter == 0:
             print("=", end="", flush=True)
             print_counter = 10
@@ -534,40 +493,31 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
             json.dump(path_id_to_string, fn, indent=2)
 
 
-def mp_download(target, source_list, extract, region, dl_dir, overwrite):
-    base_dl_target = os.path.join(dl_dir, region, target)
-    check_target_path(base_dl_target)
+def mp_download(target, source, extract, region, dl_dir, overwrite):
+    dl_target = os.path.join(dl_dir, region, target)
+    check_target_path(dl_target)
 
-    downloaded = []
-    for idx, source in enumerate(source_list):
-        if len(source_list) > 1:
-            dl_target = base_dl_target + str(idx)
-        else:
-            dl_target = base_dl_target
-        if overwrite or not os.path.exists(dl_target):
-            try:
-                urllib.request.urlretrieve(source.url, dl_target)
-                print("-", end="", flush=True)
-            except Exception as e:
-                print(f"\n{e}")
-                continue
-        else:
-            print(".", end="", flush=True)
-        downloaded.append(dl_target)
+    if overwrite or not os.path.exists(dl_target):
+        try:
+            urllib.request.urlretrieve(source.url, dl_target)
+            print("-", end="", flush=True)
+        except Exception as e:
+            print(f"\n{e}")
+            return
+    else:
+        print(".", end="", flush=True)
 
-    if downloaded:
-        if extract is None:
-            extract = os.path.dirname(target).replace("/", "_")
-        ex_target = os.path.join(region, extract)
-        return [(ex_target, dl_target) for dl_target in downloaded]
-    return None
+    if extract is None:
+        extract = os.path.dirname(target).replace("/", "_")
+    ex_target = os.path.join(region, extract)
+    return (source, ex_target, dl_target)
 
 
 ### multiprocessing ###
 
 
 class Extractor:
-    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", mf_mode=0, overwrite=False):
+    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", overwrite=False):
         self.pm = {}
         self.pm_old = {}
         for region, manifest in MANIFESTS.items():
@@ -577,7 +527,6 @@ class Extractor:
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
         self.extract_list = []
-        self.mf_mode = mf_mode
         self.overwrite = overwrite
 
     ### multiprocessing ###
@@ -590,7 +539,7 @@ class Extractor:
             dl_args = [
                 (
                     target,
-                    list(map(SimpleAssetEntry, source)),
+                    source,
                     extract,
                     region,
                     self.dl_dir,
@@ -603,7 +552,7 @@ class Extractor:
             dl_args = [
                 (
                     target,
-                    list(map(SimpleAssetEntry, source)),
+                    source,
                     extract,
                     region,
                     self.dl_dir,
@@ -618,7 +567,10 @@ class Extractor:
         pool.join()
 
         sorted_downloaded = defaultdict(list)
-        for ex_target, dl_target in chain(*downloaded):
+        for source, ex_target, dl_target in downloaded:
+            if source.raw:
+                shutil.copy(dl_target, ex_target)
+                continue
             sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
 
         pool = multiprocessing.Pool(processes=NUM_WORKERS)
@@ -636,7 +588,7 @@ class Extractor:
         download_list = []
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
-                matched = self.pm[region].get_by_pattern_diff(pat, self.pm_old[region], mode=self.mf_mode)
+                matched = self.pm[region].get_by_pattern_diff(pat, self.pm_old[region])
                 if not matched:
                     continue
                 download_list.append((region, extract, matched))
@@ -646,27 +598,24 @@ class Extractor:
         download_list = []
         for region, label_pat in label_patterns.items():
             for pat, extract in label_pat.items():
-                matched = self.pm[region].get_by_pattern(pat, mode=self.mf_mode)
+                matched = self.pm[region].get_by_pattern(pat)
                 if not matched:
                     continue
                 download_list.append((region, extract, matched))
         self.pool_download_and_extract(download_list)
 
     def download_and_extract_by_diff(self, region="jp"):
-        download_list = self.pm[region].get_by_diff(self.pm_old[region], mode=self.mf_mode)
-        self.pool_download_and_extract(download_list, region=region)
+        download_list = self.pm[region].get_by_diff(self.pm_old[region])
+        self.pool_download_and_extract(((None, download_list),), region=region)
 
     def report_diff(self, region="jp"):
         self.pm[region].report_diff(self.pm_old[region])
 
 
-if __name__ == "__main__":
+def cmd_line_extract():
     EX_PATTERNS = {
-        "en": {
-            r"^master$": "master",
-        },
-        "cn": {
-            r"^master$": "master",
+        "jp": {
+            r"fonts": None,
         },
     }
 
@@ -678,7 +627,7 @@ if __name__ == "__main__":
                 print(f"{region}: ", flush=True, end="")
                 ex.download_and_extract_by_diff(region=region)
             else:
-                for region, manifest in MANIFESTS.items():
+                for region in MANIFESTS.keys():
                     ex.download_and_extract_by_diff(region=region)
         elif sys.argv[1] == "apk":
             ex = Extractor(ex_dir="_ex_apk", ex_img_dir="_im_apk", overwrite=False)
@@ -687,9 +636,15 @@ if __name__ == "__main__":
             ex = Extractor()
             ex.report_diff()
         else:
-            ex = Extractor(mf_mode=1)
+            ex = Extractor()
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
         # ex_dir="./_ex_sim",
-        ex = Extractor(ex_dir="./_ex_sim", overwrite=False, mf_mode=0)
+        ex = Extractor(ex_dir="./_ex_sim", overwrite=False)
         ex.download_and_extract_by_pattern(EX_PATTERNS)
+
+
+if __name__ == "__main__":
+    cmd_line_extract()
+    # pm = ParsedManifest(MANIFESTS["jp"])
+    # pprint(pm.get_by_pattern(r"images/icon/form/m/", mode=1))
