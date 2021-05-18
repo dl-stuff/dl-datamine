@@ -39,11 +39,11 @@ class DBTableMetadata:
     BLOB = "BLOB"
     DBID = "DBID"
 
-    def __init__(self, name, pk="_Id", field_type={}, foreign_keys={}):
+    def __init__(self, name, pk="_Id", field_type=None, foreign_keys=None):
         self.name = name
         self.pk = pk
-        self.field_type = field_type
-        self.foreign_keys = foreign_keys
+        self.field_type = field_type or {}
+        self.foreign_keys = foreign_keys or {}
 
     def init_from_row(self, row, auto_pk=False, extra_fields={}):
         self.field_type = {}
@@ -87,7 +87,7 @@ class DBTableMetadata:
     @property
     def field_types(self):
         fieldstr = ",".join([f"{k} {v}" for k, v in self.field_type.items()])
-        fkstr = ",".join([f"FOREIGN KEY({k}) REFERENCES {v[0]}({v[1]}))" for k, v in self.foreign_keys.items()])
+        fkstr = ",".join([f"FOREIGN KEY({k}) REFERENCES {v[0]}({v[1]})" for k, v in self.foreign_keys.items()])
         if fkstr:
             fieldstr += "," + fkstr
         return fieldstr

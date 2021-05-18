@@ -272,7 +272,7 @@ def build_db_data(meta, ref, seq, data):
     for k in HIT_LABEL_FIELDS:
         if k in data:
             hitlabel_data.extend(build_hitlabel_data(db_data["_Id"], k, data[k]))
-    if (loop := data.get("_loopData")) :
+    if loop := data.get("_loopData"):
         db_data["_loopFlag"] = loop["flag"]
         db_data["_loopNum"] = loop["loopNum"]
         db_data["_loopFrame"] = loop["restartFrame"]
@@ -295,11 +295,11 @@ def build_arrange_data(meta, ref, seq, data):
 
 def build_bullet(meta, ref, seq, data):
     db_data, hitlabel_data = build_db_data(meta, ref, seq, data)
-    if (ab_label := data["_arrangeBullet"]["_abHitAttrLabel"]) :
+    if ab_label := data["_arrangeBullet"]["_abHitAttrLabel"]:
         hitlabel_data.extend(build_hitlabel_data(db_data["_Id"], "_abHitAttrLabel", ab_label))
-    if (ab_duration := data["_arrangeBullet"]["_abDuration"]) :
+    if ab_duration := data["_arrangeBullet"]["_abDuration"]:
         db_data["_abDuration"] = ab_duration
-    if (ab_interval := data["_arrangeBullet"]["_abHitInterval"]) :
+    if ab_interval := data["_arrangeBullet"]["_abHitInterval"]:
         db_data["_abHitInterval"] = ab_interval
     return db_data, hitlabel_data
 
@@ -525,7 +525,7 @@ def log_schema_keys(schema_map, data, command_type):
     schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}
     for subdata in data.values():
         try:
-            if (command_type := subdata.get("commandType")) :
+            if command_type := subdata.get("commandType"):
                 log_schema_keys(schema_map, subdata, CommandType(command_type))
         except:
             pass
