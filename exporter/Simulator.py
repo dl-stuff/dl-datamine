@@ -1,8 +1,9 @@
 import json
 import os
+import itertools
+import re
 from glob import glob
 from tqdm import tqdm
-from itertools import count
 
 from loader.Database import DBManager, DBTableMetadata
 from loader.Actions import CommandType
@@ -27,15 +28,6 @@ SIM_TABLE_LIST = (
     "UnionAbility",
 )
 
-ACTION_PARTS = DBTableMetadata(
-    "ActionParts",
-    pk="_Id",
-    field_type={
-        "_Id": DBTableMetadata.INT + DBTableMetadata.PK,
-        "data": DBTableMetadata.BLOB,
-    },
-)
-
 DL9_DB = "../dl9/core/conf.sqlite"
 
 
@@ -44,10 +36,64 @@ def transfer_sim_db(dl_sim_db):
     db.transfer(dl_sim_db, SIM_TABLE_LIST)
 
 
-# Trying to be smart about this makes db bigger
+HIT_LABEL_FIELDS = (
+    "_hitLabel",
+    "_hitAttrLabel",
+    "_hitAttrLabelSubList",
+    "_abHitAttrLabel",
+)
+LV_PATTERN = re.compile(r"_LV\d{2}.*")
 
 
-def process_action_part_one(action_id, seq, data, processed, field_type, cnt=None):
+PARTS_INDEX = DBTableMetadata(
+    "PartsIndex",
+    pk="pk",
+    field_type={
+        "pk": DBTableMetadata.INT + DBTableMetadata.PK,
+        "act": DBTableMetadata.INT,
+        "seq": DBTableMetadata.INT,
+        "part": DBTableMetadata.TEXT,
+    },
+)
+
+PARTS_HITLABEL = DBTableMetadata(
+    "PartsHitLabel",
+    pk="pk",
+    field_type={
+        "pk": DBTableMetadata.INT + DBTableMetadata.PK,
+        "act": DBTableMetadata.INT,
+        "seq": DBTableMetadata.INT,
+        "source": DBTableMetadata.TEXT,
+        "hitLabel": DBTableMetadata.TEXT,
+        "hitLabelGlob": DBTableMetadata.TEXT,
+    },
+)
+
+
+def process_action_part_label(pk, cnt, label, processed, action_id, seq, k, data, meta):
+    label_pk = pk + f"{next(cnt):03}"
+    if label.startswith("CMN_AVOID"):
+        label_glob = label
+    elif LV_PATTERN.search(label):
+        label_glob = LV_PATTERN.sub("_LV[0-9][0-9]*", label)
+    else:
+        label_glob = f"{label}*"
+    processed[PARTS_HITLABEL.name].append(
+        {
+            "pk": label_pk,
+            "act": action_id,
+            "seq": seq,
+            "source": k,
+            "hitLabel": label,
+            "hitLabelGlob": label_glob,
+        }
+    )
+    data[k] = label_pk
+    meta.foreign_keys[k] = (PARTS_HITLABEL.name, "pk")
+    return label_pk
+
+
+def process_action_part(action_id, seq, data, processed, tablemetas, key=None, cnt=None):
     non_empty = False
     for v in data.values():
         try:
@@ -61,83 +107,15 @@ def process_action_part_one(action_id, seq, data, processed, field_type, cnt=Non
 
     pk = f"{action_id}{seq:03}"
     if cnt is None:
-        cnt = count()
+        cnt = itertools.count()
     else:
         pk += f"{next(cnt):03}"
-    for k, v in data.items():
-        if isinstance(v, dict):
-            if v.get("commandType"):
-                child_pk = process_action_part_one(action_id, seq, v, processed, field_type, cnt=cnt)
-                if child_pk:
-                    data[k] = child_pk
-                else:
-                    data[k] = None
-                field_type[k] = DBTableMetadata.TEXT
-            else:
-                field_type[k] = DBTableMetadata.BLOB
-        elif isinstance(v, list):
-            if not v or not any(v):
-                data[k] = None
-            field_type[k] = DBTableMetadata.BLOB
-        elif isinstance(v, int):
-            field_type[k] = DBTableMetadata.INT
-        elif isinstance(v, float):
-            field_type[k] = DBTableMetadata.REAL
-        elif isinstance(v, str):
-            field_type[k] = DBTableMetadata.TEXT
-        else:
-            field_type[k] = DBTableMetadata.BLOB
-
-    data["pk"] = pk
-    data["act"] = action_id
-    data["seq"] = seq
-
-    if pk in processed and processed[pk] != data:
-        raise ValueError(f"Collision {pk}:\n{processed[pk]}\n{data}")
-    processed[pk] = data
-
-    return pk
-
-
-def transfer_actions_as_one_schema(actions_dir, dl_sim_db):
-    processed = {}
-    field_type = {
-        "pk": DBTableMetadata.INT + DBTableMetadata.PK,
-        "act": DBTableMetadata.INT,
-        "seq": DBTableMetadata.INT,
-    }
-    for filename in tqdm(glob(actions_dir + "/PlayerAction_*.json"), desc="actions"):
-        action_id = filename.split("_")[-1].replace(".json", "")
-        with open(filename, "r") as fn:
-            for seq, part in enumerate(json.load(fn)):
-                process_action_part_one(action_id, seq, part, processed, field_type)
-
-    db = DBManager(dl_sim_db)
-    meta = DBTableMetadata("ActionParts", pk="pk", field_type=field_type)
-    db.drop_table(meta.name)
-    db.create_table(meta)
-    db.insert_many(meta.name, processed.values(), mode=DBManager.REPLACE)
-
-
-def process_action_part_multi(action_id, seq, data, processed, tablemetas, key=None, cnt=None):
-    non_empty = False
-    for v in data.values():
-        try:
-            non_empty = any(v)
-        except TypeError:
-            non_empty = bool(v)
-        if non_empty:
-            break
-    if not non_empty:
-        return None
-
     try:
-        tbl = "Parts" + CommandType(data["commandType"]).name
+        tbl = "Parts_" + CommandType(data["commandType"]).name
     except KeyError:
-        tbl = "PartsParam" + key.strip("_")
-    pk = f"{action_id}{seq:03}"
+        tbl = "PartsParam" + "_" + key.strip("_")
     if key is None:
-        processed["PartsIndex"].append(
+        processed[PARTS_INDEX.name].append(
             {
                 "pk": pk,
                 "act": action_id,
@@ -145,10 +123,6 @@ def process_action_part_multi(action_id, seq, data, processed, tablemetas, key=N
                 "part": tbl,
             }
         )
-    if cnt is None:
-        cnt = count()
-    else:
-        pk += f"{next(cnt):03}"
     try:
         meta = tablemetas[tbl]
     except KeyError:
@@ -164,10 +138,31 @@ def process_action_part_multi(action_id, seq, data, processed, tablemetas, key=N
         tablemetas[tbl] = meta
         processed[tbl] = []
 
-    for k, v in data.items():
-        if isinstance(v, dict):
+    for k, v in data.copy().items():
+        if k in HIT_LABEL_FIELDS:
+            if not v:
+                data[k] = None
+                continue
+            if k == "_hitAttrLabelSubList":
+                # if len(tuple(filter(None, v))) == 1:
+                #     label = v[0]
+                # else:
+                #     raise Exception((k, v))
+                for idx, label in enumerate(v):
+                    new_k = k
+                    if idx:
+                        new_k = f"_hitAttrLabelSubList{idx}"
+                    meta.field_type[new_k] = DBTableMetadata.INT
+                    if not label:
+                        data[new_k] = None
+                        continue
+                    data[new_k] = process_action_part_label(pk, cnt, label, processed, action_id, seq, new_k, data, meta)
+            else:
+                data[k] = process_action_part_label(pk, cnt, v, processed, action_id, seq, k, data, meta)
+            meta.field_type[k] = DBTableMetadata.INT
+        elif isinstance(v, dict):
             # if v.get("commandType"):
-            child_result = process_action_part_multi(action_id, seq, v, processed, tablemetas, key=k, cnt=cnt)
+            child_result = process_action_part(action_id, seq, v, processed, tablemetas, key=k, cnt=cnt)
             if child_result:
                 child_tbl, child_pk = child_result
                 data[k] = child_pk
@@ -180,7 +175,27 @@ def process_action_part_multi(action_id, seq, data, processed, tablemetas, key=N
         elif isinstance(v, list):
             if not v or not any(v):
                 data[k] = None
-            meta.field_type[k] = DBTableMetadata.BLOB
+            for idx, subv in enumerate(v):
+                new_k = k
+                if idx:
+                    new_k = f"{k}{idx}"
+                if isinstance(subv, dict):
+                    child_result = process_action_part(action_id, seq, subv, processed, tablemetas, key=k, cnt=cnt)
+                    if child_result:
+                        child_tbl, child_pk = child_result
+                        data[new_k] = child_pk
+                        meta.foreign_keys[new_k] = (child_tbl, "pk")
+                    else:
+                        data[new_k] = None
+                    meta.field_type[new_k] = DBTableMetadata.INT
+                else:
+                    data[new_k] = subv
+                    if isinstance(subv, int):
+                        meta.field_type[new_k] = DBTableMetadata.INT
+                    elif isinstance(subv, float):
+                        meta.field_type[new_k] = DBTableMetadata.REAL
+                    elif isinstance(subv, str):
+                        meta.field_type[new_k] = DBTableMetadata.TEXT
         elif isinstance(v, int):
             meta.field_type[k] = DBTableMetadata.INT
         elif isinstance(v, float):
@@ -199,75 +214,30 @@ def process_action_part_multi(action_id, seq, data, processed, tablemetas, key=N
     return tbl, pk
 
 
-def transfer_actions_as_many_schema(actions_dir, dl_sim_db):
-    processed = {"PartsIndex": []}
-    tablemetas = {
-        "PartsIndex": DBTableMetadata(
-            "PartsIndex",
-            pk="pk",
-            field_type={
-                "pk": DBTableMetadata.INT + DBTableMetadata.PK,
-                "act": DBTableMetadata.INT,
-                "seq": DBTableMetadata.INT,
-                "part": DBTableMetadata.TEXT,
-            },
-        )
+def transfer_actions(db_file, actions_dir):
+    processed = {
+        PARTS_INDEX.name: [],
+        PARTS_HITLABEL.name: [],
     }
-    for filename in tqdm(glob(actions_dir + "/PlayerAction_*.json"), desc="actions"):
+    tablemetas = {
+        PARTS_INDEX.name: PARTS_INDEX,
+        PARTS_HITLABEL.name: PARTS_HITLABEL,
+    }
+    for filename in tqdm(glob(actions_dir + "/PlayerAction_*.json"), desc="read_actions"):
         action_id = filename.split("_")[-1].replace(".json", "")
         with open(filename, "r") as fn:
             for seq, part in enumerate(json.load(fn)):
-                process_action_part_multi(action_id, seq, part, processed, tablemetas)
+                process_action_part(action_id, seq, part, processed, tablemetas)
 
-    db = DBManager(dl_sim_db)
-    for tbl, meta in tablemetas.items():
-        # print(tbl, meta.name)
-        # for k, v in meta.field_type.items():
-        #     print("field", k, v)
-        # for k, v in meta.foreign_keys.items():
-        #     print("foreign", k, v)
-        # print()
+    db = DBManager(db_file)
+    for tbl, meta in tqdm(tablemetas.items(), desc="load_actions"):
         db.drop_table(tbl)
         db.create_table(meta)
         db.insert_many(tbl, processed[tbl], mode=DBManager.REPLACE)
-
-
-def prune_falsy(data):
-    try:
-        pruned = {}
-        for k, v in data.items():
-            if k[0] == "_":
-                k = k[1:]
-            pv = prune_falsy(v)
-            if pv:
-                pruned[k] = pv
-        return pruned
-    except AttributeError:
-        try:
-            return any(data) and data
-        except TypeError:
-            return data
-
-
-def transfer_actions(actions_dir, dl_sim_db):
-    db = DBManager(dl_sim_db)
-    db.drop_table(ACTION_PARTS.name)
-    db.create_table(ACTION_PARTS)
-    sorted_data = []
-    for filename in tqdm(glob(actions_dir + "/PlayerAction_*.json"), desc="actions"):
-        action_id = filename.split("_")[-1].replace(".json", "")
-        pruned_parts = []
-        with open(filename, "r") as fn:
-            for part in json.load(fn):
-                pruned_parts.append(prune_falsy(part))
-        sorted_data.append({"_Id": int(action_id), "data": pruned_parts})
-    db.insert_many(ACTION_PARTS.name, sorted_data)
 
 
 if __name__ == "__main__":
     if os.path.exists(DL9_DB):
         os.remove(DL9_DB)
     transfer_sim_db(DL9_DB)
-    # transfer_actions("./_ex_sim/jp/actions", "../dl9/conf.sqlite")
-    # transfer_actions_as_one_schema("./_ex_sim/jp/actions", DL9_DB)
-    transfer_actions_as_many_schema("./_ex_sim/jp/actions", DL9_DB)
+    transfer_actions(DL9_DB, "./_ex_sim/jp/actions")
