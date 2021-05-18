@@ -569,6 +569,8 @@ class Extractor:
         sorted_downloaded = defaultdict(list)
         for source, ex_target, dl_target in downloaded:
             if source.raw:
+                ex_target = os.path.join(self.ex_dir, ex_target)
+                check_target_path(ex_target, is_dir=True)
                 shutil.copy(dl_target, ex_target)
                 continue
             sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
@@ -640,7 +642,7 @@ def cmd_line_extract():
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
         # ex_dir="./_ex_sim",
-        ex = Extractor(ex_dir="./_ex_sim", overwrite=False)
+        ex = Extractor(overwrite=False)
         ex.download_and_extract_by_pattern(EX_PATTERNS)
 
 
