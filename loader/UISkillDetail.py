@@ -44,7 +44,7 @@ def load_ui_skill_detail(db, path):
     skilldetails = {}
     for region in ("en", "jp", "cn"):
         for root, _, files in os.walk(os.path.join(path, region, "skilldetail")):
-            for fn in tqdm(files, desc="skill detail"):
+            for fn in tqdm(files, desc=f"{region}_detail"):
                 for sd_info in build_skilldetail_row(root, fn):
                     sd_text, sd_row = sd_info
                     if sd_row["_Id"] not in skilldetails:

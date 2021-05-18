@@ -226,7 +226,7 @@ PARTS_HITLABEL = DBTableMetadata(
 )
 
 
-def process_action_part_label(pk, cnt, label, processed, action_id, seq, k, data):
+def process_action_part_label(pk, cnt, label, processed, action_id, seq, k, data, meta):
     label_pk = pk + f"{next(cnt):03}"
     if label.startswith("CMN_AVOID"):
         label_glob = label
@@ -245,6 +245,7 @@ def process_action_part_label(pk, cnt, label, processed, action_id, seq, k, data
         }
     )
     data[k] = label_pk
+    meta.foreign_keys[k] = (PARTS_HITLABEL.name, "pk")
     return label_pk
 
 
@@ -260,11 +261,15 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
     if not non_empty:
         return None
 
+    pk = f"{action_id}{seq:03}"
+    if cnt is None:
+        cnt = itertools.count()
+    else:
+        pk += f"{next(cnt):03}"
     try:
         tbl = "Parts_" + CommandType(data["commandType"]).name
     except KeyError:
         tbl = "PartsParam" + "_" + key.strip("_")
-    pk = f"{action_id}{seq:03}"
     if key is None:
         processed[PARTS_INDEX.name].append(
             {
@@ -274,10 +279,6 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
                 "part": tbl,
             }
         )
-    if cnt is None:
-        cnt = itertools.count()
-    else:
-        pk += f"{next(cnt):03}"
     try:
         meta = tablemetas[tbl]
     except KeyError:
@@ -311,9 +312,9 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
                     if not label:
                         data[new_k] = None
                         continue
-                    data[new_k] = process_action_part_label(pk, cnt, label, processed, action_id, seq, new_k, data)
+                    data[new_k] = process_action_part_label(pk, cnt, label, processed, action_id, seq, new_k, data, meta)
             else:
-                data[k] = process_action_part_label(pk, cnt, v, processed, action_id, seq, k, data)
+                data[k] = process_action_part_label(pk, cnt, v, processed, action_id, seq, k, data, meta)
             meta.field_type[k] = DBTableMetadata.INT
         elif isinstance(v, dict):
             # if v.get("commandType"):
@@ -330,7 +331,27 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
         elif isinstance(v, list):
             if not v or not any(v):
                 data[k] = None
-            meta.field_type[k] = DBTableMetadata.BLOB
+            for idx, subv in enumerate(v):
+                new_k = k
+                if idx:
+                    new_k = f"{k}{idx}"
+                if isinstance(subv, dict):
+                    child_result = process_action_part(action_id, seq, subv, processed, tablemetas, key=k, cnt=cnt)
+                    if child_result:
+                        child_tbl, child_pk = child_result
+                        data[new_k] = child_pk
+                        meta.foreign_keys[new_k] = (child_tbl, "pk")
+                    else:
+                        data[new_k] = None
+                    meta.field_type[new_k] = DBTableMetadata.INT
+                else:
+                    data[new_k] = subv
+                    if isinstance(subv, int):
+                        meta.field_type[new_k] = DBTableMetadata.INT
+                    elif isinstance(subv, float):
+                        meta.field_type[new_k] = DBTableMetadata.REAL
+                    elif isinstance(subv, str):
+                        meta.field_type[new_k] = DBTableMetadata.TEXT
         elif isinstance(v, int):
             meta.field_type[k] = DBTableMetadata.INT
         elif isinstance(v, float):

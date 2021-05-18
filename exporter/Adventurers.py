@@ -277,4 +277,5 @@ if __name__ == "__main__":
     index = DBViewIndex()
     # view = ManaCircle(index)
     view = CharaData(index)
-    view.export_one_to_folder(out_dir="./test")
+    # view.export_one_to_folder(out_dir="./test")
+    view.export_all_to_folder(out_dir="./test")

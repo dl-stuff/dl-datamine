@@ -66,12 +66,16 @@ class DBTableMetadata:
             if k == self.pk:
                 self.field_type[k] += DBTableMetadata.PK
 
-    def init_from_table_info(self, table_info):
+    def init_from_table_info(self, table_info, foreign_key_info=None):
         self.field_type = {}
+        self.foreign_keys = {}
         for c in table_info:
             if c["pk"] == 1:
                 self.pk = c["name"]
             self.field_type[c["name"]] = c["type"]
+        if foreign_key_info:
+            for fk in foreign_key_info:
+                self.foreign_keys[fk["from"]] = (fk["table"], fk["to"])
 
     def get_field(self, key):
         return self.field_type[key]
@@ -166,8 +170,9 @@ class DBManager:
             table_info = self.query_many(f"PRAGMA table_info({table})", (), dict)
             if len(table_info) == 0:
                 return False
+            foreign_key_info = self.query_many(f"PRAGMA foreign_key_list({table})", (), dict)
             tbl = DBTableMetadata(table)
-            tbl.init_from_table_info(table_info)
+            tbl.init_from_table_info(table_info, foreign_key_info)
             if update_table_dict:
                 self.tables[table] = tbl
             else:
@@ -221,30 +226,24 @@ class DBManager:
     RANGE = "range"
     GLOB = "glob"
 
-    def select(
-        self,
-        table,
-        value=None,
-        by=None,
-        fields=None,
-        order=None,
-        mode=EXACT,
-        d_type=DBDict,
-    ):
+    def select(self, table, value=None, by=None, fields=None, where=None, order=None, mode=EXACT, d_type=DBDict):
         tbl = self.check_table(table)
         by = by or tbl.pk
         if fields:
             named_fields = ",".join([f"{table}.{k}" for k in fields])
         else:
             named_fields = tbl.named_fields
+        query = f"SELECT {named_fields} FROM {table}"
         if mode == self.LIKE:
-            query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by} LIKE ? || '%'"
+            query += f" WHERE {table}.{by} LIKE ? || '%'"
         elif mode == self.GLOB:
-            query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by} GLOB ?"
+            query += f" WHERE {table}.{by} GLOB ?"
         elif mode == self.RANGE:
-            query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by} >= ? AND {table}.{by} < ?"
+            query += f" WHERE {table}.{by} >= ? AND {table}.{by} < ?"
         else:  # mode == self.EXACT
-            query = f"SELECT {named_fields} FROM {table} WHERE {table}.{by}=?"
+            query += f" WHERE {table}.{by}=?"
+        if where:
+            query += f" AND {where}"
         if order:
             query += f" ORDER BY {order}"
         value = (value,) if not isinstance(value, tuple) else value
@@ -315,10 +314,10 @@ class DBView:
         if (idx := res.get(key)) and (linked := self.index[view].get(idx, **kwargs)):
             res[key] = linked
 
-    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=True, full_query=True, **kwargs):
+    def get(self, pk, by=None, fields=None, where=None, order=None, mode=DBManager.EXACT, expand_one=True, full_query=True, **kwargs):
         if order and "." not in order:
             order = self.name + "." + order
-        res = self.database.select(self.name, pk, by, fields, order, mode)
+        res = self.database.select(self.name, pk, by, fields, where, order, mode)
         if self.EXCLUDE_FALSY:
             res = [self.remove_falsy_fields(r) for r in res]
         if expand_one and len(res) == 1:
@@ -382,19 +381,57 @@ class DBViewIndex:
             self.instance_dict[key] = self.class_dict[key](self)
         elif key.startswith("Parts_"):
             self.instance_dict[key] = PartsTable(self, key)
+        elif key.startswith("PartsParam_"):
+            self.instance_dict[key] = PartsParamTable(self, key)
         else:
             self.instance_dict[key] = DBView(self, key)
         return self.instance_dict[key]
 
 
-from loader.Actions import CommandType
+from loader.Actions import CommandType, HIT_LABEL_FIELDS
+
+
+class PartsParamTable(DBView):
+    def process_result(self, res):
+        del res["pk"]
+        del res["act"]
+        del res["seq"]
+        return res
 
 
 class PartsTable(DBView):
+    ALWAYS_FK = HIT_LABEL_FIELDS + (
+        # "_conditionData",
+        "_loopData",
+        "_arrangeBullet",
+    )
+
     def __init__(self, index, key=None, **kwargs):
         key = key or self.__class__.__name__
         super().__init__(index, key, **kwargs)
+        self.foreign_keys = self.database.check_table(self.name).foreign_keys
+
+    @staticmethod
+    def remove_falsy_fields(res):
+        return DBDict(filter(lambda x: x[0] in ("seq", "_seconds") or bool(x[1]), res.items()))
+
+    def expand_fk(self, res, col):
+        if not (fk := res.get(col)):
+            return
+        try:
+            fk_info = self.foreign_keys.get(col)
+            res[col] = self.index[fk_info[0]].get(fk, by=fk_info[1])
+        except (TypeError, KeyError):
+            pass
 
     def process_result(self, res):
         res["commandType"] = CommandType(res["commandType"])
+        del res["pk"]
+        del res["act"]
+        for label in self.ALWAYS_FK:
+            self.expand_fk(res, label)
+        i = 1
+        while (label := f"_hitAttrLabelSubList{i}") in res:
+            self.expand_fk(res, label)
+            i += 1
         return res
