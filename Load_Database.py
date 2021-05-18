@@ -81,10 +81,8 @@ if __name__ == "__main__":
     load_master(db, os.path.join(in_dir, EN, MASTER))
     load_json(db, os.path.join(in_dir, JP, MASTER, TEXT_LABEL), "TextLabelJP")
     load_json(db, os.path.join(in_dir, CN, MASTER, TEXT_LABEL), "TextLabelCN")
-    schema_map = load_actions(db, os.path.join(in_dir, JP, ACTIONS))
-    os.makedirs("out", exist_ok=True)
-    with open("./out/_action_schema.json", "w") as f:
-        json.dump(schema_map, f, indent=4, sort_keys=True)
     load_motions(db, os.path.join(in_dir, JP))
     load_ui_skill_detail(db, in_dir)
+
+    load_actions(db, os.path.join(in_dir, JP, ACTIONS))
     print(f"total: {monotonic()-start:.4f}s")

@@ -6,7 +6,7 @@ from tqdm import tqdm
 from unidecode import unidecode
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
-from loader.Actions import CommandType
+from exporter.Parts import *
 from exporter.Mappings import (
     AFFLICTION_TYPES,
     KILLER_STATE,
@@ -18,12 +18,7 @@ from exporter.Mappings import (
     ActionTargetGroup,
     AbilityType,
     AbilityStat,
-    PartConditionType,
-    PartConditionComparisonType,
-    ActionCancelType,
     AuraType,
-    ActionSignalType,
-    CharacterControl,
 )
 
 
@@ -57,7 +52,7 @@ class ActionCondition(DBView):
             self.seen_skills.add(res["_Id"])
             for s in ("_EnhancedSkill1", "_EnhancedSkill2", "_EnhancedSkillWeapon"):
                 if (sid := res.get(s)) not in self.seen_skills:
-                    if (skill := self.index["SkillData"].get(sid)) :
+                    if skill := self.index["SkillData"].get(sid):
                         res[s] = skill
         self.link(res, "_DamageLink", "PlayerActionHitAttribute")
         self.link(res, "_LevelUpId", "ActionCondition")
@@ -283,9 +278,9 @@ class AbilityData(DBView):
             except (KeyError, ValueError):
                 pass
 
-        if (ele := res.get("_ElementalType")) :
+        if ele := res.get("_ElementalType"):
             res["_ElementalType"] = ELEMENTS.get(ele, ele)
-        if (wep := res.get("_WeaponType")) :
+        if wep := res.get("_WeaponType"):
             res["_WeaponType"] = WEAPON_TYPES.get(wep, wep)
         return res
 
@@ -444,148 +439,6 @@ class MotionData(DBView):
         return self.database.query_many(query=query, param=(state, state, ref), d_type=DBDict)
 
 
-class ActionPartsHitLabel(DBView):
-    LV_PATTERN = re.compile(r"_LV\d{2}.*")
-    LV_CHLV_PATTERN = re.compile(r"_CHLV\d{2}")
-    LABEL_SORT = {
-        "_hitLabel": 0,
-        "_hitAttrLabel": 1,
-        "_hitAttrLabelSubList": 2,
-        "_abHitAttrLabel": 3,
-    }
-
-    def __init__(self, index):
-        super().__init__(index, "ActionPartsHitLabel", override_view=True)
-        # SELECT * FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob
-
-    def open(self):
-        self.name = f"View_{self.base_table}"
-        self.database.conn.execute(f"DROP VIEW IF EXISTS {self.name}")
-        self.database.conn.execute(
-            f"CREATE VIEW {self.name} AS SELECT ActionPartsHitLabel._ref AS _ref, ActionPartsHitLabel._source AS _source, PlayerActionHitAttribute.* FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob"
-        )
-        self.database.conn.commit()
-
-    def process_result(self, res):
-        result_dict = {source: [] for source in self.LABEL_SORT.keys()}
-        for r in res:
-            source = r["_source"]
-            del r["_ref"]
-            del r["_source"]
-            result_dict[source].append(r)
-        for source in list(result_dict.keys()):
-            if not result_dict[source]:
-                del result_dict[source]
-            else:
-                result_dict[source] = self.index["PlayerActionHitAttribute"].process_result(result_dict[source])
-        return result_dict
-
-    def get(self, pk, **kwargs):
-        kwargs["expand_one"] = False
-        return super().get(pk, **kwargs)
-
-
-class ActionParts(DBView):
-    def __init__(self, index):
-        super().__init__(index, "ActionParts")
-        self.animation_reference = None
-
-    def process_result(self, action_parts, hide_ref=True):
-        # if isinstance(action_parts, dict):
-        #     action_parts = [action_parts]
-        for r in action_parts:
-            if "commandType" in r:
-                r["commandType"] = CommandType(r["commandType"])
-
-            hit_labels = self.index["ActionPartsHitLabel"].get(r["_Id"], by="_ref", order="_Id ASC")
-            if hit_labels:
-                r["_allHitLabels"] = hit_labels
-
-            del r["_Id"]
-            if hide_ref:
-                del r["_ref"]
-
-            try:
-                r["_actionType"] = ActionCancelType(r["_actionType"])
-            except (KeyError, ValueError):
-                pass
-
-            if r["commandType"] == CommandType.SEND_SIGNAL:
-                r["_signalType"] = ActionSignalType(r.get("_signalType", 0))
-
-            try:
-                r["_charaCommand"] = CharacterControl(r["_charaCommand"])
-                r["_charaCommandArgs"] = json.loads(r["_charaCommandArgs"])
-            except (KeyError, ValueError):
-                pass
-
-            self.link(r, "_actionConditionId", "ActionCondition")
-            self.link(r, "_buffCountConditionId", "ActionCondition")
-            skip_autoFireActionId = False
-            try:
-                autofire_actions = []
-                for autofire_id in set(map(int, json.loads(r["_autoFireActionIdList"]))):
-                    if not autofire_id:
-                        continue
-                    if autofire_id == r.get("_autoFireActionId"):
-                        skip_autoFireActionId = True
-                    if (autofire_action := self.index["PlayerAction"].get(autofire_id)) :
-                        autofire_actions.append(autofire_action)
-                if autofire_actions:
-                    r["_autoFireActionIdList"] = autofire_actions
-            except (KeyError, ValueError, TypeError):
-                pass
-            if not skip_autoFireActionId:
-                self.link(r, "_autoFireActionId", "PlayerAction")
-
-            if "_motionState" in r and r["_motionState"]:
-                ms = r["_motionState"]
-                animation = []
-                if self.animation_reference is not None:
-                    animation = self.index["MotionData"].get_by_state_ref(ms, self.animation_reference)
-                if animation:
-                    for anim in animation:
-                        del anim["pathID"]
-                        del anim["ref"]
-                    if len(animation) == 1:
-                        r["_animation"] = animation[0]
-                    else:
-                        r["_animation"] = animation
-
-            if r.get("_conditionType"):
-                condtype = PartConditionType(r["_conditionType"])
-                r["_conditionType"] = condtype
-                if condtype == PartConditionType.OwnerBuffCount:
-                    buff, comp, count, padding4 = json.loads(r["_conditionValue"])
-                    r["_conditionValue"] = {
-                        "_actionCondition": self.index["ActionCondition"].get(buff),
-                        "_compare": PartConditionComparisonType(comp),
-                        "_count": int(count),
-                        "_padding4": padding4,
-                    }
-                elif condtype in (
-                    PartConditionType.ShikigamiLevel,
-                    PartConditionType.ActionContainerHitCount,
-                ):
-                    comp, count, padding3, padding4 = json.loads(r["_conditionValue"])
-                    r["_conditionValue"] = {
-                        "_compare": PartConditionComparisonType(comp),
-                        "_count": int(count),
-                        "_padding3": padding3,
-                        "_padding4": padding4,
-                    }
-
-        return action_parts
-
-    @staticmethod
-    def remove_falsy_fields(res):
-        return DBDict(filter(lambda x: bool(x[1]) or x[0] in ("_seconds", "_seq"), res.items()))
-
-    def get(self, pk, **kwargs):
-        kwargs["expand_one"] = False
-        return super().get(pk, **kwargs)
-
-
 class PlayerAction(DBView):
     BURST_MARKER_DISPLACEMENT = 4
     # REF = set()
@@ -595,7 +448,7 @@ class PlayerAction(DBView):
 
     def process_result(self, player_action):
         pa_id = player_action["_Id"]
-        if action_parts := self.index["ActionParts"].get(pa_id, by="_ref", order="_seconds ASC"):
+        if action_parts := self.index["PartsIndex"].get(pa_id):
             player_action["_Parts"] = action_parts
         if (mid := player_action.get("_BurstMarkerId")) and (marker := self.get(mid)):
             player_action["_BurstMarkerId"] = marker
@@ -622,9 +475,9 @@ class PlayerAction(DBView):
                 player_action["_EnhancedBurstAttackOffsetFlag"] = offset_flag
             except KeyError:
                 pass
-        if (nextact := player_action.get("_NextAction")) :
+        if nextact := player_action.get("_NextAction"):
             player_action["_NextAction"] = self.get(nextact)
-        if (casting := player_action.get("_CastingAction")) :
+        if casting := player_action.get("_CastingAction"):
             player_action["_CastingAction"] = self.get(casting)
         return player_action
 

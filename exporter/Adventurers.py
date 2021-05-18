@@ -147,7 +147,7 @@ class CharaData(DBView):
         return res
 
     def process_result(self, res, condense=True):
-        self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
+        self.index["Parts_PLAY_MOTION"].anim_ref = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
         if "_WeaponType" in res:
             res["_WeaponType"] = WEAPON_TYPES.get(res["_WeaponType"], res["_WeaponType"])
         if "_ElementalType" in res:
@@ -183,7 +183,7 @@ class CharaData(DBView):
         if "_DashAttack" in res and res["_DashAttack"] and (da := self.index["PlayerAction"].get(res["_DashAttack"])):
             res["_DashAttack"] = da
 
-        self.index["ActionParts"].animation_reference = None
+        self.index["Parts_PLAY_MOTION"].anim_ref = None
         return res
 
     def get(self, pk, fields=None, full_query=True, condense=True):
@@ -208,7 +208,7 @@ class CharaData(DBView):
         out_dir = os.path.join(out_dir, "adventurers")
         super().export_all_to_folder(out_dir, ext, where=where, condense=True)
 
-    def export_one_to_folder(self, pk=10250101, out_dir="./out", ext=".json"):
+    def export_one_to_folder(self, pk=10540502, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "adventurers")
         super().export_one_to_folder(pk, out_dir, ext, condense=True)
 
@@ -275,4 +275,6 @@ class CharaLimitBreak(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = ManaCircle(index)
+    # view = ManaCircle(index)
+    view = CharaData(index)
+    view.export_one_to_folder(out_dir="./test")

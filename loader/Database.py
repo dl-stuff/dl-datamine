@@ -315,17 +315,7 @@ class DBView:
         if (idx := res.get(key)) and (linked := self.index[view].get(idx, **kwargs)):
             res[key] = linked
 
-    def get(
-        self,
-        pk,
-        by=None,
-        fields=None,
-        order=None,
-        mode=DBManager.EXACT,
-        expand_one=True,
-        full_query=True,
-        **kwargs,
-    ):
+    def get(self, pk, by=None, fields=None, order=None, mode=DBManager.EXACT, expand_one=True, full_query=True, **kwargs):
         if order and "." not in order:
             order = self.name + "." + order
         res = self.database.select(self.name, pk, by, fields, order, mode)
@@ -386,8 +376,25 @@ class DBViewIndex:
         self.instance_dict = {}
 
     def __getitem__(self, key):
-        if key in self.instance_dict.keys():
-            return self.instance_dict.get(key)
-        else:
-            self.instance_dict[key] = self.class_dict[key](self)
+        if key in self.instance_dict:
             return self.instance_dict[key]
+        elif key in self.class_dict:
+            self.instance_dict[key] = self.class_dict[key](self)
+        elif key.startswith("Parts_"):
+            self.instance_dict[key] = PartsTable(self, key)
+        else:
+            self.instance_dict[key] = DBView(self, key)
+        return self.instance_dict[key]
+
+
+from loader.Actions import CommandType
+
+
+class PartsTable(DBView):
+    def __init__(self, index, key=None, **kwargs):
+        key = key or self.__class__.__name__
+        super().__init__(index, key, **kwargs)
+
+    def process_result(self, res):
+        res["commandType"] = CommandType(res["commandType"])
+        return res
