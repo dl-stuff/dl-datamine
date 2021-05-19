@@ -1,11 +1,11 @@
 from PIL import Image
 import os
 import json
-import requests
+import urllib.request
 from tqdm import tqdm
 from collections import defaultdict
 
-from loader.AssetExtractor import Extractor
+from loader.AssetExtractor import Extractor, IMAGE_TYPES
 from loader.Database import DBManager
 
 TIMEATTACK_INDEX = "https://dragalialost.com/api/index.php?lang=en_us&type=event_web&action=index_list"
@@ -46,7 +46,8 @@ def calculate_percent_difference(i1, i2):
 
 
 def compare_remote_to_local(img_url, category):
-    i1 = Image.open(requests.get(img_url, stream=True).raw)
+    with urllib.request.urlopen(img_url) as fn:
+        i1 = Image.open(fn)
     category_dir = os.path.join(OUTPUT_DIR, "resources", category)
     for target in os.listdir(category_dir):
         i2 = Image.open(os.path.join(category_dir, target))
@@ -106,10 +107,10 @@ def convert_player_slots(player_slots, dbm, seen_icons):
 
 
 def get_timeattack_data(quest_id):
-    response = requests.get(TIMEATTACK_URL.format(quest_id=quest_id))
-    if response.status_code != 200:
+    response = urllib.request.urlopen(TIMEATTACK_URL.format(quest_id=quest_id))
+    if response.code != 200:
         return
-    res_json = response.json()
+    res_json = json.load(response)
     if res_json["data_headers"]["result_code"] == 0:
         return
     data = res_json["data"]
@@ -202,10 +203,10 @@ def weighted_usage_as_csv(quest_id, timestamp):
 
 
 def get_timeattack_index():
-    response = requests.get(TIMEATTACK_INDEX)
-    if response.status_code != 200:
+    response = urllib.request.urlopen(TIMEATTACK_URL.format(quest_id=quest_id))
+    if response.code != 200:
         return
-    res_json = response.json()
+    res_json = json.load(response)
     all_quest_ids = {}
     for entry in res_json["data"]["index_list"].values():
         for tab in entry.values():
@@ -233,6 +234,9 @@ def test_image_diff():
 # 227020105 Co-op Kai
 # 227030104 Solo Tart
 # 227030105 Co-op Tart
+
+# 227040105 Solo Ciella
+# 227040105 Co-op Ciella
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     # prepare_icons()

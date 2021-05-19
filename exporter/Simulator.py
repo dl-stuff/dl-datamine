@@ -23,6 +23,8 @@ SIM_TABLE_LIST = (
     "WeaponBody",
     "WeaponType",
     "TextLabel",
+    "TextLabelCN",
+    "TextLabelJP",
     "PlayerAction",
     "PlayerActionHitAttribute",
     "UnionAbility",
@@ -139,28 +141,28 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
         processed[tbl] = []
 
     for k, v in data.copy().items():
-        if k in HIT_LABEL_FIELDS:
-            if not v:
-                data[k] = None
-                continue
-            if k == "_hitAttrLabelSubList":
-                # if len(tuple(filter(None, v))) == 1:
-                #     label = v[0]
-                # else:
-                #     raise Exception((k, v))
-                for idx, label in enumerate(v):
-                    new_k = k
-                    if idx:
-                        new_k = f"_hitAttrLabelSubList{idx}"
-                    meta.field_type[new_k] = DBTableMetadata.INT
-                    if not label:
-                        data[new_k] = None
-                        continue
-                    data[new_k] = process_action_part_label(pk, cnt, label, processed, action_id, seq, new_k, data, meta)
-            else:
-                data[k] = process_action_part_label(pk, cnt, v, processed, action_id, seq, k, data, meta)
-            meta.field_type[k] = DBTableMetadata.INT
-        elif isinstance(v, dict):
+        # if k in HIT_LABEL_FIELDS:
+        #     if not v:
+        #         data[k] = None
+        #         continue
+        #     if k == "_hitAttrLabelSubList":
+        #         # if len(tuple(filter(None, v))) == 1:
+        #         #     label = v[0]
+        #         # else:
+        #         #     raise Exception((k, v))
+        #         for idx, label in enumerate(v):
+        #             new_k = k
+        #             if idx:
+        #                 new_k = f"_hitAttrLabelSubList{idx}"
+        #             meta.field_type[new_k] = DBTableMetadata.INT
+        #             if not label:
+        #                 data[new_k] = None
+        #                 continue
+        #             data[new_k] = process_action_part_label(pk, cnt, label, processed, action_id, seq, new_k, data, meta)
+        #     else:
+        #         data[k] = process_action_part_label(pk, cnt, v, processed, action_id, seq, k, data, meta)
+        #     meta.field_type[k] = DBTableMetadata.INT
+        if isinstance(v, dict):
             # if v.get("commandType"):
             child_result = process_action_part(action_id, seq, v, processed, tablemetas, key=k, cnt=cnt)
             if child_result:
@@ -217,11 +219,11 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
 def transfer_actions(db_file, actions_dir):
     processed = {
         PARTS_INDEX.name: [],
-        PARTS_HITLABEL.name: [],
+        # PARTS_HITLABEL.name: [],
     }
     tablemetas = {
         PARTS_INDEX.name: PARTS_INDEX,
-        PARTS_HITLABEL.name: PARTS_HITLABEL,
+        # PARTS_HITLABEL.name: PARTS_HITLABEL,
     }
     for filename in tqdm(glob(actions_dir + "/PlayerAction_*.json"), desc="read_actions"):
         action_id = filename.split("_")[-1].replace(".json", "")

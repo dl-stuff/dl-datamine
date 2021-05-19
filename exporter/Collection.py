@@ -106,17 +106,17 @@ def make_chara_json(res, index):
             s_icon = skill[f"_SkillLv{j}IconName"]
             result["Skills"][i][j] = s_icon
             skill_icons.add(s_icon.lower())
-    if (growmat := res.get("_GrowMaterialId")) :
+    if growmat := res.get("_GrowMaterialId"):
         result["Grow"] = growmat
         growend = res.get("_GrowMaterialOnlyEndDate")
         if growend:
             result["GrowEnd"] = datetime.strptime(growend + " UTC", "%Y/%m/%d %H:%M:%S %Z").timestamp()
 
         material_icons.add(growmat)
-    if (unique1 := res.get("_UniqueGrowMaterialId1")) :
+    if unique1 := res.get("_UniqueGrowMaterialId1"):
         result["Unique1"] = unique1
         material_icons.add(unique1)
-    if (unique2 := res.get("_UniqueGrowMaterialId2")) :
+    if unique2 := res.get("_UniqueGrowMaterialId2"):
         result["Unique2"] = unique2
         material_icons.add(unique2)
     return result
@@ -181,7 +181,7 @@ def make_weapon_series_json(res, index):
 
 
 from urllib.parse import quote
-import requests
+import urllib.request
 
 MAX = 500
 BASE_URL = "https://dragalialost.wiki/api.php?action=cargoquery&format=json&limit={}".format(MAX)
@@ -199,7 +199,10 @@ def get_data(**kwargs):
     data = []
     while offset % MAX == 0:
         url = get_api_request(offset, **kwargs)
-        r = requests.get(url).json()
+        response = urllib.request.urlopen(url)
+        if response.code != 200:
+            return
+        r = json.load(response)
         try:
             if len(r["cargoquery"]) == 0:
                 break
@@ -569,9 +572,9 @@ def make_manacircle_jsons(out, index):
         mcs = row["_Seq"]
         if mcs not in mc_data[mcn]:
             mats = {}
-            if (unique1 := row.get("_UniqueGrowMaterialCount1")) :
+            if unique1 := row.get("_UniqueGrowMaterialCount1"):
                 mats["Unique1"] = unique1
-            if (unique2 := row.get("_UniqueGrowMaterialCount2")) :
+            if unique2 := row.get("_UniqueGrowMaterialCount2"):
                 mats["Unique2"] = unique2
             mc_data[mcn][mcs] = {
                 "Piece": row["_ManaPieceType"],
@@ -583,7 +586,7 @@ def make_manacircle_jsons(out, index):
                 "Mats": mats,
                 "Ele": {},
             }
-            if (grow := row.get("_GrowMaterialCount")) :
+            if grow := row.get("_GrowMaterialCount"):
                 mc_data[mcn][mcs]["Grow"] = grow
         if mce := row.get("_ElementId"):
             eldwater = row.get("_DewPoint", 0)
@@ -604,7 +607,7 @@ def make_manacircle_jsons(out, index):
         for i in range(1, 6):
             clb = {}
             clb["Mats"] = get_mats_dict(row, range(1, 6), "_OrbData{}Id" + str(i), "_OrbData{}Num" + str(i))
-            if (grow := row.get(f"_GrowMaterialNum{i}")) :
+            if grow := row.get(f"_GrowMaterialNum{i}"):
                 clb["Grow"] = grow
             chara_lb[row["_Id"]][i] = clb
     outfile = "charalimitbreak.json"
