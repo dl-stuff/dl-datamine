@@ -130,10 +130,12 @@ class DBManager:
         self.conn.execute(f"ATTACH DATABASE '{new_db_file}' AS target;")
         self.conn.commit()
         for table in tqdm(table_list, desc="transfer"):
-            meta = self.check_table(table)
+            meta = self.check_table(f"View_{table}")
+            if not meta:
+                meta = self.check_table(table)
             self.conn.execute(f"DROP TABLE IF EXISTS target.{table}")
             self.conn.execute(f"CREATE TABLE target.{table} ({meta.field_types});")
-            self.conn.execute(f"INSERT INTO target.{table} SELECT * FROM main.{table};")
+            self.conn.execute(f"INSERT INTO target.{table} SELECT * FROM main.{meta.name};")
             self.conn.commit()
         self.conn.execute(f"DETACH DATABASE target;")
         self.conn.commit()

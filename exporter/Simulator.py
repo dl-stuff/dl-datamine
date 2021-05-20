@@ -4,6 +4,7 @@ import itertools
 import re
 from glob import glob
 from tqdm import tqdm
+import shutil
 
 from loader.Database import DBManager, DBTableMetadata
 from loader.Actions import CommandType
@@ -22,9 +23,9 @@ SIM_TABLE_LIST = (
     "SkillData",
     "WeaponBody",
     "WeaponType",
-    "TextLabel",
-    "TextLabelCN",
-    "TextLabelJP",
+    # "TextLabel",
+    # "TextLabelCN",
+    # "TextLabelJP",
     "PlayerAction",
     "PlayerActionHitAttribute",
     "UnionAbility",
@@ -141,27 +142,6 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
         processed[tbl] = []
 
     for k, v in data.copy().items():
-        # if k in HIT_LABEL_FIELDS:
-        #     if not v:
-        #         data[k] = None
-        #         continue
-        #     if k == "_hitAttrLabelSubList":
-        #         # if len(tuple(filter(None, v))) == 1:
-        #         #     label = v[0]
-        #         # else:
-        #         #     raise Exception((k, v))
-        #         for idx, label in enumerate(v):
-        #             new_k = k
-        #             if idx:
-        #                 new_k = f"_hitAttrLabelSubList{idx}"
-        #             meta.field_type[new_k] = DBTableMetadata.INT
-        #             if not label:
-        #                 data[new_k] = None
-        #                 continue
-        #             data[new_k] = process_action_part_label(pk, cnt, label, processed, action_id, seq, new_k, data, meta)
-        #     else:
-        #         data[k] = process_action_part_label(pk, cnt, v, processed, action_id, seq, k, data, meta)
-        #     meta.field_type[k] = DBTableMetadata.INT
         if isinstance(v, dict):
             # if v.get("commandType"):
             child_result = process_action_part(action_id, seq, v, processed, tablemetas, key=k, cnt=cnt)
@@ -216,7 +196,7 @@ def process_action_part(action_id, seq, data, processed, tablemetas, key=None, c
     return tbl, pk
 
 
-def transfer_actions(db_file, actions_dir):
+def transfer_actions_db(db_file, actions_dir):
     processed = {
         PARTS_INDEX.name: [],
         # PARTS_HITLABEL.name: [],
@@ -238,8 +218,14 @@ def transfer_actions(db_file, actions_dir):
         db.insert_many(tbl, processed[tbl], mode=DBManager.REPLACE)
 
 
+def transfer_actions_json(output_dir, actions_dir):
+    for filename in tqdm(glob(actions_dir + "/PlayerAction_*.json"), desc="copy_actions"):
+        shutil.copy(filename, os.path.join(output_dir, os.path.basename(filename)))
+
+
 if __name__ == "__main__":
     if os.path.exists(DL9_DB):
         os.remove(DL9_DB)
     transfer_sim_db(DL9_DB)
-    transfer_actions(DL9_DB, "./_ex_sim/jp/actions")
+    # transfer_actions_db(DL9_DB, "./_ex_sim/jp/actions")
+    transfer_actions_json("../dl9/action/data", "./_ex_sim/jp/actions")
