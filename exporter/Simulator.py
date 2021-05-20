@@ -29,6 +29,7 @@ SIM_TABLE_LIST = (
     "PlayerAction",
     "PlayerActionHitAttribute",
     "UnionAbility",
+    "EnemyParam",
 )
 
 DL9_DB = "../dl9/core/conf.sqlite"

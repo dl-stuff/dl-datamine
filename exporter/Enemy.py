@@ -90,27 +90,27 @@ class EnemyAbility(DBView):
         return res
 
 
-class EnemyList(DBView):
-    def __init__(self, index):
-        super().__init__(index, "EnemyList", labeled_fields=["_Name"])
+# class EnemyList(DBView):
+#     def __init__(self, index):
+#         super().__init__(index, "EnemyList", labeled_fields=["_Name"])
 
-    def process_result(self, res):
-        if "_TribeType" in res and res["_TribeType"]:
-            res["_TribeType"] = TRIBE_TYPES.get(res["_TribeType"], res["_TribeType"])
-        return res
+#     def process_result(self, res):
+#         if "_TribeType" in res and res["_TribeType"]:
+#             res["_TribeType"] = TRIBE_TYPES.get(res["_TribeType"], res["_TribeType"])
+#         return res
 
 
-class EnemyData(DBView):
-    def __init__(self, index):
-        super().__init__(index, "EnemyData")
+# class EnemyData(DBView):
+#     def __init__(self, index):
+#         super().__init__(index, "EnemyData")
 
-    def process_result(self, res):
-        if "_BookId" in res and res["_BookId"]:
-            if (data := self.index["EnemyList"].get(res["_BookId"])) :
-                res["_BookId"] = data
-        if "_ElementalType" in res and res["_ElementalType"]:
-            res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
-        return res
+#     def process_result(self, res):
+#         if "_BookId" in res and res["_BookId"]:
+#             if (data := self.index["EnemyList"].get(res["_BookId"])) :
+#                 res["_BookId"] = data
+#         if "_ElementalType" in res and res["_ElementalType"]:
+#             res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
+#         return res
 
 
 class EnemyActionHitAttribute(DBView):
@@ -187,7 +187,26 @@ class EnemyParam(DBView):
     DO_FULL_ACTIONS = ("AGITO_ABS", "DIABOLOS")
 
     def __init__(self, index):
-        super().__init__(index, "EnemyParam")
+        super().__init__(index, "EnemyParam", override_view=True)
+
+    def open(self):
+        self.name = f"View_{self.base_table}"
+        fields = []
+        for tbl in ("EnemyParam", "EnemyData", "EnemyList"):
+            meta = self.database.check_table(tbl)
+            for fld in meta.field_type.keys():
+                if tbl == "EnemyList" and fld == "_Name":
+                    fields.append(f"TextLabel._Text AS _Name")
+                    fields.append(f"TextLabelJP._Text AS _NameJP")
+                    fields.append(f"TextLabelCN._Text AS _NameCN")
+                elif tbl == "EnemyParam" or fld not in ("_Id",):
+                    fields.append(f"{tbl}.{fld}")
+        fieldstr = ", ".join(fields)
+        self.database.conn.execute(f"DROP VIEW IF EXISTS {self.name}")
+        self.database.conn.execute(
+            f"CREATE VIEW {self.name} AS SELECT {fieldstr} FROM EnemyParam LEFT JOIN EnemyData ON EnemyParam._DataId=EnemyData._Id LEFT JOIN EnemyList ON EnemyData._BookId=EnemyList._Id LEFT JOIN TextLabel ON EnemyList._Name=TextLabel._Id LEFT JOIN TextLabelJP ON EnemyList._Name=TextLabelJP._Id LEFT JOIN TextLabelCN ON EnemyList._Name=TextLabelCN._Id"
+        )
+        self.database.conn.commit()
 
     PARAM_GROUP = re.compile(r"([^\d]+)_\d{2}_\d{2}_E_?\d{2}")
 
@@ -195,7 +214,7 @@ class EnemyParam(DBView):
     def general_param_group(res):
         try:
             param_group = res["_ParamGroupName"]
-            if (match := EnemyParam.PARAM_GROUP.match(param_group)) :
+            if match := EnemyParam.PARAM_GROUP.match(param_group):
                 return match.group(1)
             else:
                 return param_group.split("_", 1)[0]
@@ -203,9 +222,13 @@ class EnemyParam(DBView):
             return "UNKNOWN"
 
     def process_result(self, res, full_actions=False):
-        if "_DataId" in res and res["_DataId"]:
-            if (data := self.index["EnemyData"].get(res["_DataId"])) :
-                res["_DataId"] = data
+        # if "_DataId" in res and res["_DataId"]:
+        #     if data := self.index["EnemyData"].get(res["_DataId"]):
+        #         res["_DataId"] = data
+        if "_TribeType" in res and res["_TribeType"]:
+            res["_TribeType"] = TRIBE_TYPES.get(res["_TribeType"], res["_TribeType"])
+        if "_ElementalType" in res and res["_ElementalType"]:
+            res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
         if full_actions or EnemyParam.general_param_group(res) in EnemyParam.DO_FULL_ACTIONS:
             seen_actsets = set()
             for actset_key in ("_ActionSet", "_ActionSetBoost", "_ActionSetFire", "_ActionSetWater", "_ActionSetWind", "_ActionSetLight", "_ActionSetDark"):
@@ -240,7 +263,7 @@ class EnemyParam(DBView):
     def outfile_name_with_subdir(res, ext=".json", aiscript_dir="./out/_aiscript", enemies_dir="./out/enemies"):
         subdir = EnemyParam.general_param_group(res)
         try:
-            name = res["_DataId"]["_BookId"]["_Name"]
+            name = res["_Name"]
         except KeyError:
             name = "UNNAMED"
         check_target_path(os.path.join(enemies_dir, subdir))
