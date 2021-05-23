@@ -21,7 +21,7 @@ SKILLDETAIL_PATTERN = re.compile(
 
 
 def build_skilldetail_row(root, fn):
-    with open(os.path.join(root, fn), "r") as fp:
+    with open(os.path.join(root, fn), "r", encoding='utf-8') as fp:
         skilldetail = fp.read()
         # :awauuangery:
         res = SKILLDETAIL_FN_PATTERN.match(fn)
