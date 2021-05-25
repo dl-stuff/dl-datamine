@@ -12,7 +12,7 @@ from loader.Actions import CommandType
 SIM_TABLE_LIST = (
     "AbilityCrest",
     "AbilityData",
-    "AbilityLimitedGroup",
+    "ExAbilityData",
     "ActionCondition",
     "ActionGrant",
     "AuraData",
@@ -23,13 +23,11 @@ SIM_TABLE_LIST = (
     "SkillData",
     "WeaponBody",
     "WeaponType",
-    # "TextLabel",
-    # "TextLabelCN",
-    # "TextLabelJP",
     "PlayerAction",
     "PlayerActionHitAttribute",
     "UnionAbility",
     "EnemyParam",
+    "MotionData",
 )
 
 DL9_DB = "../dl9/core/conf.sqlite"
