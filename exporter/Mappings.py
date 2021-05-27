@@ -205,6 +205,7 @@ class AbilityCondition(ShortEnum):
     PARTY_AURA_LEVEL_MORE = 105
     DRAGONSHIFT = 106
     DRAGON_MODE_STRICTLY = 107
+    HITCOUNT_MOMENT_WITH_ACTION = 108
 
 
 class AbilityType(ShortEnum):
@@ -290,6 +291,7 @@ class AbilityType(ShortEnum):
     AutoAvoidProbability = 79
     LimitCriticalAddRate = 80
     AddReborn = 81
+    RunOptionActionRemoteToo = 82
 
 
 class AbilityStat(ShortEnum):
@@ -327,6 +329,16 @@ class PartConditionType(ShortEnum):
     HumanOrDragon = 11
     BulletTagContains = 12
     InitialOwner = 13
+    RenderPartVisibility = 14
+    RESERVE_01 = 15
+    RESERVE_02 = 16
+    RESERVE_03 = 17
+    RESERVE_04 = 18
+    RESERVE_05 = 19
+    RESERVE_06 = 20
+    RESERVE_07 = 21
+    RESERVE_08 = 22
+
 
 
 class PartConditionComparisonType(ShortEnum):
