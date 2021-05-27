@@ -57,10 +57,11 @@ class ActionCondition(DBView):
             self.seen_skills.add(res["_Id"])
             for s in ("_EnhancedSkill1", "_EnhancedSkill2", "_EnhancedSkillWeapon"):
                 if (sid := res.get(s)) not in self.seen_skills:
-                    if (skill := self.index["SkillData"].get(sid)) :
+                    if skill := self.index["SkillData"].get(sid):
                         res[s] = skill
         self.link(res, "_DamageLink", "PlayerActionHitAttribute")
         self.link(res, "_LevelUpId", "ActionCondition")
+        self.link(res, "_GrantSkill", "ActionGrant")
         if reset_seen_skills:
             self.seen_skills = set()
         return res
@@ -283,9 +284,9 @@ class AbilityData(DBView):
             except (KeyError, ValueError):
                 pass
 
-        if (ele := res.get("_ElementalType")) :
+        if ele := res.get("_ElementalType"):
             res["_ElementalType"] = ELEMENTS.get(ele, ele)
-        if (wep := res.get("_WeaponType")) :
+        if wep := res.get("_WeaponType"):
             res["_WeaponType"] = WEAPON_TYPES.get(wep, wep)
         return res
 
@@ -404,6 +405,7 @@ class PlayerActionHitAttribute(DBView):
                 "BuffCountData",
             )
             self.link(r, "_AuraId", "AuraData")
+            self.link(r, "_HpDrainAttribute", "PlayerActionHitAttribute")
             for ks in ("_KillerState1", "_KillerState2", "_KillerState3"):
                 if ks in r and r[ks] in KILLER_STATE:
                     r[ks] = KILLER_STATE[r[ks]]
@@ -529,7 +531,7 @@ class ActionParts(DBView):
                         continue
                     if autofire_id == r.get("_autoFireActionId"):
                         skip_autoFireActionId = True
-                    if (autofire_action := self.index["PlayerAction"].get(autofire_id)) :
+                    if autofire_action := self.index["PlayerAction"].get(autofire_id):
                         autofire_actions.append(autofire_action)
                 if autofire_actions:
                     r["_autoFireActionIdList"] = autofire_actions
@@ -622,9 +624,9 @@ class PlayerAction(DBView):
                 player_action["_EnhancedBurstAttackOffsetFlag"] = offset_flag
             except KeyError:
                 pass
-        if (nextact := player_action.get("_NextAction")) :
+        if nextact := player_action.get("_NextAction"):
             player_action["_NextAction"] = self.get(nextact)
-        if (casting := player_action.get("_CastingAction")) :
+        if casting := player_action.get("_CastingAction"):
             player_action["_CastingAction"] = self.get(casting)
         return player_action
 
@@ -792,6 +794,11 @@ class FortPlantDetail(DBView):
     def process_result(self, res):
         self.link(res, "_NextAssetGroup", "FortPlantDetail")
         return res
+
+
+class AbnormalStatusType(DBView):
+    def __init__(self, index):
+        super().__init__(index, "AbnormalStatusType", labeled_fields=["_AbnormalName"])
 
 
 if __name__ == "__main__":

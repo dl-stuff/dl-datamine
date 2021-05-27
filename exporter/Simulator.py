@@ -6,8 +6,11 @@ from glob import glob
 from tqdm import tqdm
 import shutil
 
-from loader.Database import DBManager, DBTableMetadata
+from loader.Database import DBManager, DBTableMetadata, DBViewIndex
 from loader.Actions import CommandType
+from exporter.Shared import AbnormalStatusType
+
+AbnormalStatusType(DBViewIndex())  # just to create the view bolb
 
 SIM_TABLE_LIST = (
     "AbilityCrest",
@@ -28,6 +31,8 @@ SIM_TABLE_LIST = (
     "UnionAbility",
     "EnemyParam",
     "MotionData",
+    "BuffCountData",
+    "AbnormalStatusType",
 )
 
 DL9_DB = "../dl9/core/conf.sqlite"

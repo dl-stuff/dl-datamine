@@ -339,12 +339,24 @@ def tex_env_img(obj_by_pathid, material, mat_paths, ex_paths, key, image_only=Tr
         return None
 
 
-def merge_YCbCr(y_img, cb_img, cr_img):
+def merge_Alpha(m_img, a_img):
+    if a_img.mode == "RGB" or a_img.getextrema()[3][0] == 255:
+        alpha = a_img.convert("L")
+    else:
+        _, _, _, alpha = a_img.split()
+    m_img.putalpha(alpha)
+
+
+def merge_YCbCr(y_img, cb_img, cr_img, a_img=None):
     # Sometimes MonoBehavior can carry the mapping instead of Material
+    # print(y_img, cb_img, cr_img, a_img)
     _, _, _, Y = y_img.convert("RGBA").split()
     Cb = cb_img.convert("L").resize(y_img.size, Image.ANTIALIAS)
     Cr = cr_img.convert("L").resize(y_img.size, Image.ANTIALIAS)
-    return Image.merge("YCbCr", (Y, Cb, Cr)).convert("RGBA")
+    ycbcr_img = Image.merge("YCbCr", (Y, Cb, Cr)).convert("RGBA")
+    if a_img:
+        merge_Alpha(ycbcr_img, a_img)
+    return ycbcr_img
 
 
 def unpack_Material(obj, dest, ex_paths, obj_by_pathid):
@@ -355,27 +367,21 @@ def unpack_Material(obj, dest, ex_paths, obj_by_pathid):
 
     get_tex = partial(tex_env_img, obj_by_pathid, data, mat_paths, ex_paths)
 
-    m_data = get_tex("_MainTex", image_only=False)
-    if not m_data:
-        return
-    m_img, m_name = m_data.image, m_data.name
-
-    # _MaskAlphaTex is probably always path_id = 0
-    if (a_img := get_tex("_AlphaTex")) or (a_img := get_tex("_MaskAlphaTex")):
-        if a_img.mode == "RGB" or a_img.getextrema()[3][0] == 255:
-            alpha = a_img.convert("L")
-        else:
-            _, _, _, alpha = a_img.split()
-        m_img.putalpha(alpha)
     if (y_img := get_tex("_TexY")) and (cb_img := get_tex("_TexCb")) and (cr_img := get_tex("_TexCr")):
-        save_img(merge_YCbCr(y_img, cb_img, cr_img), os.path.join(dest, f"{m_name}{IMG_EXT}"))
+        save_img(merge_YCbCr(y_img, cb_img, cr_img, a_img=get_tex("_TexA")), os.path.join(dest, f"{data.m_Name}{IMG_EXT}"))
+    else:
+        m_data = get_tex("_MainTex", image_only=False)
+        if not m_data:
+            return
+        m_img, m_name = m_data.image, m_data.name
+        # _MaskAlphaTex is probably always path_id = 0
+        if (a_img := get_tex("_AlphaTex")) or (a_img := get_tex("_MaskAlphaTex")):
+            merge_Alpha(m_img, a_img)
+        save_img(m_img, os.path.join(dest, f"{m_name}{IMG_EXT}"))
+        obj_by_pathid[m_data.path_id] = m_img
 
     # for key, env_img, env_img_name in other_tex_env(data, mat_paths):
     #     save_img(env_img, os.path.join(dest, f"{data.name}{key}.{env_img_name}{IMG_EXT}"))
-
-    save_img(m_img, os.path.join(dest, f"{m_name}{IMG_EXT}"))
-
-    obj_by_pathid[m_data.path_id] = m_img
 
     ex_paths.update(mat_paths)
 
@@ -494,7 +500,7 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
 
 
 def mp_download(target, source, extract, region, dl_dir, overwrite):
-    dl_target = os.path.join(dl_dir, region, target)
+    dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
     check_target_path(dl_target)
 
     if overwrite or not os.path.exists(dl_target):
@@ -617,7 +623,7 @@ class Extractor:
 def cmd_line_extract():
     EX_PATTERNS = {
         "jp": {
-            r"fonts": None,
+            r"^emotion/eventcg": None,
         },
     }
 
