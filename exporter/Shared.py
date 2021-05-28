@@ -276,12 +276,12 @@ class AbilityData(DBView):
             except (KeyError, ValueError):
                 pass
             try:
-                res = ABILITY_TYPES[res[f"_AbilityType{i}"]](self, res, i)
-            except (KeyError, IndexError):
-                pass
-            try:
                 res[f"_AbilityType{i}"] = AbilityType(res[f"_AbilityType{i}"])
             except (KeyError, ValueError):
+                pass
+            try:
+                res = ABILITY_TYPES[res[f"_AbilityType{i}"]](self, res, i)
+            except (KeyError, IndexError):
                 pass
 
         if ele := res.get("_ElementalType"):
@@ -297,76 +297,28 @@ class AbilityData(DBView):
 
 
 ABILITY_TYPES = {
-    1: AbilityData.stat_ability,
-    2: AbilityData.affliction_ability,
-    3: AbilityData.affliction_ability,
-    4: AbilityData.tribe_ability,
-    5: AbilityData.tribe_ability,
-    # 6: AbilityData.generic_description('damage'),
-    # 7: AbilityData.generic_description('critical rate'),
-    # 8: AbilityData.generic_description('recovery potency'),
-    # 9: AbilityData.generic_description('gauge accelerator'),
-    # 10
-    # 11: AbilityData.generic_description('striking haste'),
-    # 12 13
-    14: AbilityData.action_condition,
-    # 15
-    # 16: AbilityData.generic_description('debuff chance'),
-    # 17: AbilityData.generic_description('skill prep'),
-    # 18: AbilityData.generic_description('buff time'),
-    # 19: AbilityData.generic_description('debuff time'),
-    20: AbilityData.affliction_ability,
-    # 21: AbilityData.generic_description('player exp'),
-    # 22: AbilityData.generic_description('adv exp'),
-    # 23: AbilityData.generic_description('rupies'),
-    # 24: AbilityData.generic_description('mana'),
-    25: AbilityData.conditional_action_grant,
-    # 26: AbilityData.generic_description('critical damage'),
-    # 27: AbilityData.generic_description('shapeshift prep'),
-    28: AbilityData.elemental_ability,
-    # 29: AbilityData.generic_description('specific enemy resist'),
-    # 30: AbilityData.generic_description('specific enemy bane'),
-    # 31 32
-    # 33: AbilityData.generic_description('event points'),
-    # 34: AbilityData.generic_description('event drops'),
-    # 35: AbilityData.generic_description('gauge inhibitor'),
-    # 36: AbilityData.generic_description('dragon damage'),
-    # 37: AbilityData.generic_description('enemy ability resist'),
-    38: AbilityData.action_condition,
-    39: AbilityData.action_grant,
-    # 40: AbilityData.generic_description('gauge defense & skill damage'),
-    # 41: AbilityData.generic_description('event points'),
-    # 42: AbilityData.generic_description('level up dragon auto'),
-    43: AbilityData.ability_reference,
-    44: AbilityData.skill_reference,
-    45: AbilityData.action_reference,  # force strikes
-    # 46: AbilityData.generic_description('dragon gauge all team'),
-    # 47 extend afflic time?
-    # 48: AbilityData.generic_description('dragon gauge decrease rate'),
-    # 49: AbilityData.generic_description('dragon gauge self'),
-    # 50 do nothing
-    51: AbilityData.action_condition,
-    # 52: AbilityData.generic_description('buff icon critical rate'),
-    # 53
-    # 54: AbilityData.generic_description('combo damage boost'),
-    # 55: AbilityData.generic_description('combo time'),
-    # 56: AbilityData.generic_description('dragondrive'),
-    57: AbilityData.elemental_ability,
-    # 58: AbilityData.generic_description('dragondrive charge'),
-    # 59: AbilityData.generic_description('debuff time'),
-    # 60: AbilityData.generic_description('stop autofire'),
-    # 61: AbilityData.generic_description('mode change'),
-    62: AbilityData.action_condition,
-    63: AbilityData.action_condition_timer,
-    # 64: AbilityData.generic_description('cp gauge gain'),
-    65: AbilityData.action_reference,  # dodge
-    # 66: AbilityData.generic_description('revive hp'),
-    # 67: AbilityData.generic_description('stamina strength'),
-    68: AbilityData.action_condition,  # enemy
-    # 69: AbilityData.generic_description('cp gauge drain'),
-    # 70: AbilityData.generic_description('cp gauge cost'),
-    71: AbilityData.action_reference,
-    # 72: AbilityData.generic_description('persona element')
+    AbilityType.StatusUp: AbilityData.stat_ability,
+    AbilityType.ResistAbs: AbilityData.affliction_ability,
+    AbilityType.ActAddAbs: AbilityData.affliction_ability,
+    AbilityType.ResistTribe: AbilityData.tribe_ability,
+    AbilityType.ActKillerTribe: AbilityData.tribe_ability,
+    AbilityType.ChangeState: AbilityData.action_condition,
+    AbilityType.AbnormalKiller: AbilityData.affliction_ability,
+    AbilityType.ActionGrant: AbilityData.conditional_action_grant,
+    AbilityType.ResistElement: AbilityData.elemental_ability,
+    AbilityType.HitAttribute: AbilityData.action_condition,
+    AbilityType.PassiveGrant: AbilityData.action_grant,
+    AbilityType.ReferenceOther: AbilityData.ability_reference,
+    AbilityType.EnhancedSkill: AbilityData.skill_reference,
+    AbilityType.EnhancedBurstAttack: AbilityData.action_reference,  # force strikes
+    AbilityType.RandomBuff: AbilityData.action_condition,
+    AbilityType.EnhancedElementDamage: AbilityData.elemental_ability,
+    AbilityType.RandomBuffNoTDuplicate_Param1Times: AbilityData.action_condition,
+    AbilityType.ModifyBuffDebuffDurationTime: AbilityData.action_condition_timer,
+    AbilityType.UniqueAvoid: AbilityData.action_reference,  # dodge
+    AbilityType.ChangeStateHostile: AbilityData.action_condition,  # enemy
+    AbilityType.RunOptionAction: AbilityData.action_reference,
+    AbilityType.RunOptionActionRemoteToo: AbilityData.action_reference,
 }
 
 
@@ -443,7 +395,12 @@ class MotionData(DBView):
     def get_by_state_ref(self, state, ref):
         tbl = self.database.check_table(self.name)
         query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.name=? OR ({self.name}.state=? AND {self.name}.ref=?);"
-        return self.database.query_many(query=query, param=(state, state, ref), d_type=DBDict)
+        if result := self.database.query_many(query=query, param=(state, state, ref), d_type=DBDict):
+            return result
+        query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref IS NULL;"
+        if len(result := self.database.query_many(query=query, param=(state,), d_type=DBDict)) == 1:
+            return result
+        return None
 
 
 class ActionPartsHitLabel(DBView):

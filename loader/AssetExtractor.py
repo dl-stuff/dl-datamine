@@ -345,6 +345,7 @@ def merge_Alpha(m_img, a_img):
     else:
         _, _, _, alpha = a_img.split()
     m_img.putalpha(alpha)
+    return m_img
 
 
 def merge_YCbCr(y_img, cb_img, cr_img, a_img=None):
@@ -392,6 +393,25 @@ def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
         return
     if not data.m_Width or not data.m_Height:
         return
+    if obj.assets_file and len(obj.assets_file.container_) == 2:
+        for other_container, other_ptr in obj.assets_file.container_.items():
+            if other_container != obj.container:
+                other_obj = other_ptr.get_obj()
+                if str(other_obj.type) != "Texture2D":
+                    continue
+                other_data = other_obj.read()
+                if data.name in other_data.name:
+                    img_name = f"{data.name}{IMG_EXT}"
+                    m_img, a_img = data.image, other_data.image
+                elif other_data.name in data.name:
+                    img_name = f"{other_data.name}{IMG_EXT}"
+                    m_img, a_img = other_data.image, data.image
+                else:
+                    continue
+                save_img(merge_Alpha(m_img, a_img), os.path.join(dest, img_name))
+                ex_paths.add(data.path_id)
+                ex_paths.add(other_data.path_id)
+                return
     save_img(data.image, os.path.join(dest, f"{data.name}{IMG_EXT}"))
     ex_paths.add(data.path_id)
 
@@ -441,10 +461,11 @@ def unpack_Sprite(obj, dest, ex_paths, obj_by_pathid):
     obj_by_pathid[data.path_id] = data.name
 
 
-IMAGE_TYPES = ("Texture2D", "Material", "Sprite")
+IMAGE_TYPES = ("Texture2D", "Material", "Sprite", "AssetBundle")
 UNPACK_PRIORITY = {
     "GameObject": 10,
     "Material": 9,
+    # "AssetBundle": 8,
 }
 
 
@@ -575,9 +596,10 @@ class Extractor:
         sorted_downloaded = defaultdict(list)
         for source, ex_target, dl_target in downloaded:
             if source.raw:
-                ex_target = os.path.join(self.ex_dir, ex_target)
-                check_target_path(ex_target, is_dir=True)
-                shutil.copy(dl_target, ex_target)
+                if self.ex_dir:
+                    ex_target = os.path.join(self.ex_dir, ex_target)
+                    check_target_path(ex_target, is_dir=True)
+                    shutil.copy(dl_target, ex_target)
                 continue
             sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
 
@@ -623,7 +645,7 @@ class Extractor:
 def cmd_line_extract():
     EX_PATTERNS = {
         "jp": {
-            r"^emotion/eventcg": None,
+            r"^images/outgame/summon/stage/cutin/character/summon_cutin_c100029_04_r05": None,
         },
     }
 
@@ -637,9 +659,6 @@ def cmd_line_extract():
             else:
                 for region in MANIFESTS.keys():
                     ex.download_and_extract_by_diff(region=region)
-        elif sys.argv[1] == "apk":
-            ex = Extractor(ex_dir="_ex_apk", ex_img_dir="_im_apk", overwrite=False)
-            ex.local_extract("_apk")
         elif sys.argv[1] == "report":
             ex = Extractor()
             ex.report_diff()
@@ -648,7 +667,7 @@ def cmd_line_extract():
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
         # ex_dir="./_ex_sim",
-        ex = Extractor(overwrite=False)
+        ex = Extractor(ex_dir=None, overwrite=False)
         ex.download_and_extract_by_pattern(EX_PATTERNS)
 
 

@@ -275,4 +275,6 @@ class CharaLimitBreak(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = ManaCircle(index)
+    # view = ManaCircle(index)
+    view = CharaData(index)
+    view.export_one_to_folder(pk=10950203)
