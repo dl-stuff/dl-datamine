@@ -147,7 +147,7 @@ class DBManager:
                 for field in tbl.blob_fields:
                     if entry.get(field):
                         entry[field] = json.dumps(entry[field])
-                yield tuple(entry.get(field) for field in tbl.field_type.keys())
+                yield tuple(entry.get(field) for field in tbl.field_type.keys() if field != DBTableMetadata.DBID)
 
     def query_one(self, query, param, d_type):
         cursor = self.conn.cursor()

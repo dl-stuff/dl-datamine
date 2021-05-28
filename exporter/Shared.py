@@ -789,7 +789,7 @@ class FortPlantData(DBView):
 
 class FortPlantDetail(DBView):
     def __init__(self, index):
-        super().__init__(index, "FortPlantDetail", labeled_fields=["_Name", "_Description"])
+        super().__init__(index, "FortPlantDetail")
 
     def process_result(self, res):
         self.link(res, "_NextAssetGroup", "FortPlantDetail")
