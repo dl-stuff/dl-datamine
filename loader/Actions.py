@@ -301,6 +301,8 @@ def build_bullet(meta, ref, seq, data):
         db_data["_abDuration"] = ab_duration
     if ab_interval := data["_arrangeBullet"]["_abHitInterval"]:
         db_data["_abHitInterval"] = ab_interval
+    if ab_collision_flag := data["_arrangeBullet"]["_abUseAccurateCollisionHitInterval"]:
+        db_data["_abUseAccurateCollisionHitInterval"] = ab_collision_flag
     return db_data, hitlabel_data
 
 
@@ -421,6 +423,10 @@ ACTION_PART = DBTableMetadata(
         "_conditionType": DBTableMetadata.INT,
         "_conditionValue": DBTableMetadata.BLOB,
         "_attenuationRate": DBTableMetadata.REAL,
+        "_canBeSameTarget": DBTableMetadata.INT,
+        "_addNum": DBTableMetadata.INT,
+        "_useAccurateCollisionHitInterval": DBTableMetadata.INT,
+        "_abUseAccurateCollisionHitInterval": DBTableMetadata.INT,
         # COLLISION
         "_collision": DBTableMetadata.INT,
         "_collisionPosId": DBTableMetadata.INT,

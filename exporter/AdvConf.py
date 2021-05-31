@@ -1,3 +1,5 @@
+from enum import Enum
+from _apk.useful_enums import PartConditionType
 import sys
 import os
 import pathlib
@@ -224,6 +226,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     clear_once_per_action = action.get("_OnHitExecType") == 1
     hitattrs = []
     once_per_action = set()
+    # accurate_col = 0
+    # accurate_ab_col = 0
     for part in actparts:
         if clear_once_per_action:
             once_per_action.clear()
@@ -257,12 +261,21 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 value = part_hitattr_map[key]
             except KeyError:
                 continue
+            # # heuristic for gala mascula
+            # if key == "_hitAttrLabel" and part.get("_useAccurateCollisionHitInterval"):
+            #     if part.get("_seconds") < accurate_col:
+            #         continue
+            #     accurate_ab_col = part.get("_seconds") + part.get("_collisionHitInterval")
+            # if key == "_abHitAttrLabel" and part.get("_abUseAccurateCollisionHitInterval"):
+            #     if part.get("_seconds") < accurate_ab_col:
+            #         continue
+            #     accurate_ab_col = part.get("_seconds") + part.get("_collisionHitInterval")
             if isinstance(value, list):
                 part_hitattrs.extend(value)
             else:
                 part_hitattrs.append(value)
         is_msl = True
-        if (blt := part.get("_bulletNum", 0)) > 1 and "_hitAttrLabel" in part_hitattr_map and not "extra" in part_hitattr_map["_hitAttrLabel"]:
+        if part["commandType"] != CommandType.MULTI_BULLET and (blt := part.get("_bulletNum", 0)) > 1 and "_hitAttrLabel" in part_hitattr_map and not "extra" in part_hitattr_map["_hitAttrLabel"]:
             for hattr in (
                 part_hitattr_map["_hitAttrLabel"],
                 *part_hitattr_map["_hitAttrLabelSubList"],
@@ -274,8 +287,9 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 else:
                     part_hitattrs.append(blt)
         gen, delay = None, None
+        # part.get("_canBeSameTarget")
         if gen := part.get("_generateNum"):
-            delay = part.get("_generateDelay")
+            delay = part.get("_generateDelay", 0)
             ref_attrs = part_hitattrs
         elif (abd := part.get("_abDuration", 0)) >= (abi := part.get("_abHitInterval", 0)) and "_abHitAttrLabel" in part_hitattr_map:
             # weird rounding shenanigans can occur due to float bullshit
@@ -317,13 +331,17 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             is_msl = False
         gen_attrs = []
         timekey = "msl" if is_msl else "iv"
-        if gen and delay:
+        if gen is not None and delay is not None:
             for gseq in range(1, gen):
                 for attr in ref_attrs:
-                    gattr, _ = clean_hitattr(attr.copy(), once_per_action)
+                    try:
+                        gattr, _ = clean_hitattr(attr.copy(), once_per_action)
+                    except AttributeError:
+                        continue
                     if not gattr:
                         continue
-                    gattr[timekey] = fr(attr.get(timekey, 0) + delay * gseq)
+                    if delay:
+                        gattr[timekey] = fr(attr.get(timekey, 0) + delay * gseq)
                     gen_attrs.append(gattr)
         if part.get("_generateNumDependOnBuffCount"):
             # possible that this can be used with _generateNum
@@ -336,13 +354,15 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 delay = float(delay)
                 for attr in part_hitattrs:
                     if idx == 0:
-                        attr[timekey] = fr(attr.get(timekey, 0) + delay)
+                        if delay:
+                            attr[timekey] = fr(attr.get(timekey, 0) + delay)
                         attr["cond"] = ["var>=", [buffname, idx + 1]]
                     else:
                         gattr, _ = clean_hitattr(attr.copy(), once_per_action)
                         if not gattr:
                             continue
-                        gattr[timekey] = fr(attr.get(timekey, 0) + delay)
+                        if delay:
+                            gattr[timekey] = fr(attr.get(timekey, 0) + delay)
                         gattr["cond"] = ["var>=", [buffname, idx + 1]]
                         gen_attrs.append(gattr)
         part_hitattrs.extend(gen_attrs)
@@ -468,6 +488,11 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
     if attr:
         if ctype := part.get("_conditionType"):
             attr[f"DEBUG_CHECK_PARTCOND"] = str(ctype)
+            if str(ctype) == PartConditionType.OwnerBuffCount.name:
+                actcond = part["_conditionValue"]["_actionCondition"]
+                if actcond:
+                    attr[f"DEBUG_CHECK_PARTCOND"] += f' [{actcond["_Id"]}]{actcond.get("_Text", "")}'
+        # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
         iv = fr(part["_seconds"])
         if iv > 0:
             attr["iv"] = iv

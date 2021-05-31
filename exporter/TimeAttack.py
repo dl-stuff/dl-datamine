@@ -236,13 +236,13 @@ def test_image_diff():
 # 227030105 Co-op Tart
 
 # 227040105 Solo Ciella
-# 227040105 Co-op Ciella
+# 227040106 Co-op Ciella
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    # prepare_icons()
+    prepare_icons()
     # get_timeattack_index()
     # exit()
-    for quest_id in (227010104, 227010105, 227020104, 227020105):
+    for quest_id in (227040105, 227040106):
         timestamp = get_timeattack_data(quest_id)
         # timestamp = 1619683200
         weighted_usage_data(quest_id, timestamp)
