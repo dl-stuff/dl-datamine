@@ -9,6 +9,7 @@ from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target
 from loader.Actions import CommandType
 from exporter.Mappings import (
     AFFLICTION_TYPES,
+    ActionCollision,
     KILLER_STATE,
     TRIBE_TYPES,
     ELEMENTS,
@@ -475,6 +476,16 @@ class ActionParts(DBView):
             try:
                 r["_charaCommand"] = CharacterControl(r["_charaCommand"])
                 r["_charaCommandArgs"] = json.loads(r["_charaCommandArgs"])
+            except (KeyError, ValueError):
+                pass
+
+            try:
+                r["_collision"] = ActionCollision(r["_collision"])
+            except (KeyError, ValueError):
+                pass
+
+            try:
+                r["_collisionPosId"] = ActionCollision(r["_collisionPosId"])
             except (KeyError, ValueError):
                 pass
 

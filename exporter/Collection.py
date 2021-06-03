@@ -609,6 +609,10 @@ def make_manacircle_jsons(out, index):
             clb["Mats"] = get_mats_dict(row, range(1, 6), "_OrbData{}Id" + str(i), "_OrbData{}Num" + str(i))
             if grow := row.get(f"_GrowMaterialNum{i}"):
                 clb["Grow"] = grow
+            if unique := row.get(f"_UniqueGrowMaterial1Num{i}"):
+                clb["Mats"]["Unique1"] = unique
+            if unique := row.get(f"_UniqueGrowMaterial2Num{i}"):
+                clb["Mats"]["Unique2"] = unique
             chara_lb[row["_Id"]][i] = clb
     outfile = "charalimitbreak.json"
     with open(os.path.join(out, outfile), "w") as f:

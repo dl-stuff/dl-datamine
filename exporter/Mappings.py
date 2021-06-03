@@ -340,7 +340,6 @@ class PartConditionType(ShortEnum):
     RESERVE_08 = 22
 
 
-
 class PartConditionComparisonType(ShortEnum):
     Equality = 0
     Inequality = 1
@@ -484,3 +483,64 @@ class CharacterControl(ShortEnum):
     RESERVE_48 = 67
     RESERVE_49 = 68
     RESERVE_50 = 69
+
+
+class ActionCollision(ShortEnum):
+    NONE = 0
+    SPHERE_SINGLEHIT = 1
+    SPHERE = 2
+    FAN = 3
+    LINE = 4
+    OMIT_001 = 5
+    OMIT_002 = 6
+    CROSS = 7
+    OMIT_003 = 8
+    WHOLE = 9
+    DONUT_2D = 10
+    FAN_IGNORE_HEIGHT = 11
+    CIRCLE = 12
+    FAN_HEIGHT = 13
+    LINE_02 = 14
+    BOX_NO_ROT = 15
+    FAN_HEIGHT_02 = 16
+    RESERVE_07 = 17
+    RESERVE_08 = 18
+    RESERVE_09 = 19
+    RESERVE_10 = 20
+
+
+class ActionCollisionPos(ShortEnum):
+    NONE = 0
+    SELF = 1
+    SELF_C = 2
+    TARGET = 3
+    TARGET_C = 4
+    FRONT_R = 5
+    FRONT_CR = 6
+    FRONT_CHR = 7
+    SLOT_ATTACK = 8
+    SLOT_ARM_R = 9
+    SLOT_ARM_L = 10
+    SLOT_TAIL_B = 11
+    SLOT_HEAD = 13
+    SLOT_JAW = 14
+    SELF_GROUND = 15
+    TARGET_GROUND = 16
+    SLOT_HAND_R = 17
+    SLOT_HAND_L = 18
+    MARKER = 19
+    MARKER_U_RANDOM = 20
+    SLOT_WEAPON_R = 21
+    SLOT_WEAPON_L = 22
+    SPECIFY_ID = 23
+    AREA_ANCHOR = 24
+    TARGET_P = 25
+    RESERVE_02 = 26
+    RESERVE_03 = 27
+    RESERVE_04 = 28
+    RESERVE_05 = 29
+    RESERVE_06 = 30
+    RESERVE_07 = 31
+    RESERVE_08 = 32
+    RESERVE_09 = 33
+    RESERVE_10 = 34

@@ -22,7 +22,7 @@ def check_target_path(target):
 
 class ShortEnum(Enum):
     def __str__(self):
-        return self.name
+        return f"{self.value:03}-{self.name}"
 
 
 class DBDict(dict):

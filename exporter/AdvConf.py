@@ -487,8 +487,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
 
     if attr:
         if ctype := part.get("_conditionType"):
-            attr[f"DEBUG_CHECK_PARTCOND"] = str(ctype)
-            if str(ctype) == PartConditionType.OwnerBuffCount.name:
+            attr[f"DEBUG_CHECK_PARTCOND"] = ctype.name
+            if ctype.name == PartConditionType.OwnerBuffCount.name:
                 actcond = part["_conditionValue"]["_actionCondition"]
                 if actcond:
                     attr[f"DEBUG_CHECK_PARTCOND"] += f' [{actcond["_Id"]}]{actcond.get("_Text", "")}'
@@ -1130,7 +1130,7 @@ class SkillProcessHelper:
                     attr["cond"] = ["hp>", fr(ab["_ConditionValue"])]
                 elif condtype in HP_LEQ:
                     attr["cond"] = ["hp<=", fr(ab["_ConditionValue"])]
-                confkey = "attr" if ab.get("_OnSkill") == seq else f"attr_{condtype}"
+                confkey = "attr" if ab.get("_OnSkill") == seq else f"attr_{condtype.name}"
                 try:
                     sconf[confkey].insert(0, attr)
                 except KeyError:
