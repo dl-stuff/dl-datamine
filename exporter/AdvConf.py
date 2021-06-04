@@ -1,5 +1,4 @@
 from enum import Enum
-from _apk.useful_enums import PartConditionType
 import sys
 import os
 import pathlib
@@ -31,6 +30,7 @@ from exporter.Mappings import (
     AbilityType,
     AbilityStat,
     AuraType,
+    PartConditionType,
 )
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
