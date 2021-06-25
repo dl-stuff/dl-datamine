@@ -1936,11 +1936,26 @@ def ab_dpcharge(**kwargs):
         return [f"dpcombo", int(ab.get("_ConditionValue"))]
 
 
+def ab_cc(**kwargs):
+    if upval := kwargs.get("upval"):
+        upval = fr(upval / 100)
+        ab = kwargs.get("ab")
+        cond = ab.get("_ConditionType")
+        condval = ab.get("_ConditionValue")
+        condval2 = ab.get("_ConditionValue2")
+        if cond == AbilityCondition.HITCOUNT_MOMENT_TIMESRATE:
+            return ["critcombo", upval, condval, condval2]
+        res = ["cc", upval]
+        if condstr := ab_cond(ab, kwargs.get("chains")):
+            res.append(condstr)
+        return res
+
+
 ABILITY_CONVERT = {
     AbilityType.StatusUp: ab_stats,
     AbilityType.ActAddAbs: ab_aff_edge,
     AbilityType.ActDamageUp: ab_damage,
-    AbilityType.ActCriticalUp: ab_generic("cc"),
+    AbilityType.ActCriticalUp: ab_cc,
     AbilityType.ActBreakUp: ab_generic("odaccel"),
     AbilityType.AddRecoverySp: ab_generic("spf"),
     AbilityType.AddRecoveryDp: ab_actcond,
@@ -1965,7 +1980,6 @@ SPECIAL = {
     448: ["spu", 0.08],
     1402: ["au", 0.08],
     1776: ["corrosion", 3],
-    400000838: ["critcombo", 10],
     400000858: ["poised_shadowblight-killer_passive", 0.08],
 }
 
