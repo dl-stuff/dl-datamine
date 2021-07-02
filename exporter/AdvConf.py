@@ -1951,6 +1951,14 @@ def ab_cc(**kwargs):
         return res
 
 
+def ab_afftime(**kwargs):
+    if a_id := kwargs.get("var_a"):
+        res = [f"afftime_{a_id}", kwargs.get("upval")]
+        if condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains")):
+            res.append(condstr)
+        return res
+
+
 ABILITY_CONVERT = {
     AbilityType.StatusUp: ab_stats,
     AbilityType.ActAddAbs: ab_aff_edge,
@@ -1975,6 +1983,7 @@ ABILITY_CONVERT = {
     AbilityType.ActRecoveryUp: ab_generic("rcv"),
     AbilityType.EnhancedElementDamage: ab_eledmg,
     AbilityType.DpChargeMyParty: ab_dpcharge,
+    AbilityType.AbnoramlExtension: ab_afftime,
 }
 SPECIAL = {
     448: ["spu", 0.08],
