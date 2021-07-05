@@ -1069,6 +1069,16 @@ class SkillProcessHelper:
                         tsk,
                         skill.get("_Id"),
                     )
+        try:
+            for tbuff in skill["_TransBuff"]["_Parts"]:
+                if not tbuff.get("_allHitLabels"):
+                    continue
+                for hl_list in tbuff["_allHitLabels"].values():
+                    for hitlabel in hl_list:
+                        if (actcond := hitlabel.get("_ActionCondition1")) and actcond.get("_CurseOfEmptinessInvalid"):
+                            sconf["phase_coei"] = True
+        except KeyError:
+            pass
 
         if isinstance((chainskills := skill.get("_ChainGroupId")), list):
             for idx, cs in enumerate(chainskills):
@@ -1953,10 +1963,21 @@ def ab_cc(**kwargs):
 
 def ab_afftime(**kwargs):
     if a_id := kwargs.get("var_a"):
-        res = [f"afftime_{a_id}", kwargs.get("upval")]
+        res = [f"afftime_{a_id}", kwargs.get("upval") / 100]
         if condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains")):
             res.append(condstr)
         return res
+
+
+def ab_crisis(**kwargs):
+    target = kwargs.get("target")
+    if target == AbilityTargetAction.SKILL_ALL:
+        mod = "s"
+    elif target == AbilityTargetAction.BURST_ATTACK:
+        mod = "fs"
+    elif target == AbilityTargetAction.COMBO:
+        mod = "x"
+    return [f"crisis_{mod}", fr(kwargs.get("upval") / 100 - 1)]
 
 
 ABILITY_CONVERT = {
@@ -1984,6 +2005,7 @@ ABILITY_CONVERT = {
     AbilityType.EnhancedElementDamage: ab_eledmg,
     AbilityType.DpChargeMyParty: ab_dpcharge,
     AbilityType.AbnoramlExtension: ab_afftime,
+    AbilityType.CrisisRate: ab_crisis,
 }
 SPECIAL = {
     448: ["spu", 0.08],

@@ -71,7 +71,7 @@ def merge_conf_recurse(simconf, genconf, kind, mapdict, depth):
                     pre, suf = key.split("_")
                 except ValueError:
                     pre, suf = key, None
-                if (gsuf := mapdict.get(suf)) :
+                if gsuf := mapdict.get(suf):
                     gkey = f"{pre}_{gsuf}"
             if gkey in genconf and genconf[gkey] != subconf:
                 merge_subconf(subconf, genconf[gkey], kind)
