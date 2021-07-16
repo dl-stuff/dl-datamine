@@ -39,6 +39,7 @@ KILLER_STATE = {
     **AFFLICTION_TYPES,
     99: "afflicted",
     103: "debuff_def",
+    108: "bleed",
     198: "buffed",
     199: "debuff",
     201: "break",

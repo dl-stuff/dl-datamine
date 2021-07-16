@@ -14,7 +14,7 @@ from ctypes import c_float
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.Actions import CommandType
-from exporter.Shared import ActionCondition, ActionParts, PlayerAction, AbilityData, ActionPartsHitLabel, snakey
+from exporter.Shared import ActionCondition, ActionParts, AuraData, PlayerAction, AbilityData, ActionPartsHitLabel, snakey
 from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
@@ -442,31 +442,9 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
     #     attr["counter"] = counter
     if crit := hitattr.get("_AdditionCritical"):
         attr["crit"] = fr(crit)
-    if (aura_max := hitattr.get("_AuraMaxLimitLevel")) and (aura_data := hitattr.get("_AuraId")):
+    if aura_data := hitattr.get("_AuraId"):
         try:
-            publish_lv = aura_data.get("_PublishLevel")
-            # fr(aura_data.get("_DurationExtension"))
-            # aura_args = [[aura_data["_Id"], *AURA_TYPE_BUFFARGS[aura_data["_Type"]]]]
-            aura_args = [
-                [
-                    aura_data["_Type"].value,
-                    # aura_data["_Id"],
-                    publish_lv,
-                    aura_max,
-                    fr(aura_data.get("_DurationExtension", 0)),
-                    *AURA_TYPE_BUFFARGS[aura_data["_Type"]],
-                ]
-            ]
-            aura_values = []
-            for i in range(1, 7):
-                aura_values.append(
-                    [
-                        fr(aura_data.get(f"_Rate{i:02}")),
-                        aura_data.get(f"_Duration{i:02}"),
-                    ]
-                )
-            aura_args.append(aura_values)
-            attr["amp"] = aura_args
+            attr["amp"] = [str(aura_data["_Id"]), hitattr.get("_AuraMaxLimitLevel", 0), hitattr.get("_AuraTargetType", 0)]
         except KeyError:
             pass
 
@@ -2399,6 +2377,35 @@ class WepConf(WeaponBody, SkillProcessHelper):
         # print('Skipped:', ','.join(skipped))
 
 
+class AuraConf(AuraData):
+    def process_result(self, res):
+        super().process_result(res)
+        aura_values = []
+        for i in range(1, 7):
+            aura_values.append(
+                [
+                    fr(res.get(f"_Rate{i:02}")),
+                    res.get(f"_Duration{i:02}"),
+                ]
+            )
+        return {
+            "publish": res.get("_PublishLevel"),
+            "extend": res.get("_DurationExtension"),
+            "modargs": AURA_TYPE_BUFFARGS[res["_Type"]],
+            "values": aura_values,
+        }
+
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
+        all_res = self.get_all()
+        check_target_path(out_dir)
+        outdata = {}
+        for res in tqdm(all_res, desc="wp"):
+            outdata[str(res["_Id"])] = self.process_result(res)
+        output = os.path.join(out_dir, "amp.json")
+        with open(output, "w", newline="", encoding="utf-8") as fp:
+            fmt_conf(outdata, f=fp)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-a", help="_Name/_SecondName")
@@ -2412,6 +2419,7 @@ if __name__ == "__main__":
     # parser.add_argument('-x', '_UniqueComboId')
     parser.add_argument("-w", help="_Name")
     parser.add_argument("-act", help="_ActionId")
+    parser.add_argument("-aura", help="all")
     args = parser.parse_args()
 
     index = DBViewIndex()
@@ -2489,3 +2497,6 @@ if __name__ == "__main__":
         view = PlayerAction(index)
         action = view.get(int(args.act))
         pprint(hit_sr(action["_Parts"], is_dragon=True))
+    elif args.aura:
+        view = AuraConf(index)
+        view.export_all_to_folder(out_dir=out_dir)
