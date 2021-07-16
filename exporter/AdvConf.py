@@ -144,7 +144,7 @@ def str_to_tuples(value):
     #     key, value = map(int, pair.split("_"))
     #     result[key] = value
     # return result
-    return [tuple(map(int, pair.split('_'))) for pair in value.split('/')]
+    return [tuple(map(int, pair.split("_"))) for pair in value.split("/")]
 
 
 def confsort(a):
@@ -395,7 +395,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             try:
                 attr["killer"] = [fr(hitattr["_KillerStateDamageRate"] - 1), killers]
             except KeyError:
-                attr["killer_hitcount"] = [str_to_tuples(hitattr["_KillerStateDamageRateCurveDependsOnHitCount"]), killers]
+                attr["killer_hitcount"] = [[(hc, fr(mod / 100)) for hc, mod in str_to_tuples(hitattr["_KillerStateDamageRateCurveDependsOnHitCount"])], killers]
         if crisis := hitattr.get("_CrisisLimitRate"):
             attr["crisis"] = fr(crisis - 1)
         if bufc := hitattr.get("_DamageUpRateByBuffCount"):
