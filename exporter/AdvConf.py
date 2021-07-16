@@ -122,11 +122,6 @@ ENHANCED_SKILL = {
     "_EnhancedSkill2": 2,
     "_EnhancedSkillWeapon": 3,
 }
-AURA_TYPE_BUFFARGS = {
-    AuraType.HP: ("maxhp", "buff"),
-    AuraType.ATTACK: ("att", "buff"),
-    AuraType.DEFENSE: ("def", "buff"),
-}
 DUMMY_PART = {"_seconds": 0}
 
 
@@ -2379,7 +2374,6 @@ class WepConf(WeaponBody, SkillProcessHelper):
 
 class AuraConf(AuraData):
     def process_result(self, res):
-        super().process_result(res)
         aura_values = []
         for i in range(1, 7):
             aura_values.append(
@@ -2391,7 +2385,7 @@ class AuraConf(AuraData):
         return {
             "publish": res.get("_PublishLevel"),
             "extend": res.get("_DurationExtension"),
-            "modargs": AURA_TYPE_BUFFARGS[res["_Type"]],
+            "type": res["_Type"],
             "values": aura_values,
         }
 
@@ -2419,7 +2413,7 @@ if __name__ == "__main__":
     # parser.add_argument('-x', '_UniqueComboId')
     parser.add_argument("-w", help="_Name")
     parser.add_argument("-act", help="_ActionId")
-    parser.add_argument("-aura", help="all")
+    parser.add_argument("-amp", help="all")
     args = parser.parse_args()
 
     index = DBViewIndex()
@@ -2497,6 +2491,6 @@ if __name__ == "__main__":
         view = PlayerAction(index)
         action = view.get(int(args.act))
         pprint(hit_sr(action["_Parts"], is_dragon=True))
-    elif args.aura:
+    elif args.amp:
         view = AuraConf(index)
         view.export_all_to_folder(out_dir=out_dir)
