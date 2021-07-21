@@ -1,5 +1,7 @@
-from loader.Database import DBManager
+import os
+from loader.Database import DBManager, check_target_path
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
+from exporter.AdvConf import fmt_conf
 
 COUNT_WEAPON_BONUS = "SELECT _WeaponType, SUM(_WeaponPassiveEffAtk) AS _Bonus FROM WeaponBody GROUP BY _WeaponType"
 
@@ -79,7 +81,31 @@ def count_fort_passives(include_album=True):
     return adv_ele_passives, adv_wep_passives, drg_passives
 
 
+def to_jsonable(passives):
+    jsonable = {"hp": {}, "att": {}}
+    for key, bonus in passives.items():
+        jsonable["hp"][key[1].lower()] = bonus[0]
+        jsonable["att"][key[1].lower()] = bonus[1]
+    return jsonable
+
+
+def write_fort_passives(out_dir):
+    fort_passives = {}
+    for key, album in (("album_true", True), ("album_false", False)):
+        adv_ele_passives, adv_wep_passives, drg_passives = count_fort_passives(include_album=album)
+        fort_passives[key] = {
+            "ele": to_jsonable(adv_ele_passives),
+            "wep": to_jsonable(adv_wep_passives),
+            "drg": to_jsonable(drg_passives),
+        }
+        out_path = os.path.join(out_dir, "fort.json")
+        with open(out_path, "w") as fn:
+            fmt_conf(fort_passives, f=fn)
+
+
 if __name__ == "__main__":
+    write_fort_passives("./out/gen")
+    exit()
     adv_ele_passives, adv_wep_passives, drg_passives = count_fort_passives(include_album=True)
 
     print("===Adventurer Bonus===")
@@ -95,3 +121,5 @@ if __name__ == "__main__":
     for ele, bonus in drg_passives.items():
         hp, atk = bonus
         print(f"{ele[1]}:\t{hp:.1f}% {atk:.1f}%")
+
+    check_target_path("./out")

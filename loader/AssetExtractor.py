@@ -387,15 +387,37 @@ def unpack_Material(obj, dest, ex_paths, obj_by_pathid):
     ex_paths.update(mat_paths)
 
 
+YCBCR_PATTERN = re.compile(r"(.*)_(Y|Cb|Cr)")
+
+
 def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
     data = obj.read()
     if data.path_id in ex_paths:
         return
     if not data.m_Width or not data.m_Height:
         return
-    if obj.assets_file and len(obj.assets_file.container_) == 2:
-        for other_container, other_ptr in obj.assets_file.container_.items():
-            if other_container != obj.container:
+    if obj.assets_file:
+        # try to find ycbcr
+        if (res := YCBCR_PATTERN.match(data.name)) :
+            img_name = res.group(1)
+            found_ycbcr = {res.group(2): data}
+            for other_pathid, other_obj in obj.assets_file.objects.items():
+                if other_pathid in ex_paths or str(other_obj.type) != "Texture2D":
+                    continue
+                other_data = other_obj.read()
+                if (res := YCBCR_PATTERN.match(other_data.name)) and res.group(1) == img_name and res.group(2) not in found_ycbcr:
+                    found_ycbcr[res.group(2)] = other_data
+                if len(found_ycbcr) == 3:
+                    img_name = f"{img_name}{IMG_EXT}"
+                    save_img(merge_YCbCr(found_ycbcr["Y"].image, found_ycbcr["Cb"].image, found_ycbcr["Cr"].image), os.path.join(dest, img_name))
+                    for ycbcr_data in found_ycbcr.values():
+                        ex_paths.add(ycbcr_data.path_id)
+                    return
+        if len(obj.assets_file.container_) == 2:
+            # try to find alpha
+            for other_container, other_ptr in obj.assets_file.container_.items():
+                if other_container == obj.container:
+                    continue
                 other_obj = other_ptr.get_obj()
                 if str(other_obj.type) != "Texture2D":
                     continue
@@ -484,6 +506,7 @@ UNPACK = {
     "Sprite": unpack_Sprite,
     "Material": unpack_Material,
     # "AssetBundle": unpack_TypeTree,
+    # "MonoScript": unpack_TypeTree,
 }
 
 
@@ -499,6 +522,8 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
             # print(obj.type, obj.read().name, obj.read().path_id)
             if UNPACK.get(str(obj.type)):
                 obj_by_pathid[obj.read().path_id] = obj
+            # else:
+            #     print(obj.type, obj.read().name, obj.read().path_id)
 
     ex_dest = None if ex_dir is None else os.path.join(ex_dir, ex_target)
     img_dest = None if ex_img_dir is None else os.path.join(ex_img_dir, ex_target)
@@ -645,7 +670,7 @@ class Extractor:
 def cmd_line_extract():
     EX_PATTERNS = {
         "jp": {
-            r"^images/outgame/summon/stage/cutin/character/summon_cutin_c100029_04_r05": None,
+            r"^emotion/story/chara/110334_02": None,
         },
     }
 
@@ -668,6 +693,7 @@ def cmd_line_extract():
     else:
         # ex_dir="./_ex_sim",
         ex = Extractor(ex_dir=None, overwrite=False)
+        ex.ex_dir = ex.ex_img_dir
         ex.download_and_extract_by_pattern(EX_PATTERNS)
 
 
