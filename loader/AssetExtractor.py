@@ -349,7 +349,7 @@ def merge_Alpha(m_img, a_img):
 
 
 def merge_YCbCr(y_img, cb_img, cr_img, a_img=None):
-    # Sometimes MonoBehavior can carry the mapping instead of Material
+    # Sometimes MonoBehaviour can carry the mapping instead of Material
     # print(y_img, cb_img, cr_img, a_img)
     _, _, _, Y = y_img.convert("RGBA").split()
     Cb = cb_img.convert("L").resize(y_img.size, Image.ANTIALIAS)
