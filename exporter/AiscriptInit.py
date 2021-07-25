@@ -78,6 +78,7 @@ class Target(Enum):
     PLAYER2_TARGET_SUB_HOST = 53
     PLAYER3_TARGET_SUB_HOST = 54
     PLAYER4_TARGET_SUB_HOST = 55
+    HOSTILE_DEAD_ALIVE_01 = 56
 
 
 class Order(Enum):

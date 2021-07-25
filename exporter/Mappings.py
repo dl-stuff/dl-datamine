@@ -208,6 +208,9 @@ class AbilityCondition(ShortEnum):
     DRAGON_MODE_STRICTLY = 107
     HITCOUNT_MOMENT_WITH_ACTION = 108
     ACTIVATE_SKILL = 109
+    SELF_AURA_MOMENT = 110
+    PARTY_AURA_MOMENT = 111
+    BUFFFIELD_COUNT = 112
 
 
 class AbilityType(ShortEnum):
@@ -333,7 +336,7 @@ class PartConditionType(ShortEnum):
     InitialOwner = 13
     RenderPartVisibility = 14
     TargetIdContains = 15
-    RESERVE_02 = 16
+    AuraLevel = 16
     RESERVE_03 = 17
     RESERVE_04 = 18
     RESERVE_05 = 19
