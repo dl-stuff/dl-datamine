@@ -1,7 +1,11 @@
 import os
-from loader.Database import DBManager, check_target_path
+from loader.Database import DBManager, DBViewIndex, check_target_path
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 from exporter.AdvConf import fmt_conf
+from exporter.Shared import FortPlantData
+
+# hax
+FortPlantData(DBViewIndex())
 
 COUNT_WEAPON_BONUS = "SELECT _WeaponType, SUM(_WeaponPassiveEffAtk) AS _Bonus FROM WeaponBody GROUP BY _WeaponType"
 
