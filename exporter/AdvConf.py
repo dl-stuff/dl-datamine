@@ -615,6 +615,9 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                     if drain := actcond.get("_RateHpDrain"):
                         # FIXME: distinction between self vs team?
                         buffs.append(["drain", fr(drain), duration])
+                    for k, aff in AFFRES_KEY.items():
+                        if value := actcond.get(f"{k}Add"):
+                            buffs.append(["affup", fr(value), duration, aff])
                     for k, mod in BUFFARG_KEY.items():
                         if value := actcond.get(k):
                             if (bele := actcond.get("_TargetElemental")) and btype != "self":
