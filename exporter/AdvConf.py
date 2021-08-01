@@ -661,7 +661,7 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                 # if any(actcond.get(k) for k in AdvConf.OVERWRITE):
                 #     buffs.append('-refresh')
                 if actcond.get("_OverwriteGroupId"):
-                    buffs.append(f'-overwrite_{actcond.get("_OverwriteGroupId")}')
+                    buffs.append(f'-overwrite_{target.name}{actcond.get("_OverwriteGroupId")}')
                 elif actcond.get("_Overwrite") or actcond.get("_OverwriteIdenticalOwner") or is_duration_num:
                     buffs.append("-refresh")
                 attr["buff"] = buffs
