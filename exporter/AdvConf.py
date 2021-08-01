@@ -493,6 +493,13 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         return None
 
 
+TARGET_OVERWRITE_KEY = {
+    ActionTargetGroup.MYSELF: "MYSELF",
+    ActionTargetGroup.MYPARTY: "MYSELF",
+    ActionTargetGroup.ALLY: "MYSELF",
+}
+
+
 def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_ab=False):
     if actcond.get("_EfficacyType") == DISPEL and (rate := actcond.get("_Rate", 0)):
         attr["dispel"] = rate
@@ -661,7 +668,8 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                 # if any(actcond.get(k) for k in AdvConf.OVERWRITE):
                 #     buffs.append('-refresh')
                 if actcond.get("_OverwriteGroupId"):
-                    buffs.append(f'-overwrite_{target.name}{actcond.get("_OverwriteGroupId")}')
+                    target_name = TARGET_OVERWRITE_KEY.get(target, target.name)
+                    buffs.append(f'-overwrite_{target_name}{actcond.get("_OverwriteGroupId")}')
                 elif actcond.get("_Overwrite") or actcond.get("_OverwriteIdenticalOwner") or is_duration_num:
                     buffs.append("-refresh")
                 attr["buff"] = buffs
