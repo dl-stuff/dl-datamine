@@ -189,6 +189,7 @@ class EnemyParam(DBView):
         15: 14,
     }
     DO_FULL_ACTIONS = ("AGITO_ABS", "DIABOLOS")
+    ACTION_SETS = ("_ActionSet", "_ActionSetBoost", "_ActionSetFire", "_ActionSetWater", "_ActionSetWind", "_ActionSetLight", "_ActionSetDark")
 
     def __init__(self, index):
         super().__init__(index, "EnemyParam", override_view=True)
@@ -235,7 +236,7 @@ class EnemyParam(DBView):
             res["_ElementalType"] = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"])
         if full_actions or EnemyParam.general_param_group(res) in EnemyParam.DO_FULL_ACTIONS:
             seen_actsets = set()
-            for actset_key in ("_ActionSet", "_ActionSetBoost", "_ActionSetFire", "_ActionSetWater", "_ActionSetWind", "_ActionSetLight", "_ActionSetDark"):
+            for actset_key in EnemyParam.ACTION_SETS:
                 if not (actset_id := res.get(actset_key)) or actset_id in seen_actsets:
                     continue
                 seen_actsets.add(actset_id)

@@ -6,36 +6,51 @@ from exporter.Enemy import EnemyParam
 from exporter.Shared import snakey
 
 
-def export_corrosion_data():
+def find_enemy_actionset_data(output_name, check_condition, res_where=None):
     index = DBViewIndex()
     view = EnemyParam(index)
-    all_corrosion_data = {}
-    all_res = view.get_all(where="_ParamGroupName LIKE 'DIABOLOS_%'")
+    all_data = {}
+    all_res = view.get_all(where=res_where)
     for res in tqdm(all_res, desc="enemies"):
         res = view.process_result(res)
-        action_set = res["_ActionSet"]
-        corrosion_data = {}
-        for key, value in action_set.items():
-            if not isinstance(value, dict):
+        sub_data = {}
+        for as_key in EnemyParam.ACTION_SETS:
+            if not (action_set := res.get(as_key)):
                 continue
-            if not isinstance((action_group := value.get("_ActionGroupName")), dict):
-                continue
-            is_corrosion = False
-            for hitattr in action_group.values():
-                if not isinstance(hitattr, dict) or not (act_cond := hitattr.get("_ActionCondition")):
+            if isinstance(action_set, int):
+                if not (action_set := index["EnemyActionSet"].get(as_key)):
                     continue
-                if act_cond.get("_UniqueIcon") == 96:
-                    is_corrosion = True
-            if is_corrosion:
-                corrosion_data[key] = value
-        if corrosion_data:
+            for key, value in action_set.items():
+                if not isinstance(value, dict):
+                    continue
+                if not isinstance((action_group := value.get("_ActionGroupName")), dict):
+                    continue
+                is_data = False
+                for hitattr in action_group.values():
+                    if not isinstance(hitattr, dict) or not (act_cond := hitattr.get("_ActionCondition")):
+                        continue
+                    if check_condition(act_cond):
+                        is_data = True
+                if is_data:
+                    sub_data[f"{as_key}{key}"] = value
+        if sub_data:
             key = snakey(f'{res.get("_ParamGroupName", "UNKNOWN")}_{res.get("_Name")}')
-            all_corrosion_data[key] = corrosion_data
-    with open("corrosion.json", "w") as fn:
-        json.dump(all_corrosion_data, fn, indent=2, ensure_ascii=False)
+            all_data[key] = sub_data
+    with open(f"{output_name}.json", "w") as fn:
+        json.dump(all_data, fn, indent=2, ensure_ascii=False)
+
+
+def export_nihility_data():
+    find_enemy_actionset_data("nihility", lambda act_cond: act_cond.get("_CurseOfEmptiness"))
+
+
+def export_corrosion_data():
+    # res_where="_ParamGroupName LIKE 'DIABOLOS_%'"
+    find_enemy_actionset_data("corrosion", lambda act_cond: act_cond.get("_UniqueIcon") == 96)
 
 
 if __name__ == "__main__":
+    export_nihility_data()
     export_corrosion_data()
 
 # "_Id": 1602,
