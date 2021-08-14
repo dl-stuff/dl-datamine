@@ -115,6 +115,13 @@ AFFRES_KEY = {
     "_RateDarkAbs": "shadowblight",
     "_RateDestroyFire": "scorchrend",
 }
+ELERES_KEY = {
+    "_RateFire": "flame_resist",
+    "_RateWater": "water_resist",
+    "_RateWind": "wind_resist",
+    "_RateLight": "light_resist",
+    "_RateDark": "shadow_resist",
+}
 TENSION_KEY = {"_Tension": "energy", "_Inspiration": "inspiration"}
 # OVERWRITE = ('_Overwrite', '_OverwriteVoice', '_OverwriteGroupId')
 ENHANCED_SKILL = {
@@ -616,6 +623,9 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                     for k, aff in AFFRES_KEY.items():
                         if value := actcond.get(k):
                             buffs.append(["affres", fr(value), duration, aff])
+                    for k, eleres in ELERES_KEY.items():
+                        if value := actcond.get(k):
+                            buffs.append(["self", -fr(value), duration, eleres, "down"])
                 else:
                     if addatk := actcond.get("_AdditionAttack"):
                         buffs.append(["echo", fr(addatk["_DamageAdjustment"]), duration])
@@ -1689,6 +1699,8 @@ def ab_damage(**kwargs):
                     res = ["k_debuff_def", upval / 100]
                 elif condval == 21:
                     res = ["k_debuff", upval / 100]
+                elif condval == 2:
+                    res = ["k_debuff_att", upval / 100]
         condstr = ab_cond(kwargs.get("ab"), kwargs.get("chains"))
         if res:
             if condstr:
