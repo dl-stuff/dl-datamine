@@ -1700,7 +1700,7 @@ def ab_damage(**kwargs):
                 elif condval == 21:
                     res = ["k_debuff", upval / 100]
                 elif condval == 2:
-                    res = ["k_debuff_att", upval / 100]
+                    res = ["k_debuff_attack", upval / 100]
         condstr = ab_cond(kwargs.get("ab"), kwargs.get("chains"))
         if res:
             if condstr:
