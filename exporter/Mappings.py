@@ -211,6 +211,9 @@ class AbilityCondition(ShortEnum):
     SELF_AURA_MOMENT = 110
     PARTY_AURA_MOMENT = 111
     BUFFFIELD_COUNT = 112
+    PARTY_AURA_LEVEL_MORE_REACTION_TIME = 113
+    NEAREST_ENEMY_DISTANCE = 114
+    CHARA_MODE = 115
 
 
 class AbilityType(ShortEnum):
@@ -297,6 +300,7 @@ class AbilityType(ShortEnum):
     LimitCriticalAddRate = 80
     AddReborn = 81
     RunOptionActionRemoteToo = 82
+    ConsumeUtpToRecoverHp = 83
 
 
 class AbilityStat(ShortEnum):
@@ -317,6 +321,7 @@ class AbilityStat(ShortEnum):
     FinalDragonTimeRate = 14
     Utpr = 15
     DamageCutB = 16
+    MoveSpeedRateB = 17
 
 
 class PartConditionType(ShortEnum):
