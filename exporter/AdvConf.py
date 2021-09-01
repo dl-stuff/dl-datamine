@@ -482,8 +482,10 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr[f"DEBUG_CHECK_PARTCOND"] = ctype.name
             if ctype.name == PartConditionType.OwnerBuffCount.name:
                 actcond = part["_conditionValue"]["_actionCondition"]
+                compare = part["_conditionValue"]["_compare"].name
+                count = part["_conditionValue"]["_count"]
                 if actcond:
-                    attr[f"DEBUG_CHECK_PARTCOND"] += f' [{actcond["_Id"]}]{actcond.get("_Text", "")}'
+                    attr[f"DEBUG_CHECK_PARTCOND"] += f' [{actcond["_Id"]}]{actcond.get("_Text", "")} {compare} {count}'
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
         iv = fr(part["_seconds"])
         if iv > 0:
@@ -833,23 +835,29 @@ def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=Fals
     return xconf
 
 
-def convert_fs(burst, marker=None, cancel=None):
+def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
     startup, recovery, followed_by = hit_sr(burst["_Parts"])
     fsconf = {}
+    if is_dragon:
+        hitattr_pattern = re.compile(r"S\d{3}.*$")
+        key = "dfs"
+    else:
+        hitattr_pattern = re.compile(r".*_LV02$")
+        key = "fs"
     if not isinstance(marker, dict):
-        fsconf["fs"] = hit_attr_adj(
+        fsconf[key] = hit_attr_adj(
             burst,
             startup,
             {"startup": startup, "recovery": recovery},
-            re.compile(r".*_LV02$"),
+            hitattr_pattern,
         )
     else:
         for mpart in marker["_Parts"]:
             if mpart["commandType"] == CommandType.GEN_MARKER:
                 break
         charge = mpart.get("_chargeSec", 0.5)
-        fsconf["fs"] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
-        if clv := mpart.get("_chargeLvSec"):
+        fsconf[key] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
+        if not is_dragon and (clv := mpart.get("_chargeLvSec")):
             clv = list(map(float, [charge] + json.loads(clv)))
             totalc = 0
             for idx, c in enumerate(clv):
@@ -877,19 +885,19 @@ def convert_fs(burst, marker=None, cancel=None):
                 fsconf["fs"] = fsconf["fs1"]
                 del fsconf["fs1"]
         else:
-            fsconf["fs"] = hit_attr_adj(
+            fsconf[key] = hit_attr_adj(
                 burst,
                 startup,
-                fsconf["fs"],
-                re.compile(r".*_LV02$"),
+                fsconf[key],
+                hitattr_pattern,
                 skip_nohitattr=False,
             )
-            if fsconf["fs"]:
+            if fsconf[key]:
                 (
-                    fsconf["fs"]["interrupt"],
-                    fsconf["fs"]["cancel"],
+                    fsconf[key]["interrupt"],
+                    fsconf[key]["cancel"],
                 ) = convert_following_actions(startup, followed_by, ("s",))
-    if cancel is not None:
+    if not is_dragon and cancel is not None:
         fsconf["fsf"] = {
             "charge": fr(0.1 + cancel["_Parts"][0]["_duration"]),
             "startup": 0.0,
@@ -1924,12 +1932,13 @@ def ab_tribe_k(**kwargs):
 
 def ab_aff_res(**kwargs):
     if a_id := kwargs.get("var_a"):
+        ab = kwargs.get("ab")
         aff = a_id
-        if aff == 99:
-            res = ["affshield", kwargs.get("ab").get("_OccurenceNum")]
+        if aff == "all" and (count := ab.get("_OccurenceNum")):
+            res = ["affshield", count]
         else:
             res = [f"affres_{aff}", kwargs.get("upval")]
-        if condstr := ab_cond(kwargs.get("ab"), kwargs.get("chains")):
+        if condstr := ab_cond(ab, kwargs.get("chains")):
             res.append(condstr)
         return res
 
@@ -2265,6 +2274,9 @@ class DrgConf(DragonData, SkillProcessHelper):
                         conf[act]["attr"] = hitattrs
                     except KeyError:
                         conf[act] = {"attr": hitattrs}
+
+        if burst := res.get("_BurstAttack"):
+            conf.update(convert_fs(burst, burst.get("_BurstMarkerId"), is_dragon=True))
 
         if "dodgeb" in conf:
             if "dodge" not in conf or conf["dodge"]["recovery"] > conf["dodgeb"]["recovery"]:

@@ -7,7 +7,7 @@ from exporter.Shared import AbilityData, SkillData, PlayerAction, snakey
 
 
 class DragonData(DBView):
-    ACTIONS = ["_AvoidActionFront", "_AvoidActionBack", "_Transform"]
+    ACTIONS = ["_AvoidActionFront", "_AvoidActionBack", "_Transform", "_BurstAttack"]
 
     def __init__(self, index):
         super().__init__(
@@ -37,9 +37,13 @@ class DragonData(DBView):
         for act in self.ACTIONS:
             if act in res:
                 res[act] = self.index["PlayerAction"].get(res[act])
-        if "_DefaultSkill" in res and res["_DefaultSkill"]:
+        if res.get("_DefaultSkill"):
             base_action_id = res["_DefaultSkill"]
             res["_DefaultSkill"] = [self.index["PlayerAction"].get(base_action_id + i) for i in range(0, res["_ComboMax"])]
+        if (burst := res.get("_BurstAttack")) and not burst.get("_BurstMarkerId"):
+            # dum
+            if marker := self.index["PlayerAction"].get(burst["_Id"] + 4):
+                burst["_BurstMarkerId"] = marker
         self.index["ActionParts"].animation_reference = None
         return res
 
@@ -83,4 +87,4 @@ class DragonData(DBView):
 if __name__ == "__main__":
     index = DBViewIndex()
     view = DragonData(index)
-    view.export_all_to_folder()
+    view.export_one_to_folder(20050319, out_dir="./out/dragons")

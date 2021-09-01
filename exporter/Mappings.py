@@ -33,6 +33,7 @@ AFFLICTION_TYPES = {
     13: "stormlash",
     14: "shadowblight",
     15: "scorchrend",
+    99: "all",
 }
 
 KILLER_STATE = {
