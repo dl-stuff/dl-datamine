@@ -2122,7 +2122,8 @@ class WpConf(AbilityCrest):
         "a": [["res_hdt", 0.25]],
     }
     SKIP_AB = (AbilityType.ResistAbs,)
-    SKIP_BOON = (0, 7, 8, 9, 10)
+    # 7(burn) and 13(poison) have self inflictions, do not skip
+    SKIP_BOON = (0, 8, 9, 10, 13, 14, 15, 16)
 
     def __init__(self, index):
         super().__init__(index)
