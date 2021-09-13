@@ -359,7 +359,12 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             buffcond = part["_buffCountConditionId"]
             buffname = snakey(buffcond["_Text"]).lower()
             gen = buffcond["_MaxDuplicatedCount"]
-            for idx, delay in enumerate(map(float, json.loads(part["_bulletDelayTime"]))):
+            try:
+                bullet_timing = map(float, json.loads(part["_bulletDelayTime"]))
+            except KeyError:
+                bullet_timing = (0,) * gen
+
+            for idx, delay in enumerate(bullet_timing):
                 if idx >= gen:
                     break
                 delay = float(delay)
