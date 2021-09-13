@@ -360,7 +360,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             buffname = snakey(buffcond["_Text"]).lower()
             gen = buffcond["_MaxDuplicatedCount"]
             try:
-                bullet_timing = map(float, json.loads(part["_bulletDelayTime"]))
+                bullet_timing = map(float, json.loads(part["_markerDelay"]))
             except KeyError:
                 bullet_timing = (0,) * gen
 
@@ -582,7 +582,7 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                         ActionTargetGroup.ALLY,
                         ActionTargetGroup.MYPARTY,
                     ):
-                        if part.get("_collisionParams_01", 0) > 0:
+                        if target == ActionTargetGroup.ALLY and part.get("_collisionParams_01", 0) > 0:
                             buffs.append([btype, v, "nearby"])
                         else:
                             buffs.append([btype, v, "team"])
@@ -603,7 +603,7 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                         ActionTargetGroup.ALLY,
                         ActionTargetGroup.MYPARTY,
                     ):
-                        if part.get("_collisionParams_01", 0) > 0:
+                        if target == ActionTargetGroup.ALLY and part.get("_collisionParams_01", 0) > 0:
                             btype = "nearby"
                         else:
                             btype = "team"
