@@ -292,13 +292,13 @@ class EnemyParam(DBView):
         aiscript_dir = os.path.join(out_dir, "_aiscript")
         out_dir = os.path.join(out_dir, "enemies")
         aiscript_init_link = os.path.join(out_dir, "__init__.py")
+        all_res = self.get_all()
+        check_target_path(out_dir)
         try:
             os.link(AISCRIPT_INIT_PATH, aiscript_init_link)
         except FileExistsError:
             os.remove(aiscript_init_link)
             os.link(AISCRIPT_INIT_PATH, aiscript_init_link)
-        all_res = self.get_all()
-        check_target_path(out_dir)
         misc_data = defaultdict(list)
         for res in tqdm(all_res, desc="enemies"):
             res = self.process_result(res)
