@@ -46,13 +46,20 @@ LABEL_PATTERNS = {
 
 
 def extract_story_function_json(ex):
-    ex.download_and_extract_by_pattern({"jp": {r"^story/function": None}})
-    ex_path = os.path.join(ex.ex_dir, "jp", "story", "function.json")
-    with open(ex_path) as func:
-        data = json.load(func)["functions"][0]["variables"]
+    filenames = ("function", "function_namelist_notedit")
+    storynames = {}
+    ex.download_and_extract_by_pattern({"jp": {f"^story/{fn}": None for fn in filenames}})
+    for fn in filenames:
+        ex_path = os.path.join(ex.ex_dir, "jp", "story", f"{fn}.json")
+        with open(ex_path) as func:
+            data = json.load(func)["functions"][0]["variables"]
+        for k, v in zip(data["entriesKey"], data["entriesValue"]):
+            if not k:
+                continue
+            storynames[k] = v
     with open("./out/_storynames.json", "w") as out:
         json.dump(
-            {k: v for k, v in zip(data["entriesKey"], data["entriesValue"])},
+            storynames,
             out,
             indent=4,
             ensure_ascii=False,
