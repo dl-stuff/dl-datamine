@@ -311,11 +311,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             except KeyError:
                 part_hitattr_map["_abHitAttrLabel"]["msl"] = fr(abi)
             ref_attrs = [part_hitattr_map["_abHitAttrLabel"]]
-        elif (
-            (bci := part.get("_collisionHitInterval", 0))
-            and ((bld := part.get("_bulletDuration", 0)) > bci or (bld := part.get("_duration", 0)) > bci)
-            and ("_hitLabel" in part_hitattr_map or "_hitAttrLabel" in part_hitattr_map)
-        ):
+        elif (bci := part.get("_collisionHitInterval", 0)) and ((bld := part.get("_bulletDuration", 0)) > bci or (bld := part.get("_duration", 0)) > bci) and ("_hitLabel" in part_hitattr_map or "_hitAttrLabel" in part_hitattr_map):
             gen = int(bld / bci)
             delay = bci
             ref_attrs = []
@@ -502,6 +498,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                 attr["msl_spd"] = 1
         # if attr_tag:
         #     attr['tag'] = attr_tag
+        if from_ab:
+            attr["ab"] = 1
         return attr
     else:
         return None
@@ -582,7 +580,7 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                         ActionTargetGroup.ALLY,
                         ActionTargetGroup.MYPARTY,
                     ):
-                        if target == ActionTargetGroup.ALLY and part.get("_collisionParams_01", 0) > 0:
+                        if part.get("_collisionParams_01", 0) > 1:
                             buffs.append([btype, v, "nearby"])
                         else:
                             buffs.append([btype, v, "team"])
@@ -603,7 +601,7 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                         ActionTargetGroup.ALLY,
                         ActionTargetGroup.MYPARTY,
                     ):
-                        if target == ActionTargetGroup.ALLY and part.get("_collisionParams_01", 0) > 0:
+                        if part.get("_collisionParams_01", 0) > 1:
                             btype = "nearby"
                         else:
                             btype = "team"

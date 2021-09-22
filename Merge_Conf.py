@@ -26,7 +26,7 @@ def get_gitdiff():
 
 def merge_attrs(simattr, genattr):
     for sattr, gattr in zip(simattr, genattr):
-        if not isinstance(sattr, dict):
+        if not isinstance(sattr, dict) or not isinstance(gattr, dict):
             continue
         sattr.update(gattr)
     if len(genattr) > len(simattr):
