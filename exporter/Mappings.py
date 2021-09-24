@@ -215,6 +215,8 @@ class AbilityCondition(ShortEnum):
     PARTY_AURA_LEVEL_MORE_REACTION_TIME = 113
     NEAREST_ENEMY_DISTANCE = 114
     CHARA_MODE = 115
+    ON_REMOVE_ABNORMAL_STATUS = 116
+    SUBSTITUDE_DAMAGE = 117
 
 
 class AbilityType(ShortEnum):
@@ -302,6 +304,23 @@ class AbilityType(ShortEnum):
     AddReborn = 81
     RunOptionActionRemoteToo = 82
     ConsumeUtpToRecoverHp = 83
+    DpGaugeCap = 84
+    AbnormalTypeNumKiller = 85
+    RegisterKeepComboAction = 86
+    Reserve_087 = 87
+    Reserve_088 = 88
+    Reserve_089 = 89
+    Reserve_090 = 90
+    Reserve_091 = 91
+    Reserve_092 = 92
+    Reserve_093 = 93
+    Reserve_094 = 94
+    Reserve_095 = 95
+    Reserve_096 = 96
+    Reserve_097 = 97
+    Reserve_098 = 98
+    Reserve_099 = 99
+    Reserve_100 = 100
 
 
 class AbilityStat(ShortEnum):
@@ -323,6 +342,7 @@ class AbilityStat(ShortEnum):
     Utpr = 15
     DamageCutB = 16
     MoveSpeedRateB = 17
+    NeedDpRate = 18
 
 
 class PartConditionType(ShortEnum):
@@ -343,8 +363,8 @@ class PartConditionType(ShortEnum):
     RenderPartVisibility = 14
     TargetIdContains = 15
     AuraLevel = 16
-    RESERVE_03 = 17
-    RESERVE_04 = 18
+    AllyHpRateLowest = 17
+    CharaMode = 18
     RESERVE_05 = 19
     RESERVE_06 = 20
     RESERVE_07 = 21
@@ -366,6 +386,7 @@ class ActionCancelType(ShortEnum):
     Avoid = 2
     AvoidFront = 3
     AvoidBack = 4
+    AnyCombo = 5
 
 
 class AuraType(ShortEnum):
@@ -373,6 +394,7 @@ class AuraType(ShortEnum):
     HP = 1
     ATTACK = 2
     DEFENSE = 3
+    CRITICAL = 4
 
 
 class ActionSignalType(ShortEnum):
