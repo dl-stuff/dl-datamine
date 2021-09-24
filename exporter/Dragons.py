@@ -27,13 +27,18 @@ class DragonData(DBView):
                 res[s] = self.index["SkillData"].get(res[s], full_abilities=full_abilities)
             except:
                 pass
-        inner = (1, 2, 3, 4, 5) if full_abilities else (5,)
+        if full_abilities:
+            inner = (1, 2, 3, 4, 5, 6)
+        elif res.get("_MaxLimitBreakCount") == 5:
+            inner = (6,)
+        else:
+            inner = (5,)
         outer = (1, 2)
         for i in outer:
             for j in inner:
                 k = f"_Abilities{i}{j}"
-                if k in res and res[k]:
-                    res[k] = self.index["AbilityData"].get(res[k], full_query=True)
+                if ab_id := res.get(k):
+                    res[k] = self.index["AbilityData"].get(ab_id, full_query=True)
         for act in self.ACTIONS:
             if act in res:
                 res[act] = self.index["PlayerAction"].get(res[act])

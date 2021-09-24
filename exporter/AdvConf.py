@@ -1370,7 +1370,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     #     continue
                 if not mode_name:
                     try:
-                        mode_name = snakey(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
+                        mode_name = "_" + snakey(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
                     except:
                         if res.get("_ModeChangeType") == 3 and m == 2:
                             mode_name = "_ddrive"
@@ -2237,9 +2237,19 @@ class DrgConf(DragonData, SkillProcessHelper):
     def process_result(self, res):
         super().process_result(res)
 
+        max_lb = res.get("_MaxLimitBreakCount", 4)
+        att = res["_MaxAtk"]
+        hp = res["_MaxHp"]
+        if max_lb == 5:
+            ab_seq = 6
+            att += res.get("_AddMaxHp1", 0)
+            hp += res.get("_AddMaxAtk1", 0)
+        else:
+            ab_seq = 5
+
         ab_lst = []
         for i in (1, 2):
-            if ab := res.get(f"_Abilities{i}5"):
+            if ab := res.get(f"_Abilities{i}{ab_seq}"):
                 ab_lst.append(ab)
         converted, skipped = convert_all_ability(ab_lst)
 
@@ -2247,8 +2257,8 @@ class DrgConf(DragonData, SkillProcessHelper):
             "d": {
                 "name": res.get("_SecondName", res.get("_Name")),
                 "icon": f'{res["_BaseId"]}_{res["_VariationId"]:02}',
-                "att": res["_MaxAtk"],
-                "hp": res["_MaxHp"],
+                "att": att,
+                "hp": hp,
                 "ele": ELEMENTS.get(res["_ElementalType"]).lower(),
                 "a": converted,
             }
