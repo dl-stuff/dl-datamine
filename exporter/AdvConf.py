@@ -1784,8 +1784,11 @@ def ab_actcond(**kwargs):
             ]
         if val := actcond.get("_Tension"):
             return ["ecombo", int(ab.get("_ConditionValue"))]
-    elif cond == AbilityCondition.QUEST_START and (val := actcond.get("_Tension")):
-        return ["eprep", int(val)]
+    elif cond == AbilityCondition.QUEST_START:
+        if (val := actcond.get("_Tension")):
+            return ["eprep", int(val)]
+        elif (val := actcond.get("_RateAttack")):
+            return ["bprep_att", fr(val), fr(actcond.get("_DurationSec"))]
     elif cond == AbilityCondition.TRANSFORM_DRAGON:
         astr = "dshift"
         modtype = None
