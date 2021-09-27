@@ -2245,8 +2245,8 @@ class DrgConf(DragonData, SkillProcessHelper):
         hp = res["_MaxHp"]
         if max_lb == 5:
             ab_seq = 6
-            att += res.get("_AddMaxHp1", 0)
-            hp += res.get("_AddMaxAtk1", 0)
+            att = res.get("_AddMaxAtk1", 0)
+            hp = res.get("_AddMaxHp1", 0)
         else:
             ab_seq = 5
 
