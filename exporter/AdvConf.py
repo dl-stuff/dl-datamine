@@ -2033,6 +2033,7 @@ ABILITY_CONVERT = {
 SPECIAL = {
     448: ["spu", 0.08],
     1402: ["au", 0.08],
+    2366: ["ccu", 0.1],
     1776: ["corrosion", 3],
     400000858: ["poised_shadowblight-killer_passive", 0.08],
 }

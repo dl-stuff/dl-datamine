@@ -10,7 +10,7 @@ FortPlantData(DBViewIndex())
 COUNT_WEAPON_BONUS = "SELECT _WeaponType, SUM(_WeaponPassiveEffAtk) AS _Bonus FROM WeaponBody GROUP BY _WeaponType"
 
 COUNT_ADV_BY_MAX_LIMIT_BREAK = "SELECT _ElementalType, COUNT(_Id) as _Count FROM CharaData WHERE _MaxLimitBreakCount=? AND _IsPlayable GROUP BY _ElementalType"
-COUNT_DRG = "SELECT _ElementalType, COUNT(_Id) as _Count FROM DragonData WHERE _IsPlayable GROUP BY _ElementalType"
+COUNT_DRG_BY_MAX_LIMIT_BREAK = "SELECT _ElementalType, COUNT(_Id) as _Count FROM DragonData WHERE _MaxLimitBreakCount=? AND _IsPlayable GROUP BY _ElementalType"
 
 COUNT_HALIDOM = """SELECT View_FortPlantData._Name,
 FortPlantDetail._AssetGroup, FortPlantDetail._EffectId, FortPlantDetail._EffType1, FortPlantDetail._EffType2,
@@ -21,7 +21,7 @@ WHERE _EffectId=1 OR _EffectId=2 OR _EffectId=6
 GROUP BY (_AssetGroup)"""
 
 ALBUM_BONUS_ADV = {4: 0.2, 5: 0.3}
-ALBUM_BONUS_DRG = 0.2
+ALBUM_BONUS_DRG = {4: {"hp": 0.2, "atk": 0.2}, 5: {"hp": 0.3, "atk": 0.2}}
 
 # SELECT View_FortPlantData._Name, FortPlantDetail._EffectId, FortPlantDetail._EffType1, FortPlantDetail._EffType2, FortPlantDetail._EffArgs1, FortPlantDetail._EffArgs2, FortPlantDetail._EffArgs3
 # FROM View_FortPlantData
@@ -39,8 +39,8 @@ def count_fort_passives(include_album=True):
                     elename = ELEMENTS[eletype]
                 except KeyError:
                     continue
-                adv_ele_passives[(eletype, elename)][0] += res["_Count"] * factor
-                adv_ele_passives[(eletype, elename)][1] += res["_Count"] * factor
+                adv_ele_passives[(eletype, elename)][0] += round(res["_Count"] * factor, 1)
+                adv_ele_passives[(eletype, elename)][1] += round(res["_Count"] * factor, 1)
 
     adv_wep_passives = {(idx, wep): [0, 0] for idx, wep in WEAPON_TYPES.items()}
     for res in dbm.query_many(COUNT_WEAPON_BONUS, tuple(), dict):
@@ -54,14 +54,15 @@ def count_fort_passives(include_album=True):
 
     drg_passives = {(idx, ele): [0, 0] for idx, ele in ELEMENTS.items()}
     if include_album:
-        for res in dbm.query_many(COUNT_DRG, tuple(), dict):
-            try:
-                eletype = res["_ElementalType"]
-                elename = ELEMENTS[eletype]
-            except KeyError:
-                continue
-            drg_passives[(eletype, elename)][0] += res["_Count"] * ALBUM_BONUS_DRG
-            drg_passives[(eletype, elename)][1] += res["_Count"] * ALBUM_BONUS_DRG
+        for mlb, factor in ALBUM_BONUS_DRG.items():
+            for res in dbm.query_many(COUNT_DRG_BY_MAX_LIMIT_BREAK, (mlb,), dict):
+                try:
+                    eletype = res["_ElementalType"]
+                    elename = ELEMENTS[eletype]
+                except KeyError:
+                    continue
+                drg_passives[(eletype, elename)][0] += round(res["_Count"] * factor["hp"], 1)
+                drg_passives[(eletype, elename)][1] += round(res["_Count"] * factor["atk"], 1)
 
     for res in dbm.query_many(COUNT_HALIDOM, (), dict):
         if res["_EffectId"] == 1:
