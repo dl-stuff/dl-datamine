@@ -129,6 +129,7 @@ def make_dragon_json(res, index):
         "NameCN": res.get("_SecondNameCN") or res.get("_NameCN"),
         "Element": res.get("_ElementalType"),
         "Rarity": res.get("_Rarity"),
+        "MaxLimitBreak": res.get("_MaxLimitBreakCount"),
     }
 
 
