@@ -1324,8 +1324,11 @@ class AdvConf(CharaData, SkillProcessHelper):
                 conf.update(convert_fs(burst, marker))
 
         for s in (1, 2):
-            skill = self.index["SkillData"].get(res[f"_Skill{s}"], full_query=True)
-            self.chara_skills[res[f"_Skill{s}"]] = (f"s{s}", s, skill, None)
+            try:
+                skill = self.index["SkillData"].get(res[f"_Skill{s}"], full_query=True)
+                self.chara_skills[res[f"_Skill{s}"]] = (f"s{s}", s, skill, None)
+            except KeyError:
+                continue
         if (edit := res.get("_EditSkillId")) and edit not in self.chara_skills:
             skill = self.index["SkillData"].get(res[f"_EditSkillId"], full_query=True)
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
