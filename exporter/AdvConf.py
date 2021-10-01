@@ -19,22 +19,10 @@ from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import (
-    WEAPON_TYPES,
-    ELEMENTS,
-    TRIBE_TYPES,
-    AFFLICTION_TYPES,
-    AbilityCondition,
-    ActionTargetGroup,
-    AbilityTargetAction,
-    AbilityType,
-    AbilityStat,
-    AuraType,
-    PartConditionType,
-)
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction, AbilityType, AbilityStat, AuraType, PartConditionType, ActionCancelType
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
-DODGE_ACTIONS = {6, 40}
+DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
 DEFAULT_AFF_DURATION = {
     "poison": 15,
     "burn": 12,
@@ -169,6 +157,8 @@ INDENT = "    "
 
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
+    if k == "dragonform" or k == "dragonform2":
+        lim += 1
     if depth >= lim:
         if k.startswith("attr"):
             r_str_lst = []
@@ -240,6 +230,13 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     # accurate_col = 0
     # accurate_ab_col = 0
     for part in actparts:
+        if servant_cmd := part.get("_servantActionCommandId"):
+            servant_attr = {"servant": servant_cmd}
+            iv = fr(part["_seconds"])
+            if iv:
+                servant_attr["iv"] = iv
+            hitattrs.append(servant_attr)
+            continue
         if clear_once_per_action:
             once_per_action.clear()
         part_hitattr_map = {"_hitAttrLabelSubList": []}
@@ -407,9 +404,9 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr["drg"] = dragon
         if (od := hitattr.get("_ToBreakDmgRate")) and od != 1:
             attr["odmg"] = fr(od)
-        # wow i fucking hate cykagames
-        if part.get("DEBUG_GLUCA_FLAG"):
-            attr["gluca"] = 1
+        # i still fucking hate cykagames but i will find better way than this
+        # if part.get("DEBUG_GLUCA_FLAG"):
+        #     attr["gluca"] = 1
     if "sp" not in once_per_action:
         if sp := hitattr.get("_AdditionRecoverySp"):
             attr["sp"] = fr(sp)
@@ -705,21 +702,24 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
     for idx, part in enumerate(parts):
         if part["commandType"] == CommandType.SEND_SIGNAL:
             actid = part.get("_actionId", 0)
-            if not (is_dragon and actid % 100 in (20, 21)) and not actid in DODGE_ACTIONS:
-                signals[actid] = -10
-                if part.get("_motionEnd"):
-                    signal_end.add(actid)
-        elif part.get("_allHitLabels") and s is None:
-            s = fr(part["_seconds"])
+            # if not (is_dragon and actid % 100 in (20, 21)) and not actid in DODGE_ACTIONS:
+            #     signals[actid] = -10
+            if part.get("_motionEnd"):
+                signal_end.add(actid)
+        elif (hitlabels := part.get("_allHitLabels")) and s is None:
+            for hl_list in hitlabels.values():
+                for hitlabel in hl_list:
+                    if hitlabel["_TargetGroup"] != ActionTargetGroup.DUNOBJ:
+                        s = fr(part["_seconds"])
         elif part["commandType"] == CommandType.ACTIVE_CANCEL:
-            recovery = part["_seconds"]
-            actid = part.get("_actionId")
-            if seq and actid in signals:
-                signals[actid] = recovery
-            if part.get("_motionEnd") or actid in signal_end:
-                motion_end = recovery
-            if actid:
-                followed_by.add((recovery, actid))
+            # recovery = part["_seconds"]
+            # actid = part.get("_actionId")
+            # if seq and actid in signals:
+            #     signals[actid] = recovery
+            # if part.get("_motionEnd") or actid in signal_end:
+            #     motion_end = recovery
+            if actid := part.get("_actionId"):
+                followed_by.add((part["_seconds"], actid, part.get("_actionType")))
             # else:
             #     recovery = max(timestop, recovery)
         elif part["commandType"] == CommandType.HIT_STOP:
@@ -736,10 +736,8 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
             #                 npart['_seconds'] += ts_delay
         elif is_dragon and part["commandType"] == CommandType.MOVE_TIME_CURVE and not part.get("_isNormalizeCurve"):
             timecurve = part.get("_duration")
-        # if part['commandType'] == 'PLAY_MOTION' and part.get('_animation'):
-        #     motion = fr(part['_animation']['stopTime'] - part['_blendDuration'])
-        #     if part['_animation']['name'][0] == 'D':
-        #         use_motion = True
+        # elif part["commandType"] == CommandType.PLAY_MOTION and part.get("_animation"):
+        #     motion = fr(part["_seconds"] + part["_animation"]["duration"])
     # if timestop > 0:
     # if not signal_to_next:
     #     for part in sorted(parts, key=lambda p: -p['_seq']):
@@ -767,12 +765,21 @@ def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
         if motion_end:
             r = motion_end
         else:
+            final_r = None
+            motion = None
             for part in reversed(parts):
-                if part["commandType"] == CommandType.ACTIVE_CANCEL:
-                    r = part["_seconds"]
+                if part["commandType"] == CommandType.ACTIVE_CANCEL and part["_seconds"] >= s:
+                    final_r = part["_seconds"]
                     break
-        if r is not None:
-            r = max(timestop, r)
+            for part in reversed(parts):
+                if part["commandType"] == CommandType.PLAY_MOTION:
+                    anim = part.get("_animation")
+                    if anim and isinstance(anim, dict):
+                        motion = part["_seconds"] + anim["duration"]
+                        if motion >= s:
+                            break
+        r = final_r or motion or 0
+        r = max(timestop, r)
     r = fr(r)
     return s, r, followed_by
 
@@ -794,27 +801,50 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
     return conf
 
 
+def remap_following_actions(conf, action_ids):
+    for key, subdict in conf.items():
+        if not isinstance(subdict, dict):
+            continue
+        if key not in ("interrupt", "cancel"):
+            remap_following_actions(subdict, action_ids)
+            continue
+        new_subdict = {}
+        for idx, value in subdict.items():
+            try:
+                new_subdict[action_ids[idx]] = value[0]
+            except KeyError:
+                if idx in DODGE_ACTIONS or value[1] in (ActionCancelType.Avoid, ActionCancelType.AvoidFront, ActionCancelType.AvoidBack):
+                    idx = "dodge"
+                elif value[1] in (ActionCancelType.BurstAttack,):
+                    idx = "fs"
+                elif isinstance(idx, int):
+                    continue
+                new_subdict[idx] = value[0]
+        if "dodgeb" in new_subdict:
+            if "dodge" in subdict:
+                new_subdict["dodge"] = min(new_subdict["dodge"], new_subdict["dodgeb"])
+            else:
+                new_subdict["dodge"] = new_subdict["dodgeb"]
+            del new_subdict["dodgeb"]
+        conf[key] = new_subdict
+
+
 def convert_following_actions(startup, followed_by, default=None):
     interrupt_by = {}
     cancel_by = {}
     if default:
         for act in default:
-            interrupt_by[act] = 0.0
-            cancel_by[act] = 0.0
-    for t, act in followed_by:
-        if act in DODGE_ACTIONS:
-            act_name = "dodge"
-        elif act % 10 == 5:
-            act_name = "fs"
-        else:
-            continue
+            interrupt_by[act] = (0.0, None)
+            cancel_by[act] = (0.0, None)
+    for t, act, kind in followed_by:
         if t < startup:
-            interrupt_by[act_name] = fr(t)
+            interrupt_by[act] = (fr(t), kind)
         else:
-            cancel_by[act_name] = t
+            cancel_by[act] = (t, kind)
     cancel_by.update(interrupt_by)
-    for act, t in cancel_by.items():
-        cancel_by[act] = fr(max(0.0, t - startup))
+    for act, value in cancel_by.items():
+        t, kind = value
+        cancel_by[act] = (fr(max(0.0, t - startup)), kind)
     return interrupt_by, cancel_by
 
 
@@ -832,10 +862,23 @@ def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=Fals
         xconf["DEBUG_CHECK_NEXTACT"] = True
     xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
 
+    if xn.get("_IsLoopAction"):
+        xconf["loop"] = 1
+
     if convert_follow:
         xconf["interrupt"], xconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
 
     return xconf
+
+
+def convert_dodge(action, convert_follow=True):
+    s, r, followed_by = hit_sr(action["_Parts"])
+    dodgeconf = {"startup": s, "recovery": r}
+    print(dodgeconf)
+    dodgeconf = hit_attr_adj(action, s, dodgeconf, skip_nohitattr=False, pattern=re.compile(r".*H0\d_LV01$"))
+    if convert_follow:
+        dodgeconf["interrupt"], dodgeconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
+    return dodgeconf
 
 
 def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
@@ -925,6 +968,10 @@ class BaseConf(WeaponType):
     }
     GUN_MODES = (40, 41, 42)
 
+    def __init__(self, index):
+        self.action_ids = {}
+        return super().__init__(index)
+
     def process_result(self, res, full_query=True):
         conf = {"lv2": {}}
         if res["_Label"] != "GUN":
@@ -932,9 +979,11 @@ class BaseConf(WeaponType):
             res = super().process_result(res, full_query=True)
             # fs_delay = {}
             fsconf = convert_fs(res["_BurstPhase1"], res["_ChargeMarker"], res["_ChargeCancel"])
-            startup = fsconf["fs"]["startup"]
+            # startup = fsconf["fs"]["startup"]
             # for x, delay in fs_delay.items():
             #     fsconf['fs'][x] = {'startup': fr(startup+delay)}
+            if fsconf:
+                self.action_ids[res["_BurstPhase1"]["_Id"]] = "fs"
             conf.update(fsconf)
             for n in range(1, 6):
                 try:
@@ -945,6 +994,7 @@ class BaseConf(WeaponType):
                 # for part in xn['_Parts']:
                 #     if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
                 #         fs_delay[f'x{n}'] = part.get('_seconds')
+                self.action_ids[xn["_Id"]] = f"x{n}"
                 if hitattrs := convert_all_hitattr(xn, re.compile(r".*H0\d_LV02$")):
                     for attr in hitattrs:
                         attr["iv"] = fr(attr["iv"] - conf[f"x{n}"]["startup"])
@@ -953,6 +1003,7 @@ class BaseConf(WeaponType):
                     conf["lv2"][f"x{n}"] = {"attr": hitattrs}
         else:
             # gun stuff
+            self.action_ids[res["_BurstPhase1"]] = "fs"
             for mode in BaseConf.GUN_MODES:
                 mode = self.index["CharaModeData"].get(mode, full_query=True)
                 mode_name = f'gun{mode["_GunMode"]}'
@@ -960,6 +1011,7 @@ class BaseConf(WeaponType):
                     marker = burst.get("_BurstMarkerId")
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f"{fs}_{mode_name}"] = fsc
+                        self.action_ids[burst["_Id"]] = "fs"
                 if (xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict):
                     for prefix in ("", "Ex"):
                         if xalt.get(f"_{prefix}ActionId"):
@@ -968,12 +1020,15 @@ class BaseConf(WeaponType):
                                 xn_key = f"x{n}_{mode_name}{prefix.lower()}"
                                 if xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"]):
                                     conf[xn_key] = xaltconf
+                                self.action_ids[xn["_Id"]] = f"x{n}"
                                 if hitattrs := convert_all_hitattr(xn, re.compile(r".*H0\d_LV02$")):
                                     for attr in hitattrs:
                                         attr["iv"] = fr(attr["iv"] - conf[xn_key]["startup"])
                                         if attr["iv"] == 0:
                                             del attr["iv"]
                                     conf["lv2"][xn_key] = {"attr": hitattrs}
+
+        remap_following_actions(conf, self.action_ids)
 
         return conf
 
@@ -1009,7 +1064,7 @@ def convert_skill_common(skill, lv):
     for part in action["_Parts"]:
         if part["commandType"] == CommandType.ACTIVE_CANCEL and actcancel is None:
             if "_actionId" in part:
-                followed_by.add((part["_seconds"], part["_actionId"]))
+                followed_by.add((part["_seconds"], part["_actionId"], part.get("_actionType")))
             else:
                 actcancel = part["_seconds"]
         if part["commandType"] == CommandType.PLAY_MOTION and mstate is None:
@@ -1061,6 +1116,7 @@ class SkillProcessHelper:
         self.all_chara_skills = {}
         self.enhanced_fs = {}
         self.ab_alt_attrs = defaultdict(lambda: [])
+        self.action_ids = {}
 
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
         sconf, action = convert_skill_common(skill, lv)
@@ -1076,16 +1132,16 @@ class SkillProcessHelper:
             sconf["energizable"] = bool(skill[f"_IsAffectedByTensionLv{lv}"])
 
         if isinstance((transkills := skill.get("_TransSkill")), dict):
-            k = f"s{seq}_phase1"
             for idx, ts in enumerate(transkills.items()):
                 tsid, tsk = ts
                 if tsid not in self.all_chara_skills:
                     self.chara_skills[tsid] = (
-                        f"s{seq}_phase{idx+1}",
+                        f"{k}_phase{idx+1}",
                         seq,
                         tsk,
                         skill.get("_Id"),
                     )
+            k = f"{k}_phase1"
         try:
             for tbuff in skill["_TransBuff"]["_Parts"]:
                 if not tbuff.get("_allHitLabels"):
@@ -1212,12 +1268,14 @@ class SkillProcessHelper:
                 except KeyError:
                     cskill["attr"] = [attr]
             conf[k] = cskill
+            self.action_ids[action.get("_Id")] = k
             del self.chara_skills[skill.get("_Id")]
 
         for efs, eba, emk in self.enhanced_fs.values():
             n = ""
             for fs, fsc in convert_fs(eba, emk).items():
                 conf[f"{fs}_{efs}"] = fsc
+                self.action_ids[eba["_Id"]] = f"{fs}_{efs}"
 
         # if res.get('_Id') not in AdvConf.DO_NOT_FIND_LOOP:
         #     if self.chara_skill_loop:
@@ -1234,7 +1292,7 @@ class SkillProcessHelper:
         #                 del conf[k]
 
 
-def find_ab_alt_attrs(ab_alt_attrs, ab):
+def search_abs(meta, ab):
     if not ab:
         return
     for i in (1, 2, 3):
@@ -1242,13 +1300,29 @@ def find_ab_alt_attrs(ab_alt_attrs, ab):
         if ab_type == AbilityType.ChangeState:
             hitattr = ab.get(f"_VariousId{i}str")
             if not hitattr:
-                hitattr = {"_ActionCondition1": ab.get(f"_VariousId{i}a")}
-            if sid := ab.get("_OnSkill"):
-                ab_alt_attrs[sid].append((ab, hitattr))
-
+                actcond = ab.get(f"_VariousId{i}a")
+                if actcond:
+                    hitattr = {"_ActionCondition1": actcond}
+            if hitattr:
+                if sid := ab.get("_OnSkill"):
+                    meta.ab_alt_attrs[sid].append((ab, hitattr))
+                elif actcond := hitattr.get("_ActionCondition1"):
+                    if isinstance((eba := actcond.get("_EnhancedBurstAttack")), dict):
+                        base_name = snakey(meta.name.lower()).replace("_", "")
+                        group = base_name
+                        while group in meta.enhanced_fs and meta.enhanced_fs[group][1] != eba:
+                            eid = next(meta.efs_counter)
+                            group = f"{base_name}{eid}"
+                        meta.enhanced_fs[group] = group, eba, eba.get("_BurstMarkerId")
+        elif ab_type == AbilityType.EnhancedBurstAttack:
+            meta.alt_actions.append(("fs", ab[f"_VariousId{i}a"]))
+        elif ab_type == AbilityType.UniqueAvoid:
+            meta.alt_actions.append(("dodge", ab[f"_VariousId{i}a"]))
+        elif ab_type == AbilityType.UniqueTransform:
+            meta.utp_chara = (ab.get(f"_VariousId{i}a"), ab.get(f"_VariousId{i}str"))
         elif ab_type == AbilityType.ReferenceOther:
             for sfx in ("a", "b", "c"):
-                find_ab_alt_attrs(ab_alt_attrs, ab.get(f"_VariousId{i}{sfx}"))
+                search_abs(meta, ab.get(f"_VariousId{i}{sfx}"))
 
 
 class AdvConf(CharaData, SkillProcessHelper):
@@ -1315,41 +1389,62 @@ class AdvConf(CharaData, SkillProcessHelper):
             conf["c"]["gun"] = []
         self.name = conf["c"]["name"]
 
+        self.alt_actions = []
+        self.utp_chara = None
         for ab in ab_lst:
-            find_ab_alt_attrs(self.ab_alt_attrs, ab)
+            search_abs(self, ab)
 
         if burst := res.get("_BurstAttack"):
             burst = self.index["PlayerAction"].get(res["_BurstAttack"])
             if burst and (marker := burst.get("_BurstMarkerId")):
                 conf.update(convert_fs(burst, marker))
+                self.action_ids[burst["_Id"]] = "fs"
+
+        for act, actdata in self.alt_actions:
+            if not actdata:
+                continue
+            actconf = None
+            if act == "fs" and (marker := actdata.get("_BurstMarkerId")):
+                actconf = convert_fs(actdata, marker)["fs"]
+                if act in conf:
+                    act = f"{act}_abalt"
+            elif act == "dodge":
+                actconf = convert_dodge(actdata)
+                # hax for lv1 of the ability
+                self.action_ids[actdata["_Id"] - 1] = "dodge"
+            if actconf:
+                conf[act] = actconf
+                self.action_ids[actdata["_Id"]] = act
 
         for s in (1, 2):
-            skill = self.index["SkillData"].get(res[f"_Skill{s}"], full_query=True)
-            self.chara_skills[res[f"_Skill{s}"]] = (f"s{s}", s, skill, None)
+            if sdata := res.get(f"_Skill{s}"):
+                skill = self.index["SkillData"].get(sdata, full_query=True)
+                self.chara_skills[sdata] = (f"s{s}", s, skill, None)
         if (edit := res.get("_EditSkillId")) and edit not in self.chara_skills:
             skill = self.index["SkillData"].get(res[f"_EditSkillId"], full_query=True)
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
 
         if udrg := res.get("_UniqueDragonId"):
-            if not res.get("_ModeChangeType") and res.get("_IsConvertDragonSkillLevel"):
-                dragon = self.index["DragonData"].get(udrg, by="_Id")
-                for part in dragon["_Skill1"]["_ActionId1"]["_Parts"]:
-                    part["DEBUG_GLUCA_FLAG"] = True
-                res["_ModeId2"] = {
-                    "_UniqueComboId": {
-                        "_ActionId": dragon["_DefaultSkill"],
-                        "_MaxComboNum": dragon["_ComboMax"],
-                    },
-                    "_Skill1Id": dragon["_Skill1"],
-                    "_Skill2Id": dragon["_Skill2"],
-                }
-                if ddodge := dragon.get("dodge"):
-                    conf["dodge"] = {"startup": ddodge["recovery"]}
-                else:
-                    conf["dodge"] = {"startup": DrgConf.COMMON_ACTIONS_DEFAULTS["dodge"]}
-            else:
-                conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id")
-                del conf["dragonform"]["d"]
+            # if not res.get("_ModeChangeType") and res.get("_IsConvertDragonSkillLevel"):
+            #     dragon = self.index["DragonData"].get(udrg, by="_Id")
+            #     for part in dragon["_Skill1"]["_ActionId1"]["_Parts"]:
+            #         part["DEBUG_GLUCA_FLAG"] = True
+            #     res["_ModeId2"] = {
+            #         "_UniqueComboId": {
+            #             "_ActionId": dragon["_DefaultSkill"],
+            #             "_MaxComboNum": dragon["_ComboMax"],
+            #         },
+            #         "_Skill1Id": dragon["_Skill1"],
+            #         "_Skill2Id": dragon["_Skill2"],
+            #     }
+            #     if ddodge := dragon.get("dodge"):
+            #         conf["dodge"] = {"startup": ddodge["recovery"]}
+            #     else:
+            #         conf["dodge"] = {"startup": DrgConf.COMMON_ACTIONS_DEFAULTS["dodge"]}
+            # else:
+            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id")
+            del conf["dragonform"]["d"]
+            self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
             self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
 
@@ -1360,35 +1455,35 @@ class AdvConf(CharaData, SkillProcessHelper):
                     mode = self.index["CharaModeData"].get(mode, full_query=True)
                     if not mode:
                         continue
-                else:
-                    mode_name = "_ddrive"
                 if gunkind := mode.get("_GunMode"):
                     conf["c"]["gun"].append(gunkind)
                     if mode["_Id"] in BaseConf.GUN_MODES:
                         continue
                     # if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
                     #     continue
-                if not mode_name:
+                if self.utp_chara is not None and m == 2:
+                    mode_name = "_ddrive"
+                else:
                     try:
                         mode_name = "_" + snakey(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
                     except:
-                        if res.get("_ModeChangeType") == 3 and m == 2:
-                            mode_name = "_ddrive"
-                            if udrg := res.get("_UniqueDragonId"):
-                                dragon = self.index["DragonData"].get(udrg, by="_Id")
-                                for s in (1, 2):
-                                    a_skey = f"_Skill{s}Id"
-                                    d_skey = f"_Skill{s}"
-                                    if not d_skey in dragon:
-                                        continue
-                                    if s == 1:
-                                        for part in dragon[d_skey]["_ActionId1"]["_Parts"]:
-                                            part["DEBUG_GLUCA_FLAG"] = True
-                                    if a_skey in mode:
-                                        mode[a_skey]["_ActionId1"]["_Parts"].extend(dragon[d_skey]["_ActionId1"]["_Parts"])
-                                    else:
-                                        mode[a_skey] = dragon[d_skey]
-                        elif m == 1:
+                        # if res.get("_ModeChangeType") == 3 and m == 2:
+                        #     mode_name = "_ddrive"
+                        #     if udrg := res.get("_UniqueDragonId"):
+                        #         dragon = self.index["DragonData"].get(udrg, by="_Id")
+                        #         for s in (1, 2):
+                        #             a_skey = f"_Skill{s}Id"
+                        #             d_skey = f"_Skill{s}"
+                        #             if not d_skey in dragon:
+                        #                 continue
+                        #             if s == 1:
+                        #                 for part in dragon[d_skey]["_ActionId1"]["_Parts"]:
+                        #                     part["DEBUG_GLUCA_FLAG"] = True
+                        #             if a_skey in mode:
+                        #                 mode[a_skey]["_ActionId1"]["_Parts"].extend(dragon[d_skey]["_ActionId1"]["_Parts"])
+                        #             else:
+                        #                 mode[a_skey] = dragon[d_skey]
+                        if m == 1:
                             mode_name = ""
                         else:
                             mode_name = f"_mode{m}"
@@ -1406,21 +1501,28 @@ class AdvConf(CharaData, SkillProcessHelper):
                         marker = self.index["PlayerAction"].get(burst["_Id"] + 4)
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f"{fs}{mode_name}"] = fsc
+                    self.action_ids[burst["_Id"]] = f"{fs}{mode_name}"
                 if (xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict):
                     xalt_pattern = re.compile(r".*H0\d_LV02$") if conf["c"]["spiral"] else None
                     for prefix in ("", "Ex"):
                         if xalt.get(f"_{prefix}ActionId"):
                             for n, xn in enumerate(xalt[f"_{prefix}ActionId"]):
                                 n += 1
+                                if not mode_name and prefix:
+                                    xn_key = f"x{n}_{prefix.lower()}"
+                                else:
+                                    xn_key = f"x{n}{mode_name}{prefix.lower()}"
                                 if xaltconf := convert_x(
                                     xn["_Id"],
                                     xn,
                                     xlen=xalt["_MaxComboNum"],
                                     pattern=xalt_pattern,
                                 ):
-                                    conf[f"x{n}{mode_name}{prefix.lower()}"] = xaltconf
+                                    conf[xn_key] = xaltconf
+                                    self.action_ids[xn["_Id"]] = xn_key
                                 elif xalt_pattern is not None and (xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"])):
-                                    conf[f"x{n}{mode_name}{prefix.lower()}"] = xaltconf
+                                    conf[xn_key] = xaltconf
+                                    self.action_ids[xn["_Id"]] = xn_key
         try:
             conf["c"]["gun"] = list(set(conf["c"]["gun"]))
         except KeyError:
@@ -1441,6 +1543,17 @@ class AdvConf(CharaData, SkillProcessHelper):
                 self.edit_skill_idx = self.SPECIAL_EDIT_SKILL[edit]
             except KeyError:
                 self.edit_skill_idx = self.all_chara_skills[edit][1]
+
+        try:
+            self.action_ids.update(self.base_conf.action_ids)
+        except AttributeError:
+            pass
+
+        for dodge in map(res.get, ("_Avoid", "_BackAvoidOnCombo")):
+            if dodge:
+                self.action_ids[dodge] = "dodge"
+
+        remap_following_actions(conf, self.action_ids)
 
         return conf
 
@@ -1560,6 +1673,10 @@ class AdvConf(CharaData, SkillProcessHelper):
         exability_data.update(extra_data)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
+        # do this here in order to have the action ids from generic weapon
+        self.base_conf = BaseConf(self.index)
+        self.base_conf.export_all_to_folder(out_dir=out_dir)
+
         all_res = self.get_all(where="_ElementalType != 99 AND _IsPlayable = 1")
         # ref_dir = os.path.join(out_dir, '..', 'adv')
         skillshare_out = os.path.join(out_dir, f"skillshare{ext}")
@@ -1568,6 +1685,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         check_target_path(advout_dir)
         skillshare_data = {}
         exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
+
         for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
             try:
                 outconf = self.process_result(
@@ -1785,9 +1903,9 @@ def ab_actcond(**kwargs):
         if val := actcond.get("_Tension"):
             return ["ecombo", int(ab.get("_ConditionValue"))]
     elif cond == AbilityCondition.QUEST_START:
-        if (val := actcond.get("_Tension")):
+        if val := actcond.get("_Tension"):
             return ["eprep", int(val)]
-        elif (val := actcond.get("_RateAttack")):
+        elif val := actcond.get("_RateAttack"):
             return ["bprep_att", fr(val), fr(actcond.get("_DurationSec"))]
     elif cond == AbilityCondition.TRANSFORM_DRAGON:
         astr = "dshift"
@@ -2238,8 +2356,9 @@ class DrgConf(DragonData, SkillProcessHelper):
             pass
         return conf, k, action
 
-    def process_result(self, res):
+    def process_result(self, res, remap=True):
         super().process_result(res)
+        self.reset_meta()
 
         max_lb = res.get("_MaxLimitBreakCount", 4)
         att = res["_MaxAtk"]
@@ -2271,8 +2390,8 @@ class DrgConf(DragonData, SkillProcessHelper):
         #     conf['d']['skipped'] = skipped
 
         for act, key in (
-            ("dodge", "_AvoidActionFront"),
             ("dodgeb", "_AvoidActionBack"),
+            ("dodge", "_AvoidActionFront"),
             ("dshift", "_Transform"),
         ):
             try:
@@ -2287,14 +2406,17 @@ class DrgConf(DragonData, SkillProcessHelper):
                 conf[act] = {"recovery": r}
             if act == "dshift":
                 hitattrs = convert_all_hitattr(res[key])
-                if hitattrs and hitattrs[0]["dmg"] != 2.0:
+                if hitattrs and (len(hitattrs) > 1 or hitattrs[0]["dmg"] != 2.0 or set(hitattrs[0].keys()) != {"dmg"}):
                     try:
                         conf[act]["attr"] = hitattrs
                     except KeyError:
                         conf[act] = {"attr": hitattrs}
 
+            self.action_ids[res[key]["_Id"]] = act
+
         if burst := res.get("_BurstAttack"):
             conf.update(convert_fs(burst, burst.get("_BurstMarkerId"), is_dragon=True))
+            self.action_ids[burst["_Id"]] = "dfs"
 
         if "dodgeb" in conf:
             if "dodge" not in conf or conf["dodge"]["recovery"] > conf["dodgeb"]["recovery"]:
@@ -2306,24 +2428,29 @@ class DrgConf(DragonData, SkillProcessHelper):
         dcmax = res["_ComboMax"]
         for n, xn in enumerate(dcombo):
             n += 1
-            if dxconf := convert_x(xn["_Id"], xn, xlen=dcmax, convert_follow=False, is_dragon=True):
+            if dxconf := convert_x(xn["_Id"], xn, xlen=dcmax, convert_follow=True, is_dragon=True):
                 conf[f"dx{n}"] = dxconf
+                self.action_ids[xn["_Id"]] = f"dx{n}"
 
-        self.reset_meta()
-        dupe_skill = {}
         for act, seq, key in (
-            ("ds", 1, "_Skill1"),
-            ("ds_final", 0, "_SkillFinalAttack"),
+            ("ds1", 1, "_Skill1"),
+            ("ds2", 2, "_Skill2"),
         ):
             if not (dskill := res.get(key)):
                 continue
-            if dskill["_Id"] in self.chara_skills:
-                dupe_skill[act] = self.chara_skills[dskill["_Id"]][0]
-            else:
-                self.chara_skills[dskill["_Id"]] = (act, seq, dskill, None)
+            self.chara_skills[dskill["_Id"]] = (act, seq, dskill, None)
+        dsfinal = res.get("_SkillFinalAttack")
+        dsfinal_act = None
+        if dsfinal:
+            dsfinal_act = self.chara_skills.get(dsfinal["_Id"], (None,))[0]
+            if dsfinal and not dsfinal_act:
+                self.chara_skills[dsfinal["_Id"]] = ("ds99", 99, dsfinal, None)
         self.process_skill(res, conf, {})
-        for act, src in dupe_skill.items():
-            conf[act] = conf[src].copy()
+        if dsfinal_act:
+            conf[dsfinal_act]["final"] = True
+
+        if remap:
+            remap_following_actions(conf, self.action_ids)
 
         return conf
 
@@ -2350,7 +2477,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         res = super().get(name, by=by, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res)
+        return self.process_result(res, remap=False)
 
 
 class WepConf(WeaponBody, SkillProcessHelper):
@@ -2402,6 +2529,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
             else:
                 self.chara_skills[skill["_Id"]] = (act, seq, skill, None)
         self.process_skill(res, conf, {})
+        remap_following_actions(conf, self.action_ids)
 
         return conf
 
@@ -2534,10 +2662,7 @@ if __name__ == "__main__":
                         conf[f"x{n}_{prefix.lower()}"] = xaltconf
         fmt_conf(conf, f=sys.stdout)
     elif args.w:
-        if args.w == "base":
-            view = BaseConf(index)
-            view.export_all_to_folder(out_dir=out_dir)
-        elif args.w == "all":
+        if args.w == "all":
             view = WepConf(index)
             view.export_all_to_folder(out_dir=out_dir)
     elif args.act:

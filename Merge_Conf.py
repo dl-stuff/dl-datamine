@@ -9,7 +9,7 @@ SIM = "../dl/conf"
 GEN = "./out/gen"
 TIMING = {"startup", "recovery", "charge"}
 DO_NOT_MERGE = {
-    "adv": {"a"},
+    "adv": {"a", "attr", "c"},
     "drg": {"startup", "recovery", "a"},
     "wep": {"a"},
 }
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Merge conf to sim directory")
     parser.add_argument("-name", type=str, help="target merge", default=None)
     parser.add_argument("-kind", type=str, help="target kind (adv/drg/wep/base)")
-    parser.add_argument("-map", type=str, nargs="*", help="suffix map")
+    parser.add_argument("-map", type=str, nargs="*", help="suffix map, sim:gen")
     parser.add_argument("-fmt", type=str, help="format a conf file")
     parser.add_argument("--all", action="store_true", help="run everything")
     parser.add_argument("--diff", action="store_true", help="run diff only")

@@ -99,13 +99,13 @@ def make_chara_json(res, index):
     result["ExAbility"] = exability["_AbilityIconName"]
     ability_icons.add(exability["_AbilityIconName"].lower())
     for i in (1, 2):
-        result["Skills"][i] = {}
         s_key = f"_Skill{i}"
-        skill = index["SkillData"].get(res.get(s_key))
-        for j in (1, 2, 3, 4):
-            s_icon = skill[f"_SkillLv{j}IconName"]
-            result["Skills"][i][j] = s_icon
-            skill_icons.add(s_icon.lower())
+        if skill := index["SkillData"].get(res.get(s_key)):
+            result["Skills"][i] = {}
+            for j in (1, 2, 3, 4):
+                s_icon = skill[f"_SkillLv{j}IconName"]
+                result["Skills"][i][j] = s_icon
+                skill_icons.add(s_icon.lower())
     if growmat := res.get("_GrowMaterialId"):
         result["Grow"] = growmat
         growend = res.get("_GrowMaterialOnlyEndDate")
@@ -130,6 +130,7 @@ def make_dragon_json(res, index):
         "Element": res.get("_ElementalType"),
         "Rarity": res.get("_Rarity"),
         "MaxLimitBreak": res.get("_MaxLimitBreakCount"),
+        "is_essence": res.get("_LimitBreakMaterialId") and res.get("_LimitBreakId") == 10000,
     }
 
 
@@ -183,6 +184,7 @@ def make_weapon_series_json(res, index):
 
 from urllib.parse import quote
 import urllib.request
+import ssl
 
 MAX = 500
 BASE_URL = "https://dragalialost.wiki/api.php?action=cargoquery&format=json&limit={}".format(MAX)
@@ -200,7 +202,9 @@ def get_data(**kwargs):
     data = []
     while offset % MAX == 0:
         url = get_api_request(offset, **kwargs)
-        response = urllib.request.urlopen(url)
+        gcontext = ssl.SSLContext()  # Only for gangstars
+        response = urllib.request.urlopen(url, context=gcontext)
+        # response = urllib.request.urlopen(url)
         if response.code != 200:
             return
         r = json.load(response)
@@ -214,7 +218,7 @@ def get_data(**kwargs):
     return data
 
 
-all_avail = {"Chara": set(), "Dragon": {"Gacha"}, "Amulet": set(), "Weapon": set()}
+all_avail = {"Chara": set(), "Dragon": {"Gacha", "Essence"}, "Amulet": set(), "Weapon": set()}
 
 
 def process_avail(ak):
@@ -250,6 +254,9 @@ def dragon_availability_data(data):
         avail = list(map(process_avail("Dragon"), d["title"]["Availability"].split(",")))
         if d["title"]["SellDewPoint"] == GACHA_DEW[data[bv_id]["Rarity"]]:
             avail.append("Gacha")
+        if data[bv_id]["is_essence"]:
+            avail.append("Essence")
+        del data[bv_id]["is_essence"]
         data[bv_id]["Availability"] = avail
 
 
@@ -621,7 +628,7 @@ def make_manacircle_jsons(out, index):
 
 
 if __name__ == "__main__":
-    all_avail = {"Chara": set(), "Dragon": {"Gacha"}, "Amulet": set(), "Weapon": set()}
+    all_avail = {"Chara": set(), "Dragon": {"Gacha", "Essence"}, "Amulet": set(), "Weapon": set()}
     outdir = os.path.join(pathlib.Path(__file__).parent.absolute(), "..", "..", "dl-collection")
     imgdir = os.path.join(outdir, "public")
     datadir = os.path.join(outdir, "src", "data")
