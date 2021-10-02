@@ -516,22 +516,19 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
         alt_buffs = []
         if meta and skill:
             for ehs, s in ENHANCED_SKILL.items():
-                if esk := actcond.get(ehs):
-                    if isinstance(esk, int) or esk.get("_Id") in meta.all_chara_skills:
-                        meta.chara_skill_loop.add(skill["_Id"])
+                if (esk := actcond.get(ehs)) and not (isinstance(esk, int) or esk.get("_Id") in meta.all_chara_skills):
+                    if existing_skill := meta.chara_skills.get(esk.get("_Id")):
+                        group = existing_skill[0].split("_")[-1]
                     else:
-                        if existing_skill := meta.chara_skills.get(esk.get("_Id")):
-                            group = existing_skill[0].split("_")[-1]
-                        else:
-                            eid = next(meta.eskill_counter)
-                            group = "enhanced" if eid == 1 else f"enhanced{eid}"
-                        meta.chara_skills[esk.get("_Id")] = (
-                            f"s{s}_{group}",
-                            s,
-                            esk,
-                            skill["_Id"],
-                        )
-                        alt_buffs.append(["sAlt", group, f"s{s}"])
+                        eid = next(meta.eskill_counter)
+                        group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                    meta.chara_skills[esk.get("_Id")] = (
+                        f"s{s}_{group}",
+                        s,
+                        esk,
+                        skill["_Id"],
+                    )
+                    alt_buffs.append(["sAlt", group, f"s{s}"])
             if isinstance((eba := actcond.get("_EnhancedBurstAttack")), dict):
                 if meta and from_ab:
                     base_name = snakey(meta.name.lower()).replace("_", "")
@@ -689,107 +686,48 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                     attr["coei"] = 1
 
 
-def hit_sr(parts, seq=None, xlen=None, is_dragon=False, signal_end=None):
-    s, r = None, None
-    motion = None
-    # use_motion = False
-    timestop = 0
-    timecurve = None
-    followed_by = set()
-    signals = {}
-    signal_end = signal_end or set()
-    motion_end = None
-    for idx, part in enumerate(parts):
-        if part["commandType"] == CommandType.SEND_SIGNAL:
-            actid = part.get("_actionId", 0)
-            # if not (is_dragon and actid % 100 in (20, 21)) and not actid in DODGE_ACTIONS:
-            #     signals[actid] = -10
-            if part.get("_motionEnd"):
-                signal_end.add(actid)
-        elif (hitlabels := part.get("_allHitLabels")) and s is None:
-            for hl_list in hitlabels.values():
-                for hitlabel in hl_list:
-                    if hitlabel["_TargetGroup"] != ActionTargetGroup.DUNOBJ:
-                        s = fr(part["_seconds"])
-        elif part["commandType"] == CommandType.ACTIVE_CANCEL:
-            # recovery = part["_seconds"]
-            # actid = part.get("_actionId")
-            # if seq and actid in signals:
-            #     signals[actid] = recovery
-            # if part.get("_motionEnd") or actid in signal_end:
-            #     motion_end = recovery
+def hit_sr(action, startup=None):
+    s, r, followed_by = startup, None, set()
+    last_r = None
+    noaid_r = None
+    motion = 0
+    for part in action["_Parts"]:
+        # find startup
+        if s is None:
+            if part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
+                s = fr(part["_seconds"])
+            if (hitlabels := part.get("_allHitLabels")) and s is None:
+                for hl_list in hitlabels.values():
+                    for hitlabel in hl_list:
+                        if hitlabel["_TargetGroup"] != ActionTargetGroup.DUNOBJ:
+                            s = fr(part["_seconds"])
+        # find recovery
+        if part["commandType"] == CommandType.ACTIVE_CANCEL:
             if actid := part.get("_actionId"):
                 followed_by.add((part["_seconds"], actid, part.get("_actionType")))
-            # else:
-            #     recovery = max(timestop, recovery)
-        elif part["commandType"] == CommandType.HIT_STOP:
-            # timestop = part.get('_seconds', 0) + part.get('_duration', 0)
-            ts_second = part.get("_seconds", 0)
-            ts_delay = part.get("_duration", 0)
-            timestop = ts_second + ts_delay
-            # if is_dragon:
-            #     found_hit = False
-            #     for npart in parts[idx+1:]:
-            #         if npart['_seconds'] > ts_second:
-            #             # found_hit = found_hit or ('HIT' in npart['commandType'] or 'BULLET' in npart['commandType'])
-            #             if 'HIT' in npart['commandType'] or 'BULLET' in npart['commandType']:
-            #                 npart['_seconds'] += ts_delay
-        elif is_dragon and part["commandType"] == CommandType.MOVE_TIME_CURVE and not part.get("_isNormalizeCurve"):
-            timecurve = part.get("_duration")
-        # elif part["commandType"] == CommandType.PLAY_MOTION and part.get("_animation"):
-        #     motion = fr(part["_seconds"] + part["_animation"]["duration"])
-    # if timestop > 0:
-    # if not signal_to_next:
-    #     for part in sorted(parts, key=lambda p: -p['_seq']):
-    #         if part['commandType'] == 'ACTIVE_CANCEL' and part['_seconds'] > 0:
-    #             r = part['_seconds']
-    #             break
-    # print(signals, motion_end, timecurve)
-    if timecurve is not None:
-        for part in sorted(parts, key=lambda p: -p["_seq"]):
-            if part["commandType"] == CommandType.ACTIVE_CANCEL and part["_seconds"] > 0:
-                r = part["_seconds"]
-                break
-        if r is None:
-            r = motion_end
-        if r is not None:
-            r = max(timestop, r)
-    else:
-        try:
-            r = max(signals.values())
-        except:
-            pass
-    if s is None:
-        return 0, 0, {}
+            elif noaid_r is None:
+                noaid_r = part["_seconds"]
+            last_r = part["_seconds"]
+        if part["commandType"] == CommandType.PLAY_MOTION:
+            if (animdata := part.get("_animation")) and isinstance(animdata, dict):
+                motion = max(motion, part["_seconds"] + animdata["duration"])
+            elif part.get("_motionState") in GENERIC_BUFF:
+                motion = max(motion, 1.0)
+    s = s or 0.0
+    r = noaid_r
     if r is None or r < s:
-        if motion_end:
-            r = motion_end
-        else:
-            final_r = None
-            motion = None
-            for part in reversed(parts):
-                if part["commandType"] == CommandType.ACTIVE_CANCEL and part["_seconds"] >= s:
-                    final_r = part["_seconds"]
-                    break
-            for part in reversed(parts):
-                if part["commandType"] == CommandType.PLAY_MOTION:
-                    anim = part.get("_animation")
-                    if anim and isinstance(anim, dict):
-                        motion = part["_seconds"] + anim["duration"]
-                        if motion >= s:
-                            break
-        r = final_r or motion or 0
-        r = max(timestop, r)
-    r = fr(r)
+        r = motion
+    if r is None:
+        r = last_r
+    if r is not None:
+        r = fr(r - s)
+    else:
+        r = None
     return s, r, followed_by
 
 
-def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
-    if hitattrs := convert_all_hitattr(action, pattern=pattern):
-        try:
-            conf["recovery"] = fr(conf["recovery"] - s)
-        except TypeError:
-            conf["recovery"] = None
+def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None):
+    if hitattrs := convert_all_hitattr(action, pattern=pattern, meta=meta, skill=skill):
         for attr in hitattrs:
             if not isinstance(attr, int) and "iv" in attr:
                 attr["iv"] = fr(attr["iv"] - s)
@@ -802,7 +740,7 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True):
 
 
 def remap_following_actions(conf, action_ids):
-    for key, subdict in conf.items():
+    for key, subdict in conf.copy().items():
         if not isinstance(subdict, dict):
             continue
         if key not in ("interrupt", "cancel"):
@@ -826,7 +764,10 @@ def remap_following_actions(conf, action_ids):
             else:
                 new_subdict["dodge"] = new_subdict["dodgeb"]
             del new_subdict["dodgeb"]
-        conf[key] = new_subdict
+        if new_subdict:
+            conf[key] = new_subdict
+        else:
+            del conf[key]
 
 
 def convert_following_actions(startup, followed_by, default=None):
@@ -841,7 +782,8 @@ def convert_following_actions(startup, followed_by, default=None):
             interrupt_by[act] = (fr(t), kind)
         else:
             cancel_by[act] = (t, kind)
-    cancel_by.update(interrupt_by)
+    for k in interrupt_by:
+        cancel_by[k] = (0.0, interrupt_by[k][1])
     for act, value in cancel_by.items():
         t, kind = value
         cancel_by[act] = (fr(max(0.0, t - startup)), kind)
@@ -856,7 +798,7 @@ def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=Fals
         currentaction = nextaction
         DEBUG_CHECK_NEXTACT = True
 
-    s, r, followed_by = hit_sr(xn["_Parts"], seq=aid, xlen=xlen, is_dragon=is_dragon)
+    s, r, followed_by = hit_sr(xn)
     xconf = {"startup": s, "recovery": r}
     if DEBUG_CHECK_NEXTACT:
         xconf["DEBUG_CHECK_NEXTACT"] = True
@@ -872,9 +814,8 @@ def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=Fals
 
 
 def convert_dodge(action, convert_follow=True):
-    s, r, followed_by = hit_sr(action["_Parts"])
+    s, r, followed_by = hit_sr(action)
     dodgeconf = {"startup": s, "recovery": r}
-    print(dodgeconf)
     dodgeconf = hit_attr_adj(action, s, dodgeconf, skip_nohitattr=False, pattern=re.compile(r".*H0\d_LV01$"))
     if convert_follow:
         dodgeconf["interrupt"], dodgeconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
@@ -882,7 +823,7 @@ def convert_dodge(action, convert_follow=True):
 
 
 def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
-    startup, recovery, followed_by = hit_sr(burst["_Parts"])
+    startup, recovery, followed_by = hit_sr(burst)
     fsconf = {}
     if is_dragon:
         hitattr_pattern = re.compile(r"S\d{3}.*$")
@@ -897,6 +838,8 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
             {"startup": startup, "recovery": recovery},
             hitattr_pattern,
         )
+        if fsconf[key]:
+            fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
     else:
         for mpart in marker["_Parts"]:
             if mpart["commandType"] == CommandType.GEN_MARKER:
@@ -939,10 +882,7 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
                 skip_nohitattr=False,
             )
             if fsconf[key]:
-                (
-                    fsconf[key]["interrupt"],
-                    fsconf[key]["cancel"],
-                ) = convert_following_actions(startup, followed_by, ("s",))
+                fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
     if not is_dragon and cancel is not None:
         fsconf["fsf"] = {
             "charge": fr(0.1 + cancel["_Parts"][0]["_duration"]),
@@ -1056,40 +996,15 @@ def convert_skill_common(skill, lv):
     if isinstance(action, int):
         action = skill.get("_ActionId1")
 
-    startup, recovery = 0.1, None
-    actcancel = None
-    mstate = None
-    timestop = 0
-    followed_by = set()
-    for part in action["_Parts"]:
-        if part["commandType"] == CommandType.ACTIVE_CANCEL and actcancel is None:
-            if "_actionId" in part:
-                followed_by.add((part["_seconds"], part["_actionId"], part.get("_actionType")))
-            else:
-                actcancel = part["_seconds"]
-        if part["commandType"] == CommandType.PLAY_MOTION and mstate is None:
-            if animation := part.get("_animation"):
-                if isinstance(animation, list):
-                    mstate = sum(a["duration"] for a in animation)
-                else:
-                    mstate = animation["duration"]
-            if part.get("_motionState") in GENERIC_BUFF:
-                mstate = 1.0
-        if part["commandType"] == CommandType.HIT_STOP:
-            timestop = part["_seconds"] + part["_duration"]
-        if actcancel and mstate:
-            break
-    if actcancel:
-        actcancel = max(timestop, actcancel)
-    recovery = actcancel or mstate or recovery
+    startup, recovery, followed_by = hit_sr(action, startup=0)
 
-    if recovery is None:
+    if not recovery:
         AdvConf.MISSING_ENDLAG.append(skill.get("_Name"))
 
     sconf = {
         "sp": skill.get(f"_SpLv{lv}", skill.get("_Sp", 0)),
         "startup": startup,
-        "recovery": None if not recovery else fr(recovery),
+        "recovery": recovery,
     }
 
     interrupt, cancel = convert_following_actions(0, followed_by)
@@ -1110,7 +1025,6 @@ def convert_skill_common(skill, lv):
 class SkillProcessHelper:
     def reset_meta(self):
         self.chara_skills = {}
-        self.chara_skill_loop = set()
         self.eskill_counter = itertools.count(start=1)
         self.efs_counter = itertools.count(start=1)
         self.all_chara_skills = {}
@@ -1121,13 +1035,8 @@ class SkillProcessHelper:
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
         sconf, action = convert_skill_common(skill, lv)
 
-        if hitattrs := convert_all_hitattr(
-            action,
-            re.compile(f".*LV0{lv}$"),
-            meta=None if no_loop else self,
-            skill=skill,
-        ):
-            sconf["attr"] = hitattrs
+        sconf = hit_attr_adj(action, sconf["startup"], sconf, skip_nohitattr=False, pattern=re.compile(f".*LV0{lv}$"), meta=self, skill=skill)
+        hitattrs = sconf.get("attr")
         if (not hitattrs or all(["dmg" not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f"_IsAffectedByTensionLv{lv}"):
             sconf["energizable"] = bool(skill[f"_IsAffectedByTensionLv{lv}"])
 
@@ -1213,7 +1122,7 @@ class SkillProcessHelper:
                     attr["cond"] = ["hp>", fr(ab["_ConditionValue"])]
                 elif condtype in HP_LEQ:
                     attr["cond"] = ["hp<=", fr(ab["_ConditionValue"])]
-                confkey = "attr" if ab.get("_OnSkill") == seq else f"attr_{condtype.name}"
+                confkey = "attr" if ab.get("_OnSkill") == seq else f"DEBUG_attr_{condtype.name}"
                 try:
                     sconf[confkey].insert(0, attr)
                 except KeyError:
@@ -1272,24 +1181,9 @@ class SkillProcessHelper:
             del self.chara_skills[skill.get("_Id")]
 
         for efs, eba, emk in self.enhanced_fs.values():
-            n = ""
             for fs, fsc in convert_fs(eba, emk).items():
                 conf[f"{fs}_{efs}"] = fsc
                 self.action_ids[eba["_Id"]] = f"{fs}_{efs}"
-
-        # if res.get('_Id') not in AdvConf.DO_NOT_FIND_LOOP:
-        #     if self.chara_skill_loop:
-        #         for loop_id in self.chara_skill_loop:
-        #             k, seq, _, prev_id = self.all_chara_skills.get(loop_id)
-        #             loop_sequence = [(k, seq)]
-        #             while prev_id != loop_id and prev_id is not None:
-        #                 k, seq, _, pid = self.all_chara_skills.get(prev_id)
-        #                 loop_sequence.append((k, seq))
-        #                 prev_id = pid
-        #             for p, ks in enumerate(reversed(loop_sequence)):
-        #                 k, seq = ks
-        #                 conf[f's{seq}_phase{p+1}'] = conf[k]
-        #                 del conf[k]
 
 
 def search_abs(meta, ab):
@@ -1319,7 +1213,7 @@ def search_abs(meta, ab):
         elif ab_type == AbilityType.UniqueAvoid:
             meta.alt_actions.append(("dodge", ab[f"_VariousId{i}a"]))
         elif ab_type == AbilityType.UniqueTransform:
-            meta.utp_chara = (ab.get(f"_VariousId{i}a"), ab.get(f"_VariousId{i}str"))
+            meta.utp_chara = (ab.get(f"_VariousId{i}a", 0), ab.get(f"_VariousId{i}str"))
         elif ab_type == AbilityType.ReferenceOther:
             for sfx in ("a", "b", "c"):
                 search_abs(meta, ab.get(f"_VariousId{i}{sfx}"))
@@ -1393,6 +1287,8 @@ class AdvConf(CharaData, SkillProcessHelper):
         self.utp_chara = None
         for ab in ab_lst:
             search_abs(self, ab)
+        if self.utp_chara is not None:
+            conf["c"]["utp"] = [self.utp_chara[0]] + [int(v) for v in self.utp_chara[1].split("/")]
 
         if burst := res.get("_BurstAttack"):
             burst = self.index["PlayerAction"].get(res["_BurstAttack"])
@@ -2148,17 +2044,18 @@ ABILITY_CONVERT = {
     AbilityType.AbnoramlExtension: ab_afftime,
     AbilityType.CrisisRate: ab_crisis,
 }
-SPECIAL = {
+SPECIAL_AB = {
     448: ["spu", 0.08],
     1402: ["au", 0.08],
     2366: ["ccu", 0.1],
+    2369: ["cdu", 0.21],
     1776: ["corrosion", 3],
     400000858: ["poised_shadowblight-killer_passive", 0.08],
 }
 
 
 def convert_ability(ab, skip_abtype=tuple(), chains=False):
-    if special_ab := SPECIAL.get(ab.get("_Id")):
+    if special_ab := SPECIAL_AB.get(ab.get("_Id")):
         return [special_ab], []
     converted = []
     skipped = []
@@ -2395,7 +2292,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             ("dshift", "_Transform"),
         ):
             try:
-                s, r, _ = hit_sr(res[key]["_Parts"], is_dragon=True, signal_end={None})
+                s, r, _ = hit_sr(res[key], startup=0.0)
             except KeyError:
                 continue
                 # try:
@@ -2668,7 +2565,7 @@ if __name__ == "__main__":
     elif args.act:
         view = PlayerAction(index)
         action = view.get(int(args.act))
-        pprint(hit_sr(action["_Parts"], is_dragon=True))
+        pprint(hit_sr(action))
     elif args.amp:
         view = AuraConf(index)
         view.export_all_to_folder(out_dir=out_dir)

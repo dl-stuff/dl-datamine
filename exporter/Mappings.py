@@ -577,3 +577,29 @@ class ActionCollisionPos(ShortEnum):
     RESERVE_08 = 32
     RESERVE_09 = 33
     RESERVE_10 = 34
+
+
+class ActionDefDebuff(ShortEnum):
+    NONE = 0
+    Hp = 1
+    Attack = 2
+    Defense = 3
+    Critical = 4
+    SkillDamage = 5
+    BurstDamage = 6
+    Recovery = 7
+    Regeneration = 8
+    ElementalResist = 9
+    EnhancedBurst = 10
+    EnhancedSkill = 11
+    AttackSpeed = 12
+    EnhancedAttack = 13
+    Hp_Attack = 14
+    CriticalDamage = 15
+    SlipHp = 16
+    Nicked = 17
+    Malaise = 18
+    SPDamage = 19
+    DisableAction = 20
+    AttackOrDefense = 21
+    HLExclusive = 22

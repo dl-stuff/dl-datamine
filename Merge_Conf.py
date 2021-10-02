@@ -9,8 +9,8 @@ SIM = "../dl/conf"
 GEN = "./out/gen"
 TIMING = {"startup", "recovery", "charge"}
 DO_NOT_MERGE = {
-    "adv": {"a", "attr", "c"},
-    "drg": {"startup", "recovery", "a"},
+    "adv": {"a", "hp", "att", "attr"},
+    "drg": {"a"},
     "wep": {"a"},
 }
 FMT_LIM = {"drg": 3, "wep": 4}
@@ -25,12 +25,18 @@ def get_gitdiff():
 
 
 def merge_attrs(simattr, genattr):
-    for sattr, gattr in zip(simattr, genattr):
-        if not isinstance(sattr, dict) or not isinstance(gattr, dict):
-            continue
-        sattr.update(gattr)
-    if len(genattr) > len(simattr):
-        simattr.extend(genattr[len(simattr) :])
+    # for sattr, gattr in zip(simattr, genattr):
+    #     if not isinstance(sattr, dict) or not isinstance(gattr, dict):
+    #         continue
+    #     sattr.update(gattr)
+    # if len(genattr) > len(simattr):
+    #     simattr.extend(genattr[len(simattr) :])
+    for attr in genattr:
+        if isinstance(attr, dict):
+            for k, v in attr.copy().items():
+                if k.startswith("DEBUG"):
+                    del attr[k]
+    return genattr
 
 
 def merge_subconf(simconf, genconf, kind=None):
@@ -47,7 +53,7 @@ def merge_subconf(simconf, genconf, kind=None):
             if not key in simconf:
                 simconf[key] = value
             else:
-                merge_attrs(simconf[key], genconf[key])
+                simconf[key] = merge_attrs(simconf[key], genconf[key])
         else:
             if key in TIMING and (value is None or value < 0):
                 continue
