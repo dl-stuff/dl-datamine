@@ -31,8 +31,11 @@ from exporter.Mappings import (
 SNAKEY_PATTERN = re.compile(r"[^0-9a-zA-Z_ ]")
 
 
-def snakey(name):
-    name, ext = os.path.splitext(name)
+def snakey(name, with_ext=True):
+    if with_ext:
+        name, ext = os.path.splitext(name)
+    else:
+        ext = ""
     snakey = SNAKEY_PATTERN.sub("", unidecode(name.replace("&", "and")).strip()).replace(" ", "_")
     if ext not in ("", "."):
         return snakey + ext
@@ -394,14 +397,28 @@ class MotionData(DBView):
     def __init__(self, index):
         super().__init__(index, "MotionData")
 
-    def get_by_state_ref(self, state, ref):
-        tbl = self.database.check_table(self.name)
-        query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.name=? OR ({self.name}.state=? AND {self.name}.ref=?);"
-        if result := self.database.query_many(query=query, param=(state, state, ref), d_type=DBDict):
-            return result
-        query = f"SELECT {tbl.named_fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref IS NULL;"
-        if len(result := self.database.query_many(query=query, param=(state,), d_type=DBDict)) == 1:
-            return result
+    def get_by_state_ref(self, state, catref=None):
+        # print(state, catref)
+        fields = f"{self.name}.name,{self.name}.state,{self.name}.duration"
+        if catref is None:
+            query = f"SELECT {fields} FROM {self.name} WHERE {self.name}.name=? AND {self.name}.ref IS NULL;"
+            if len(result := self.database.query_many(query=query, param=(state,), d_type=DBDict)) == 1:
+                return result
+            query = f"SELECT {fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.ref IS NULL;"
+            if len(result := self.database.query_many(query=query, param=(state,), d_type=DBDict)) == 1:
+                return result
+        else:
+            cat, ref = catref
+            if ref:
+                query = f"SELECT {fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.cat=? AND {self.name}.ref=?;"
+                if result := self.database.query_many(query=query, param=(state, cat, ref), d_type=DBDict):
+                    return result
+            query = f"SELECT {fields} FROM {self.name} WHERE {self.name}.state=? AND {self.name}.cat=? AND {self.name}.ref IS NULL;"
+            if len(result := self.database.query_many(query=query, param=(state, cat), d_type=DBDict)) == 1:
+                return result
+            query = f"SELECT {fields} FROM {self.name} WHERE {self.name}.name=? AND {self.name}.cat=? AND {self.name}.ref IS NULL;"
+            if len(result := self.database.query_many(query=query, param=(state, cat), d_type=DBDict)) == 1:
+                return result
         return None
 
 
@@ -511,13 +528,8 @@ class ActionParts(DBView):
 
             if "_motionState" in r and r["_motionState"]:
                 ms = r["_motionState"]
-                animation = []
-                if self.animation_reference is not None:
-                    animation = self.index["MotionData"].get_by_state_ref(ms, self.animation_reference)
+                animation = self.index["MotionData"].get_by_state_ref(ms, self.animation_reference)
                 if animation:
-                    for anim in animation:
-                        del anim["pathID"]
-                        del anim["ref"]
                     if len(animation) == 1:
                         r["_animation"] = animation[0]
                     else:
@@ -544,6 +556,14 @@ class ActionParts(DBView):
                         "_count": int(count),
                         "_padding3": padding3,
                         "_padding4": padding4,
+                    }
+                elif condtype == PartConditionType.AuraLevel:
+                    target, aura, comp, count = json.loads(r["_conditionValue"])
+                    r["_conditionValue"] = {
+                        "_target": target,
+                        "_aura": AuraType(aura),
+                        "_compare": PartConditionComparisonType(comp),
+                        "_count": count,
                     }
 
         return action_parts

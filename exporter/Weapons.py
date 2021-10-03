@@ -5,7 +5,7 @@ import re
 from loader.Database import DBViewIndex, DBView
 from exporter.Shared import AbilityData, SkillData, PlayerAction, snakey
 
-from exporter.Mappings import ELEMENTS, WEAPON_TYPES
+from exporter.Mappings import ELEMENTS, WEAPON_TYPES, WEAPON_LABEL
 
 
 class WeaponSkin(DBView):
@@ -56,9 +56,13 @@ class WeaponBody(DBView):
     def __init__(self, index):
         super().__init__(index, "WeaponBody", labeled_fields=["_Name", "_Text"])
 
+    def set_animation_reference(self, res):
+        self.index["ActionParts"].animation_reference = (WEAPON_LABEL[res["_WeaponType"]], None)
+
     def process_result(self, res, full_query=True):
         if not full_query:
             return res
+        self.set_animation_reference(res)
         self.link(res, "_WeaponSeriesId", "WeaponBodyGroupSeries")
         if res.get("_WeaponPassiveAbilityGroupId"):
             res["_WeaponPassiveAbilityGroupId"] = self.index["WeaponPassiveAbility"].get(res["_WeaponPassiveAbilityGroupId"], by="_WeaponPassiveAbilityGroupId")
@@ -82,6 +86,7 @@ class WeaponBody(DBView):
         for skin in WeaponBody.WEAPON_SKINS:
             if res.get(skin):
                 res[skin] = self.index["WeaponSkin"].get(res[skin])
+        self.index["ActionParts"].animation_reference = None
         return res
 
     def get(self, pk, fields=None, full_query=True):

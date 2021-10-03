@@ -12,6 +12,18 @@ WEAPON_TYPES = {
     9: "Gun",
 }
 
+WEAPON_LABEL = {
+    1: "SWD",
+    2: "KAT",
+    3: "DAG",
+    4: "AXE",
+    5: "LAN",
+    6: "BOW",
+    7: "ROD",
+    8: "CAN",
+    9: "GUN",
+}
+
 ELEMENTS = {1: "Flame", 2: "Water", 3: "Wind", 4: "Light", 5: "Shadow"}
 
 CLASS_TYPES = {1: "Attack", 2: "Defense", 3: "Support", 4: "Healing"}

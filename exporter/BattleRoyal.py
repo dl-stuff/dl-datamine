@@ -14,7 +14,9 @@ class BattleRoyalCharaSkin(DBView):
 
     def process_result(self, res, **kwargs):
         self.link(res, "_BaseCharaId", "CharaData", full_query=False)
+        self.index["CharaData"].set_animation_reference(res["_BaseCharaId"])
         self.link(res, "_SpecialSkillId", "SkillData", **kwargs)
+        self.index["ActionParts"].animation_reference
         filtered_res = {}
         filtered_res["_Id"] = res["_Id"]
         for name_key in ("_Name", "_NameJP", "_NameCN"):

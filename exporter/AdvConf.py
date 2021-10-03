@@ -1,3 +1,4 @@
+import ctypes
 from enum import Enum
 import sys
 import os
@@ -6,6 +7,7 @@ import json
 import re
 import itertools
 from collections import defaultdict
+from typing import OrderedDict
 from tqdm import tqdm
 from pprint import pprint
 import argparse
@@ -19,7 +21,7 @@ from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction, AbilityType, AbilityStat, AuraType, PartConditionType, ActionCancelType
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction, AbilityType, AbilityStat, AuraType, PartConditionType, ActionCancelType, PartConditionComparisonType
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
 DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
@@ -222,6 +224,16 @@ def clean_hitattr(attr, once_per_action):
     return attr, need_copy
 
 
+PART_COMPARISON_TO_VARS = {
+    PartConditionComparisonType.Equality: "=",
+    PartConditionComparisonType.Inequality: "!=",
+    PartConditionComparisonType.GreaterThan: ">",
+    PartConditionComparisonType.GreaterThanOrEqual: ">=",
+    PartConditionComparisonType.LessThan: "<",
+    PartConditionComparisonType.LessThanOrEqual: "<=",
+}
+
+
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action["_Parts"]
     clear_once_per_action = action.get("_OnHitExecType") == 1
@@ -229,7 +241,11 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     once_per_action = set()
     # accurate_col = 0
     # accurate_ab_col = 0
+
+    partcond = None
+    prev_partcond = None
     for part in actparts:
+        # servant for persona
         if servant_cmd := part.get("_servantActionCommandId"):
             servant_attr = {"servant": servant_cmd}
             iv = fr(part["_seconds"])
@@ -239,6 +255,23 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             continue
         if clear_once_per_action:
             once_per_action.clear()
+        # parse part conds
+        prev_partcond, partcond = partcond, None
+        if ctype := part.get("_conditionType"):
+            condvalue = part["_conditionValue"]
+            if ctype == PartConditionType.OwnerBuffCount:
+                actcond = condvalue["_actionCondition"]
+                if not actcond:
+                    continue
+                buffname = snakey(actcond.get("_Text") or "buff" + str(actcond.get("_Id")) or "mystery_buff", with_ext=False).lower()
+                count = condvalue["_count"]
+                compare = "var" + PART_COMPARISON_TO_VARS[condvalue["_compare"]]
+                partcond = [compare, [buffname, count]]
+            elif ctype == PartConditionType.AuraLevel:
+                partcond = ["ampcond", [condvalue["_aura"].value, condvalue["_target"], PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"]]]
+            if partcond is not None and partcond != prev_partcond:
+                once_per_action.clear()
+        # get the hitattrs
         part_hitattr_map = {"_hitAttrLabelSubList": []}
         if raw_hitattrs := part.get("_allHitLabels"):
             for source, hitattr_lst in raw_hitattrs.items():
@@ -253,6 +286,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                             once_per_action,
                             meta=meta,
                             skill=skill,
+                            partcond=partcond,
                         )
                     ):
                         if source == "_hitAttrLabelSubList":
@@ -282,6 +316,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 part_hitattrs.extend(value)
             else:
                 part_hitattrs.append(value)
+
         is_msl = True
         if part["commandType"] != CommandType.MULTI_BULLET and (blt := part.get("_bulletNum", 0)) > 1 and "_hitAttrLabel" in part_hitattr_map and not "extra" in part_hitattr_map["_hitAttrLabel"]:
             for hattr in (
@@ -310,6 +345,9 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             ref_attrs = [part_hitattr_map["_abHitAttrLabel"]]
         elif (bci := part.get("_collisionHitInterval", 0)) and ((bld := part.get("_bulletDuration", 0)) > bci or (bld := part.get("_duration", 0)) > bci) and ("_hitLabel" in part_hitattr_map or "_hitAttrLabel" in part_hitattr_map):
             gen = int(bld / bci)
+            # some frame rate bullshit idk
+            if gen * bci < bld - 10 / 60:
+                gen += 1
             delay = bci
             ref_attrs = []
             if part_hitattr_map.get("_hitLabel"):
@@ -365,6 +403,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                     if idx == 0:
                         if delay:
                             attr[timekey] = fr(attr.get(timekey, 0) + delay)
+                        if "cond" in attr:
+                            attr["cond"] = ["and", attr["cond"], ["var>=", [buffname, idx + 1]]]
                         attr["cond"] = ["var>=", [buffname, idx + 1]]
                     else:
                         gattr, _ = clean_hitattr(attr.copy(), once_per_action)
@@ -372,6 +412,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                             continue
                         if delay:
                             gattr[timekey] = fr(attr.get(timekey, 0) + delay)
+                        if "cond" in gattr:
+                            gattr["cond"] = ["and", gattr["cond"], ["var>=", [buffname, idx + 1]]]
                         gattr["cond"] = ["var>=", [buffname, idx + 1]]
                         gen_attrs.append(gattr)
         part_hitattrs.extend(gen_attrs)
@@ -380,7 +422,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     return hitattrs
 
 
-def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None, from_ab=False):
+def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None, from_ab=False, partcond=None):
     if hitattr.get("_IgnoreFirstHitCheck"):
         once_per_action = set()
     attr = {}
@@ -476,15 +518,14 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         convert_actcond(attr, actcond, target, part, meta=meta, skill=skill, from_ab=from_ab)
 
     if attr:
-        if ctype := part.get("_conditionType"):
-            attr[f"DEBUG_CHECK_PARTCOND"] = ctype.name
-            if ctype.name == PartConditionType.OwnerBuffCount.name:
-                actcond = part["_conditionValue"]["_actionCondition"]
-                compare = part["_conditionValue"]["_compare"].name
-                count = part["_conditionValue"]["_count"]
-                if actcond:
-                    attr[f"DEBUG_CHECK_PARTCOND"] += f' [{actcond["_Id"]}]{actcond.get("_Text", "")} {compare} {count}'
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
+        if partcond:
+            # look man i just want partattr to sort first
+            attr_with_cond = {"cond": partcond}
+            attr_with_cond.update(attr)
+            attr = attr_with_cond
+        elif ctype := part.get("_conditionType"):
+            attr["DEBUG_CHECK_PARTCOND"] = ctype.name + str(part["_conditionValue"])
         iv = fr(part["_seconds"])
         if iv > 0:
             attr["iv"] = iv
@@ -726,14 +767,14 @@ def hit_sr(action, startup=None):
     return s, r, followed_by
 
 
-def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None):
+def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None, attr_key="attr"):
     if hitattrs := convert_all_hitattr(action, pattern=pattern, meta=meta, skill=skill):
         for attr in hitattrs:
             if not isinstance(attr, int) and "iv" in attr:
                 attr["iv"] = fr(attr["iv"] - s)
                 if attr["iv"] == 0:
                     del attr["iv"]
-        conf["attr"] = hitattrs
+        conf[attr_key] = hitattrs
     if not hitattrs and skip_nohitattr:
         return None
     return conf
@@ -765,7 +806,7 @@ def remap_following_actions(conf, action_ids):
                 new_subdict["dodge"] = new_subdict["dodgeb"]
             del new_subdict["dodgeb"]
         if new_subdict:
-            conf[key] = new_subdict
+            conf[key] = dict(sorted(new_subdict.items()))
         else:
             del conf[key]
 
@@ -1191,7 +1232,10 @@ def search_abs(meta, ab):
         return
     for i in (1, 2, 3):
         ab_type = ab.get(f"_AbilityType{i}")
-        if ab_type == AbilityType.ChangeState:
+        if ab_type == AbilityType.ReferenceOther:
+            for sfx in ("a", "b", "c"):
+                search_abs(meta, ab.get(f"_VariousId{i}{sfx}"))
+        elif ab_type == AbilityType.ChangeState:
             hitattr = ab.get(f"_VariousId{i}str")
             if not hitattr:
                 actcond = ab.get(f"_VariousId{i}a")
@@ -1214,9 +1258,8 @@ def search_abs(meta, ab):
             meta.alt_actions.append(("dodge", ab[f"_VariousId{i}a"]))
         elif ab_type == AbilityType.UniqueTransform:
             meta.utp_chara = (ab.get(f"_VariousId{i}a", 0), ab.get(f"_VariousId{i}str"))
-        elif ab_type == AbilityType.ReferenceOther:
-            for sfx in ("a", "b", "c"):
-                search_abs(meta, ab.get(f"_VariousId{i}{sfx}"))
+        elif ab_type == AbilityType.HitAttributeShift:
+            meta.dragon_hitattrshift = True
 
 
 class AdvConf(CharaData, SkillProcessHelper):
@@ -1252,7 +1295,7 @@ class AdvConf(CharaData, SkillProcessHelper):
     }
 
     def process_result(self, res, condense=True, all_levels=False):
-        self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
+        self.set_animation_reference(res)
         self.reset_meta()
 
         ab_lst = []
@@ -1285,6 +1328,7 @@ class AdvConf(CharaData, SkillProcessHelper):
 
         self.alt_actions = []
         self.utp_chara = None
+        self.dragon_hitattrshift = False
         for ab in ab_lst:
             search_abs(self, ab)
         if self.utp_chara is not None:
@@ -1338,11 +1382,11 @@ class AdvConf(CharaData, SkillProcessHelper):
             #     else:
             #         conf["dodge"] = {"startup": DrgConf.COMMON_ACTIONS_DEFAULTS["dodge"]}
             # else:
-            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id")
+            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift)
             del conf["dragonform"]["d"]
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
-            self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
+            self.set_animation_reference(res)
 
         for m in range(1, 5):
             if mode := res.get(f"_ModeId{m}"):
@@ -1419,6 +1463,8 @@ class AdvConf(CharaData, SkillProcessHelper):
                                 elif xalt_pattern is not None and (xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"])):
                                     conf[xn_key] = xaltconf
                                     self.action_ids[xn["_Id"]] = xn_key
+                    if not mode_name and xalt["_MaxComboNum"] < 5:
+                        conf["default"] = {"x_max": xalt["_MaxComboNum"]}
         try:
             conf["c"]["gun"] = list(set(conf["c"]["gun"]))
         except KeyError:
@@ -2245,17 +2291,23 @@ class DrgConf(DragonData, SkillProcessHelper):
         conf, k, action = super().convert_skill(k, seq, skill, lv, no_loop=no_loop)
         conf["sp_db"] = skill.get("_SpLv2Dragon", 45)
         conf["uses"] = skill.get("_MaxUseNum", 1)
-        try:
-            attr = conf["attr"]
+        if self.hitattrshift:
             del conf["attr"]
-            conf["attr"] = attr
-        except KeyError:
-            pass
+            hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
+            hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d(_HAS)?_LV0{lv}.*"), attr_key="attr_HAS")
+        else:
+            try:
+                attr = conf["attr"]
+                del conf["attr"]
+                conf["attr"] = attr
+            except KeyError:
+                pass
         return conf, k, action
 
-    def process_result(self, res, remap=True):
+    def process_result(self, res, remap=True, hitattrshift=False):
         super().process_result(res)
         self.reset_meta()
+        self.hitattrshift = hitattrshift
 
         max_lb = res.get("_MaxLimitBreakCount", 4)
         att = res["_MaxAtk"]
@@ -2299,15 +2351,18 @@ class DrgConf(DragonData, SkillProcessHelper):
                 #     DrgConf.COMMON_ACTIONS[act][tuple(actconf['attr'][0].items())].add(conf['d']['name'])
                 # except KeyError:
                 #     DrgConf.COMMON_ACTIONS[act][tuple(actconf['attr'][0].items())] = {conf['d']['name']}
+            actconf = {}
             if DrgConf.COMMON_ACTIONS_DEFAULTS[act] != r:
-                conf[act] = {"recovery": r}
+                actconf = {"recovery": r}
             if act == "dshift":
                 hitattrs = convert_all_hitattr(res[key])
                 if hitattrs and (len(hitattrs) > 1 or hitattrs[0]["dmg"] != 2.0 or set(hitattrs[0].keys()) != {"dmg"}):
-                    try:
-                        conf[act]["attr"] = hitattrs
-                    except KeyError:
-                        conf[act] = {"attr": hitattrs}
+                    actconf["attr"] = hitattrs
+                if hitattrshift:
+                    if hitattrs := convert_all_hitattr(res[key], pattern=re.compile(r".*_HAS")):
+                        actconf["attr_HAS"] = hitattrs
+            if actconf:
+                conf[act] = actconf
 
             self.action_ids[res[key]["_Id"]] = act
 
@@ -2325,9 +2380,12 @@ class DrgConf(DragonData, SkillProcessHelper):
         dcmax = res["_ComboMax"]
         for n, xn in enumerate(dcombo):
             n += 1
+            xn_key = f"dx{n}"
             if dxconf := convert_x(xn["_Id"], xn, xlen=dcmax, convert_follow=True, is_dragon=True):
-                conf[f"dx{n}"] = dxconf
-                self.action_ids[xn["_Id"]] = f"dx{n}"
+                conf[xn_key] = dxconf
+                self.action_ids[xn["_Id"]] = xn_key
+            if hitattrshift:
+                hit_attr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
 
         for act, seq, key in (
             ("ds1", 1, "_Skill1"),
@@ -2370,11 +2428,11 @@ class DrgConf(DragonData, SkillProcessHelper):
                 fmt_conf(data, f=fp, lim=3)
         # pprint(DrgConf.COMMON_ACTIONS)
 
-    def get(self, name, by=None):
+    def get(self, name, by=None, hitattrshift=False):
         res = super().get(name, by=by, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res, remap=False)
+        return self.process_result(res, remap=False, hitattrshift=hitattrshift)
 
 
 class WepConf(WeaponBody, SkillProcessHelper):

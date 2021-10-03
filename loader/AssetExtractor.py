@@ -272,21 +272,21 @@ def unpack_GameObject(obj, dest, ex_paths, obj_by_pathid):
         save_json(component_monos, dest)
 
 
-def find_ref(container):
-    ref = os.path.splitext(os.path.basename(container))[0]
-    if len(ref) < 4:
-        ref = None
-    elif ref[3] == "_":
-        ref = ref.split("_")[-1]
-        if len(ref) != 8:
-            ref = None
-    elif ref[0] == "d":
-        parts = ref.split("_")
-        if len(parts[0]) == 9:
-            ref = parts[0]
-        else:
-            ref = parts[0] + parts[1]
-    return ref
+# def find_ref(container):
+#     ref = os.path.splitext(os.path.basename(container))[0]
+#     if len(ref) < 4:
+#         ref = None
+#     elif ref[3] == "_":
+#         ref = ref.split("_")[-1]
+#         if len(ref) != 8:
+#             ref = None
+#     elif ref[0] == "d":
+#         parts = ref.split("_")
+#         if len(parts[0]) == 9:
+#             ref = parts[0]
+#         else:
+#             ref = parts[0] + parts[1]
+#     return ref
 
 
 def unpack_Animation(obj, dest, ex_paths, obj_by_pathid):
@@ -294,19 +294,19 @@ def unpack_Animation(obj, dest, ex_paths, obj_by_pathid):
     if data.path_id in ex_paths:
         return
     obj_type_str = str(obj.type)
-    ref = None
-    if obj.container is not None:
-        ref = find_ref(obj.container)
-    else:
-        for asset in obj.assets_file.objects.values():
-            if asset.container is not None:
-                ref = find_ref(asset.container)
-                if ref is not None:
-                    break
+    # ref = None
+    # if obj.container is not None:
+    #     ref = find_ref(obj.container)
+    # else:
+    #     for asset in obj.assets_file.objects.values():
+    #         if asset.container is not None:
+    #             ref = find_ref(asset.container)
+    #             if ref is not None:
+    #                 break
     dest = f"{dest}/{obj_type_str}.{data.name}.json"
     tree = data.type_tree.to_dict()
     tree["pathID"] = data.path_id
-    tree["ref"] = ref
+    # tree["ref"] = ref
     save_json(tree, dest)
     ex_paths.add(data.path_id)
 
@@ -398,7 +398,7 @@ def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
         return
     if obj.assets_file:
         # try to find ycbcr
-        if (res := YCBCR_PATTERN.match(data.name)) :
+        if res := YCBCR_PATTERN.match(data.name):
             img_name = res.group(1)
             found_ycbcr = {res.group(2): data}
             for other_pathid, other_obj in obj.assets_file.objects.items():

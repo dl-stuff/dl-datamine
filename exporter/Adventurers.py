@@ -11,7 +11,7 @@ from exporter.Shared import (
     ActionCondition,
     snakey,
 )
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, CLASS_TYPES
+from exporter.Mappings import WEAPON_LABEL, WEAPON_TYPES, ELEMENTS, CLASS_TYPES
 
 MODE_CHANGE_TYPES = {1: "Skill", 2: "Hud", 3: "Dragon", 4: "Buff", 5: "Ability"}
 
@@ -146,8 +146,11 @@ class CharaData(DBView):
             return ab_map
         return res
 
+    def set_animation_reference(self, res):
+        self.index["ActionParts"].animation_reference = (WEAPON_LABEL[res["_WeaponType"]], f'{res["_BaseId"]:06}{res["_VariationId"]:02}')
+
     def process_result(self, res, condense=True):
-        self.index["ActionParts"].animation_reference = f'{res["_BaseId"]:06}{res["_VariationId"]:02}'
+        self.set_animation_reference(res)
         if "_WeaponType" in res:
             res["_WeaponType"] = WEAPON_TYPES.get(res["_WeaponType"], res["_WeaponType"])
         if "_ElementalType" in res:
@@ -262,9 +265,7 @@ class ManaCircle(DBView):
                     as_field = field
                 fieldnames.append(f"{tbl}.{field} AS {as_field}")
         fieldnames = ",".join(fieldnames)
-        self.database.conn.execute(
-            f"CREATE VIEW {self.name} AS SELECT {fieldnames} FROM MC LEFT JOIN ManaPieceMaterial ON (MC._ManaPieceType == ManaPieceMaterial._ManaPieceType AND MC._Step == ManaPieceMaterial._Step)"
-        )
+        self.database.conn.execute(f"CREATE VIEW {self.name} AS SELECT {fieldnames} FROM MC LEFT JOIN ManaPieceMaterial ON (MC._ManaPieceType == ManaPieceMaterial._ManaPieceType AND MC._Step == ManaPieceMaterial._Step)")
         self.database.conn.commit()
 
 
@@ -277,4 +278,4 @@ if __name__ == "__main__":
     index = DBViewIndex()
     # view = ManaCircle(index)
     view = CharaData(index)
-    view.export_one_to_folder(pk=10950203)
+    view.export_one_to_folder(pk=10350506)

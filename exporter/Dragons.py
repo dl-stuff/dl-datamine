@@ -16,12 +16,15 @@ class DragonData(DBView):
             labeled_fields=["_Name", "_SecondName", "_Profile", "_CvInfo", "_CvInfoEn"],
         )
 
-    def process_result(self, res, full_abilities=False):
+    def set_animation_reference(self, res):
         if "_AnimFileName" in res and res["_AnimFileName"]:
-            anim_key = res["_AnimFileName"].replace("_", "")
+            anim_key = res["_AnimFileName"].replace("_", "")[1:]
         else:
-            anim_key = f'd{res["_BaseId"]}{res["_VariationId"]:02}'
-        self.index["ActionParts"].animation_reference = anim_key
+            anim_key = f'{res["_BaseId"]}{res["_VariationId"]:02}'
+        self.index["ActionParts"].animation_reference = ("DRG", anim_key)
+
+    def process_result(self, res, full_abilities=False):
+        self.set_animation_reference(res)
         for s in ("_Skill1", "_Skill2", "_SkillFinalAttack"):
             try:
                 res[s] = self.index["SkillData"].get(res[s], full_abilities=full_abilities)
@@ -92,4 +95,5 @@ class DragonData(DBView):
 if __name__ == "__main__":
     index = DBViewIndex()
     view = DragonData(index)
-    view.export_one_to_folder(20050319, out_dir="./out/dragons")
+    # view.export_one_to_folder(20050525, out_dir="./out/dragons")
+    view.export_all_to_folder()
