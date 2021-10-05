@@ -9,7 +9,7 @@ SIM = "../dl/conf"
 GEN = "./out/gen"
 TIMING = {"startup", "recovery", "charge"}
 DO_NOT_MERGE = {
-    "adv": {"a", "attr"},
+    "adv": {"a", "attr", "startup", "recovery", "charge"},
     "drg": {"a", "attr"},
     "wep": {"a"},
 }

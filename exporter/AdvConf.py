@@ -63,8 +63,6 @@ BUFFARG_KEY = {
     "_RateHP": ("maxhp", "buff"),
     "_RateCritical": ("crit", "chance"),
     "_EnhancedCritical": ("crit", "damage"),
-    "_RegenePower": ("heal", "buff"),
-    "_SlipDamageRatio": ("regen", "buff"),
     "_RateRecoverySp": ("sp", "passive"),
     "_RateAttackSpeed": ("spd", "buff"),
     "_RateChargeSpeed": ("cspd", "buff"),
@@ -124,10 +122,15 @@ DUMMY_PART = {"_seconds": 0}
 
 def ele_bitmap(n):
     seq = 1
-    while not n & 1 and n > 0:
+    eles = []
+    while n > 0 and seq < 6:
+        if n & 1:
+            eles.append(ELEMENTS[seq].lower())
         n = n >> 1
         seq += 1
-    return ELEMENTS[seq]
+    if len(eles) == 1:
+        return eles[0]
+    return eles
 
 
 def str_to_tuples(value):
@@ -247,7 +250,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     for part in actparts:
         # servant for persona
         if servant_cmd := part.get("_servantActionCommandId"):
-            servant_attr = {"servant": servant_cmd}
+            servant_attr = {"DEBUG_SERVANT": servant_cmd}
             iv = fr(part["_seconds"])
             if iv:
                 servant_attr["iv"] = iv
@@ -332,6 +335,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         gen, delay = None, None
         # part.get("_canBeSameTarget")
         if gen := part.get("_generateNum"):
+            if blt := part.get("_bulletNum", 0):
+                gen = blt
             delay = part.get("_generateDelay", 0)
             ref_attrs = part_hitattrs
         elif (abd := part.get("_abDuration", 0)) >= (abi := part.get("_abHitInterval", 0)) and "_abHitAttrLabel" in part_hitattr_map:
@@ -446,9 +451,6 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr["drg"] = dragon
         if (od := hitattr.get("_ToBreakDmgRate")) and od != 1:
             attr["odmg"] = fr(od)
-        # i still fucking hate cykagames but i will find better way than this
-        # if part.get("DEBUG_GLUCA_FLAG"):
-        #     attr["gluca"] = 1
     if "sp" not in once_per_action:
         if sp := hitattr.get("_AdditionRecoverySp"):
             attr["sp"] = fr(sp)
@@ -677,39 +679,27 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                             buffs.append(["affup", fr(value), duration, aff])
                     for k, mod in BUFFARG_KEY.items():
                         if value := actcond.get(k):
-                            if (bele := actcond.get("_TargetElemental")) and btype != "self":
-                                buffs.append(
-                                    [
-                                        "ele",
-                                        fr(value),
-                                        duration,
-                                        *mod,
-                                        ele_bitmap(bele).lower(),
-                                    ]
-                                )
-                                if negative_value is None:
-                                    negative_value = value < 0
-                            elif k == "_SlipDamageRatio":
-                                value *= 100
-                                if (afftype := actcond.get("_Type", "").lower()) in AFFLICTION_TYPES.values():
-                                    buffs.append(
-                                        [
-                                            "selfaff",
-                                            -fr(value),
-                                            duration,
-                                            actcond.get("_Rate"),
-                                            afftype,
-                                            *mod,
-                                        ]
-                                    )
-                                    if negative_value is None:
-                                        negative_value = value > 0
-                                else:
-                                    buffs.append([btype, -fr(value), duration, *mod])
+                            buffs.append([btype, fr(value), duration, *mod])
+                            if negative_value is None:
+                                negative_value = value < 0
+                    interval = fr(actcond.get("_SlipDamageIntervalSec"))
+                    if value := actcond.get("_RegenePower"):
+                        buffs.append([btype, fr(value), [duration, interval], "heal", "hp"])
+                    for slip_dmg, mult in (("_SlipDamagePower", -1), ("_SlipDamageRatio", -100), ("_SlipDamageFixed", -1)):
+                        if value := actcond.get(slip_dmg):
+                            value *= mult
+                            if (afftype := actcond.get("_Type", "").lower()) in AFFLICTION_TYPES.values():
+                                buffs.append(["selfaff", fr(value), [duration, interval], actcond.get("_Rate"), afftype, "regen", "hp"])
+                                negative_value = True
                             else:
-                                buffs.append([btype, fr(value), duration, *mod])
+                                if actcond.get("_ValidRegeneHP"):
+                                    buffs.append([btype, fr(value), [duration, interval], "regen", "hp"])
+                                if actcond.get("_ValidRegeneSP"):
+                                    # unclear what _SlipDamagePower for spwould imply :v
+                                    sp_kind = "sp" if "_SlipDamageFixed" else "sp%"
+                                    buffs.append([btype, fr(value), [duration, interval], "regen", sp_kind])
                                 if negative_value is None:
-                                    negative_value = value < 0
+                                    negative_value = value > 0
                     if negative_value is None:
                         negative_value = False
             if buffs:
@@ -717,6 +707,8 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                     buffs = buffs[0]
                 # if any(actcond.get(k) for k in AdvConf.OVERWRITE):
                 #     buffs.append('-refresh')
+                if (bele := actcond.get("_TargetElemental")) and target != ActionTargetGroup.HOSTILE:
+                    attr["buffele"] = ele_bitmap(bele)
                 if actcond.get("_OverwriteGroupId"):
                     target_name = TARGET_OVERWRITE_KEY.get(target, target.name)
                     buffs.append(f'-overwrite_{target_name}{actcond.get("_OverwriteGroupId")}')
@@ -775,40 +767,58 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, 
                 if attr["iv"] == 0:
                     del attr["iv"]
         conf[attr_key] = hitattrs
+    if casting_action := action.get("_CastingAction"):
+        _, s, _ = hit_sr(casting_action)
+        conf["startup"] = s
     if not hitattrs and skip_nohitattr:
         return None
     return conf
 
 
-def remap_following_actions(conf, action_ids):
-    for key, subdict in conf.copy().items():
-        if not isinstance(subdict, dict):
-            continue
-        if key not in ("interrupt", "cancel"):
-            remap_following_actions(subdict, action_ids)
-            continue
-        new_subdict = {}
-        for idx, value in subdict.items():
-            try:
-                new_subdict[action_ids[idx]] = value[0]
-            except KeyError:
-                if idx in DODGE_ACTIONS or value[1] in (ActionCancelType.Avoid, ActionCancelType.AvoidFront, ActionCancelType.AvoidBack):
-                    idx = "dodge"
-                elif value[1] in (ActionCancelType.BurstAttack,):
-                    idx = "fs"
-                elif isinstance(idx, int):
-                    continue
-                new_subdict[idx] = value[0]
-        if "dodgeb" in new_subdict:
-            if "dodge" in subdict:
-                new_subdict["dodge"] = min(new_subdict["dodge"], new_subdict["dodgeb"])
+def remap_stuff(conf, action_ids, parent_key=None, servant_attrs=None):
+    # search the dict
+    for key, subvalue in conf.copy().items():
+        if key in ("interrupt", "cancel"):
+            # map interrupt/cancel to conf names
+            new_subdict = {}
+            for idx, value in subvalue.items():
+                try:
+                    new_subdict[action_ids[idx]] = value[0]
+                except KeyError:
+                    if idx in DODGE_ACTIONS or value[1] in (ActionCancelType.Avoid, ActionCancelType.AvoidFront, ActionCancelType.AvoidBack):
+                        idx = "dodge"
+                    elif value[1] in (ActionCancelType.BurstAttack,):
+                        idx = "fs"
+                    elif isinstance(idx, int):
+                        continue
+                    new_subdict[idx] = value[0]
+            if "dodgeb" in new_subdict:
+                if "dodge" in subvalue:
+                    new_subdict["dodge"] = min(new_subdict["dodge"], new_subdict["dodgeb"])
+                else:
+                    new_subdict["dodge"] = new_subdict["dodgeb"]
+                del new_subdict["dodgeb"]
+            if new_subdict:
+                conf[key] = dict(sorted(new_subdict.items()))
             else:
-                new_subdict["dodge"] = new_subdict["dodgeb"]
-            del new_subdict["dodgeb"]
-        if new_subdict:
-            conf[key] = dict(sorted(new_subdict.items()))
-        else:
-            del conf[key]
+                del conf[key]
+        elif key == "attr":
+            if servant_attrs:
+                new_attrs = []
+                for attr in subvalue:
+                    if servant_id := attr.get("DEBUG_SERVANT"):
+                        for servant_attr in servant_attrs[servant_id]:
+                            if "iv" in attr:
+                                servant_attr["iv"] = attr["iv"]
+                            elif "iv" in servant_attr:
+                                del servant_attr["iv"]
+                            servant_attr["msl"] += attr.get("msl", 0.0)
+                            new_attrs.append(servant_attr)
+                    else:
+                        new_attrs.append(attr)
+                conf[key] = new_attrs
+        elif isinstance(subvalue, dict):
+            remap_stuff(subvalue, action_ids, parent_key=key, servant_attrs=servant_attrs)
 
 
 def convert_following_actions(startup, followed_by, default=None):
@@ -835,7 +845,7 @@ def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=Fals
     DEBUG_CHECK_NEXTACT = False
     currentaction = xn
     while nextaction := currentaction.get("_NextAction"):
-        xn["_Parts"].extend(nextaction["_Parts"])
+        # xn["_Parts"].extend(nextaction["_Parts"])
         currentaction = nextaction
         DEBUG_CHECK_NEXTACT = True
 
@@ -1009,7 +1019,7 @@ class BaseConf(WeaponType):
                                             del attr["iv"]
                                     conf["lv2"][xn_key] = {"attr": hitattrs}
 
-        remap_following_actions(conf, self.action_ids)
+        remap_stuff(conf, self.action_ids)
 
         return conf
 
@@ -1056,7 +1066,7 @@ def convert_skill_common(skill, lv):
 
     currentaction = action
     while nextaction := currentaction.get("_NextAction"):
-        action["_Parts"].extend(nextaction["_Parts"])
+        # action["_Parts"].extend(nextaction["_Parts"])
         currentaction = nextaction
         sconf["DEBUG_CHECK_NEXTACT"] = True
 
@@ -1293,15 +1303,32 @@ class AdvConf(CharaData, SkillProcessHelper):
         # 25: "Joker",
         26: "Mona",
     }
+    SERVANT_TO_DACT = (
+        (1, "dx1"),
+        (2, "dx2"),
+        (3, "dx3"),
+        (4, "dx4"),
+        (5, "dx5"),
+        (6, "ds1"),
+        (7, "ds2"),
+    )
 
-    def process_result(self, res, condense=True, all_levels=False):
+    def process_result(self, res, condense=True, all_levels=False, force_50mc=False):
         self.set_animation_reference(res)
         self.reset_meta()
 
         ab_lst = []
+        if force_50mc:
+            res = dict(res)
+            res["_MaxLimitBreakCount"] = 4
+        spiral = res["_MaxLimitBreakCount"] == 5
         for i in (1, 2, 3):
+            found = 1
             for j in (3, 2, 1):
                 if ab := res.get(f"_Abilities{i}{j}"):
+                    if force_50mc and found > 0:
+                        found -= 1
+                        continue
                     ab_lst.append(self.index["AbilityData"].get(ab, full_query=True))
                     break
         converted, skipped = convert_all_ability(ab_lst)
@@ -1314,7 +1341,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 "hp": res["_MaxHp"],
                 "ele": ELEMENTS[res["_ElementalType"]].lower(),
                 "wt": WEAPON_TYPES[res["_WeaponType"]].lower(),
-                "spiral": res["_MaxLimitBreakCount"] == 5,
+                "spiral": spiral,
                 "a": converted,
                 # 'skipped': skipped
             }
@@ -1365,29 +1392,13 @@ class AdvConf(CharaData, SkillProcessHelper):
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
 
         if udrg := res.get("_UniqueDragonId"):
-            # if not res.get("_ModeChangeType") and res.get("_IsConvertDragonSkillLevel"):
-            #     dragon = self.index["DragonData"].get(udrg, by="_Id")
-            #     for part in dragon["_Skill1"]["_ActionId1"]["_Parts"]:
-            #         part["DEBUG_GLUCA_FLAG"] = True
-            #     res["_ModeId2"] = {
-            #         "_UniqueComboId": {
-            #             "_ActionId": dragon["_DefaultSkill"],
-            #             "_MaxComboNum": dragon["_ComboMax"],
-            #         },
-            #         "_Skill1Id": dragon["_Skill1"],
-            #         "_Skill2Id": dragon["_Skill2"],
-            #     }
-            #     if ddodge := dragon.get("dodge"):
-            #         conf["dodge"] = {"startup": ddodge["recovery"]}
-            #     else:
-            #         conf["dodge"] = {"startup": DrgConf.COMMON_ACTIONS_DEFAULTS["dodge"]}
-            # else:
             conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift)
             del conf["dragonform"]["d"]
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
             self.set_animation_reference(res)
 
+        base_mode_burst, base_mode_x = None, None
         for m in range(1, 5):
             if mode := res.get(f"_ModeId{m}"):
                 mode_name = None
@@ -1407,22 +1418,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                     try:
                         mode_name = "_" + snakey(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
                     except:
-                        # if res.get("_ModeChangeType") == 3 and m == 2:
-                        #     mode_name = "_ddrive"
-                        #     if udrg := res.get("_UniqueDragonId"):
-                        #         dragon = self.index["DragonData"].get(udrg, by="_Id")
-                        #         for s in (1, 2):
-                        #             a_skey = f"_Skill{s}Id"
-                        #             d_skey = f"_Skill{s}"
-                        #             if not d_skey in dragon:
-                        #                 continue
-                        #             if s == 1:
-                        #                 for part in dragon[d_skey]["_ActionId1"]["_Parts"]:
-                        #                     part["DEBUG_GLUCA_FLAG"] = True
-                        #             if a_skey in mode:
-                        #                 mode[a_skey]["_ActionId1"]["_Parts"].extend(dragon[d_skey]["_ActionId1"]["_Parts"])
-                        #             else:
-                        #                 mode[a_skey] = dragon[d_skey]
                         if m == 1:
                             mode_name = ""
                         else:
@@ -1435,14 +1430,16 @@ class AdvConf(CharaData, SkillProcessHelper):
                             skill,
                             None,
                         )
-                if burst := mode.get("_BurstAttackId"):
+                if (burst := mode.get("_BurstAttackId")) and base_mode_burst != burst["_Id"]:
                     marker = burst.get("_BurstMarkerId")
                     if not marker:
                         marker = self.index["PlayerAction"].get(burst["_Id"] + 4)
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f"{fs}{mode_name}"] = fsc
                     self.action_ids[burst["_Id"]] = f"{fs}{mode_name}"
-                if (xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict):
+                    if not mode_name:
+                        base_mode_burst = burst["_Id"]
+                if ((xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict)) and base_mode_x != xalt["_Id"]:
                     xalt_pattern = re.compile(r".*H0\d_LV02$") if conf["c"]["spiral"] else None
                     for prefix in ("", "Ex"):
                         if xalt.get(f"_{prefix}ActionId"):
@@ -1463,8 +1460,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                                 elif xalt_pattern is not None and (xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"])):
                                     conf[xn_key] = xaltconf
                                     self.action_ids[xn["_Id"]] = xn_key
-                    if not mode_name and xalt["_MaxComboNum"] < 5:
-                        conf["default"] = {"x_max": xalt["_MaxComboNum"]}
+                    if not mode_name:
+                        base_mode_x = xalt["_Id"]
+                        if xalt["_MaxComboNum"] < 5:
+                            conf["default"] = {"x_max": xalt["_MaxComboNum"]}
         try:
             conf["c"]["gun"] = list(set(conf["c"]["gun"]))
         except KeyError:
@@ -1495,7 +1494,22 @@ class AdvConf(CharaData, SkillProcessHelper):
             if dodge:
                 self.action_ids[dodge] = "dodge"
 
-        remap_following_actions(conf, self.action_ids)
+        servant_attrs = None
+        if self.utp_chara and self.utp_chara[0] == 2:
+            # build fake servant attrs
+            servant_attrs = {}
+            for servant_id, dact in self.SERVANT_TO_DACT:
+                if not (dact_conf := conf["dragonform"].get(dact)) or not (dact_attrs := dact_conf.get("attr")):
+                    continue
+                servant_attrs[servant_id] = []
+                for attr in dact_attrs:
+                    attr = dict(attr)
+                    if servant_id == 6:
+                        # man i fucking hate cykagames
+                        attr["gluca"] = 1
+                    attr["msl"] = dact_conf.get("startup") + attr.get("iv", 0.0) + attr.get("msl", 0.0)
+                    servant_attrs[servant_id].append(attr)
+        remap_stuff(conf, self.action_ids, servant_attrs=servant_attrs)
 
         return conf
 
@@ -1506,7 +1520,9 @@ class AdvConf(CharaData, SkillProcessHelper):
         return self.process_result(res, all_levels=all_levels)
 
     @staticmethod
-    def outfile_name(conf, ext):
+    def outfile_name(conf, ext, variant=None):
+        if variant is not None:
+            return snakey(conf["c"]["name"]) + "." + variant + ext
         return snakey(conf["c"]["name"]) + ext
 
     def skillshare_data(self, res):
@@ -1630,9 +1646,13 @@ class AdvConf(CharaData, SkillProcessHelper):
 
         for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
             try:
-                outconf = self.process_result(
-                    res,
-                )
+                if res.get("_UniqueGrowMaterialId1") and res.get("_UniqueGrowMaterialId2"):
+                    outconf = self.process_result(res, force_50mc=True)
+                    out_name = self.outfile_name(outconf, ext, variant="50MC")
+                    output = os.path.join(advout_dir, out_name)
+                    with open(output, "w", newline="", encoding="utf-8") as fp:
+                        fmt_conf(outconf, f=fp)
+                outconf = self.process_result(res)
                 out_name = self.outfile_name(outconf, ext)
                 if ss_res := self.skillshare_data(res):
                     skillshare_data[snakey(outconf["c"]["name"])] = ss_res
@@ -1696,6 +1716,8 @@ def ab_cond(ab, chains=False):
         cparts.append(f"hit{condval}")
     elif cond == AbilityCondition.ON_BUFF_FIELD:
         cparts.append("zone")
+    elif cond == AbilityCondition.UNIQUE_TRANS_MODE:
+        cparts.append("ddrive")
     elif cond == AbilityCondition.HAS_AURA_TYPE:
         if condval2 == 1:
             target = "self"
@@ -2405,7 +2427,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             conf[dsfinal_act]["final"] = True
 
         if remap:
-            remap_following_actions(conf, self.action_ids)
+            remap_stuff(conf, self.action_ids)
 
         return conf
 
@@ -2484,7 +2506,8 @@ class WepConf(WeaponBody, SkillProcessHelper):
             else:
                 self.chara_skills[skill["_Id"]] = (act, seq, skill, None)
         self.process_skill(res, conf, {})
-        remap_following_actions(conf, self.action_ids)
+
+        remap_stuff(conf, self.action_ids)
 
         return conf
 
