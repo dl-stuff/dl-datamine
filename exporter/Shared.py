@@ -348,7 +348,7 @@ class PlayerActionHitAttribute(DBView):
     def __init__(self, index):
         super().__init__(index, "PlayerActionHitAttribute")
 
-    def process_result(self, res):
+    def process_result(self, res, check_additional=True):
         res_list = [res] if isinstance(res, dict) else res
         for r in res_list:
             try:
@@ -366,6 +366,11 @@ class PlayerActionHitAttribute(DBView):
             for ks in ("_KillerState1", "_KillerState2", "_KillerState3"):
                 if ks in r and r[ks] in KILLER_STATE:
                     r[ks] = KILLER_STATE[r[ks]]
+
+            if check_additional and (rng_hitlabels := r.get("_AdditionalRandomHitLabel")):
+                where = " OR ".join((f"PlayerActionHitAttribute._Id={label!r}" for label in rng_hitlabels.split("/")))
+                r["_AdditionalRandomHitLabel"] = [self.process_result(rng_label, check_additional=False) for rng_label in self.get_all(where=where)]
+
         return res
 
     S_PATTERN = re.compile(r"S\d+")

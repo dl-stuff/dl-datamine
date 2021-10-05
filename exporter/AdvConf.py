@@ -724,6 +724,7 @@ def hit_sr(action, startup=None):
     last_r = None
     noaid_r = None
     motion = 0
+
     for part in action["_Parts"]:
         # find startup
         if s is None:
@@ -756,10 +757,11 @@ def hit_sr(action, startup=None):
         r = fr(r - s)
     else:
         r = None
+
     return s, r, followed_by
 
 
-def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None, attr_key="attr"):
+def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None, attr_key="attr", next_idx=0):
     if hitattrs := convert_all_hitattr(action, pattern=pattern, meta=meta, skill=skill):
         for attr in hitattrs:
             if not isinstance(attr, int) and "iv" in attr:
@@ -770,7 +772,22 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, 
     if casting_action := action.get("_CastingAction"):
         _, s, _ = hit_sr(casting_action)
         conf["startup"] = s
-    if not hitattrs and skip_nohitattr:
+
+    next_res = None
+    if nextaction := action.get("_NextAction"):
+        next_res = hit_attr_adj(
+            nextaction,
+            0.0,
+            conf,
+            pattern=pattern,
+            skip_nohitattr=skip_nohitattr,
+            meta=meta,
+            skill=skill,
+            attr_key=f"DEBUG_attr_N{next_idx+1}",
+            next_idx=next_idx + 1,
+        )
+
+    if not hitattrs and not next_res and skip_nohitattr:
         return None
     return conf
 
@@ -841,18 +858,9 @@ def convert_following_actions(startup, followed_by, default=None):
     return interrupt_by, cancel_by
 
 
-def convert_x(aid, xn, xlen=5, pattern=None, convert_follow=True, is_dragon=False):
-    DEBUG_CHECK_NEXTACT = False
-    currentaction = xn
-    while nextaction := currentaction.get("_NextAction"):
-        # xn["_Parts"].extend(nextaction["_Parts"])
-        currentaction = nextaction
-        DEBUG_CHECK_NEXTACT = True
-
+def convert_x(xn, xlen=5, pattern=None, convert_follow=True, is_dragon=False):
     s, r, followed_by = hit_sr(xn)
     xconf = {"startup": s, "recovery": r}
-    if DEBUG_CHECK_NEXTACT:
-        xconf["DEBUG_CHECK_NEXTACT"] = True
     xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
 
     if xn.get("_IsLoopAction"):
@@ -981,7 +989,7 @@ class BaseConf(WeaponType):
                     xn = res[f"_DefaultSkill0{n}"]
                 except KeyError:
                     break
-                conf[f"x{n}"] = convert_x(xn["_Id"], xn)
+                conf[f"x{n}"] = convert_x(xn)
                 # for part in xn['_Parts']:
                 #     if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
                 #         fs_delay[f'x{n}'] = part.get('_seconds')
@@ -1009,7 +1017,7 @@ class BaseConf(WeaponType):
                             for n, xn in enumerate(xalt[f"_{prefix}ActionId"]):
                                 n += 1
                                 xn_key = f"x{n}_{mode_name}{prefix.lower()}"
-                                if xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"]):
+                                if xaltconf := convert_x(xn, xlen=xalt["_MaxComboNum"]):
                                     conf[xn_key] = xaltconf
                                 self.action_ids[xn["_Id"]] = f"x{n}"
                                 if hitattrs := convert_all_hitattr(xn, re.compile(r".*H0\d_LV02$")):
@@ -1063,12 +1071,6 @@ def convert_skill_common(skill, lv):
         sconf["interrupt"] = interrupt
     if cancel:
         sconf["cancel"] = cancel
-
-    currentaction = action
-    while nextaction := currentaction.get("_NextAction"):
-        # action["_Parts"].extend(nextaction["_Parts"])
-        currentaction = nextaction
-        sconf["DEBUG_CHECK_NEXTACT"] = True
 
     return sconf, action
 
@@ -1450,14 +1452,13 @@ class AdvConf(CharaData, SkillProcessHelper):
                                 else:
                                     xn_key = f"x{n}{mode_name}{prefix.lower()}"
                                 if xaltconf := convert_x(
-                                    xn["_Id"],
                                     xn,
                                     xlen=xalt["_MaxComboNum"],
                                     pattern=xalt_pattern,
                                 ):
                                     conf[xn_key] = xaltconf
                                     self.action_ids[xn["_Id"]] = xn_key
-                                elif xalt_pattern is not None and (xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"])):
+                                elif xalt_pattern is not None and (xaltconf := convert_x(xn, xlen=xalt["_MaxComboNum"])):
                                     conf[xn_key] = xaltconf
                                     self.action_ids[xn["_Id"]] = xn_key
                     if not mode_name:
@@ -2403,7 +2404,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         for n, xn in enumerate(dcombo):
             n += 1
             xn_key = f"dx{n}"
-            if dxconf := convert_x(xn["_Id"], xn, xlen=dcmax, convert_follow=True, is_dragon=True):
+            if dxconf := convert_x(xn, xlen=dcmax, convert_follow=True, is_dragon=True):
                 conf[xn_key] = dxconf
                 self.action_ids[xn["_Id"]] = xn_key
             if hitattrshift:
@@ -2636,7 +2637,7 @@ if __name__ == "__main__":
             if xalt.get(f"_{prefix}ActionId"):
                 for n, xn in enumerate(xalt[f"_{prefix}ActionId"]):
                     n += 1
-                    if xaltconf := convert_x(xn["_Id"], xn, xlen=xalt["_MaxComboNum"]):
+                    if xaltconf := convert_x(xn, xlen=xalt["_MaxComboNum"]):
                         conf[f"x{n}_{prefix.lower()}"] = xaltconf
         fmt_conf(conf, f=sys.stdout)
     elif args.w:
