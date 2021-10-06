@@ -3,6 +3,7 @@ import json
 import re
 from collections import defaultdict
 from tqdm import tqdm
+import shutil
 
 from loader.Database import (
     DBViewIndex,
@@ -286,6 +287,8 @@ class EnemyParam(DBView):
                 except FileExistsError:
                     os.remove(link_target)
                     os.link(ai_path + ".py", link_target)
+                except OSError:
+                    shutil.copy(ai_path + ".py", link_target)
                 return subdir, snakey(f"{filename}{ext}")
         except KeyError:
             pass
@@ -302,6 +305,8 @@ class EnemyParam(DBView):
         except FileExistsError:
             os.remove(aiscript_init_link)
             os.link(AISCRIPT_INIT_PATH, aiscript_init_link)
+        except OSError:
+            shutil.copy(AISCRIPT_INIT_PATH, aiscript_init_link)
         misc_data = defaultdict(list)
         for res in tqdm(all_res, desc="enemies"):
             res = self.process_result(res)
