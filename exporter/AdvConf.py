@@ -242,11 +242,11 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     clear_once_per_action = action.get("_OnHitExecType") == 1
     hitattrs = []
     once_per_action = set()
+    partcond_once_per_action = defaultdict(set)
+    partcond_once_per_action[None] = once_per_action
     # accurate_col = 0
     # accurate_ab_col = 0
 
-    partcond = None
-    prev_partcond = None
     for part in actparts:
         # servant for persona
         if servant_cmd := part.get("_servantActionCommandId"):
@@ -259,7 +259,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if clear_once_per_action:
             once_per_action.clear()
         # parse part conds
-        prev_partcond, partcond = partcond, None
+        partcond = None
         if ctype := part.get("_conditionType"):
             condvalue = part["_conditionValue"]
             if ctype == PartConditionType.OwnerBuffCount:
@@ -269,11 +269,14 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 buffname = snakey(actcond.get("_Text") or "buff" + str(actcond.get("_Id")) or "mystery_buff", with_ext=False).lower()
                 count = condvalue["_count"]
                 compare = "var" + PART_COMPARISON_TO_VARS[condvalue["_compare"]]
-                partcond = [compare, [buffname, count]]
+                partcond = (compare, (buffname, count))
             elif ctype == PartConditionType.AuraLevel:
-                partcond = ["ampcond", [condvalue["_aura"].value, condvalue["_target"], PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"]]]
-            if partcond is not None and partcond != prev_partcond:
-                once_per_action.clear()
+                partcond = ("ampcond", (condvalue["_aura"].value, condvalue["_target"], PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"]))
+            if partcond is not None:
+                once_per_action = partcond_once_per_action[partcond]
+                once_per_action.update(partcond_once_per_action[None])
+            else:
+                once_per_action = partcond_once_per_action[None]
         # get the hitattrs
         part_hitattr_map = {"_hitAttrLabelSubList": []}
         if raw_hitattrs := part.get("_allHitLabels"):
@@ -830,6 +833,7 @@ def remap_stuff(conf, action_ids, parent_key=None, servant_attrs=None):
                             elif "iv" in servant_attr:
                                 del servant_attr["iv"]
                             servant_attr["msl"] += attr.get("msl", 0.0)
+                            servant_attr["msl"] = fr(servant_attr["msl"])
                             new_attrs.append(servant_attr)
                     else:
                         new_attrs.append(attr)
@@ -847,9 +851,11 @@ def convert_following_actions(startup, followed_by, default=None):
             cancel_by[act] = (0.0, None)
     for t, act, kind in followed_by:
         if t < startup:
-            interrupt_by[act] = (fr(t), kind)
+            if not act in interrupt_by or interrupt_by[act][0] > t:
+                interrupt_by[act] = (fr(t), kind)
         else:
-            cancel_by[act] = (t, kind)
+            if not act in cancel_by or cancel_by[act][0] > t:
+                cancel_by[act] = (t, kind)
     for k in interrupt_by:
         cancel_by[k] = (0.0, interrupt_by[k][1])
     for act, value in cancel_by.items():
@@ -1048,33 +1054,6 @@ class BaseConf(WeaponType):
                 fmt_conf(res, f=fp)
 
 
-def convert_skill_common(skill, lv):
-    action = 0
-    if lv >= skill.get("_AdvancedSkillLv1", float("inf")):
-        action = skill.get("_AdvancedActionId1", 0)
-    if isinstance(action, int):
-        action = skill.get("_ActionId1")
-
-    startup, recovery, followed_by = hit_sr(action, startup=0)
-
-    if not recovery:
-        AdvConf.MISSING_ENDLAG.append(skill.get("_Name"))
-
-    sconf = {
-        "sp": skill.get(f"_SpLv{lv}", skill.get("_Sp", 0)),
-        "startup": startup,
-        "recovery": recovery,
-    }
-
-    interrupt, cancel = convert_following_actions(0, followed_by)
-    if interrupt:
-        sconf["interrupt"] = interrupt
-    if cancel:
-        sconf["cancel"] = cancel
-
-    return sconf, action
-
-
 class SkillProcessHelper:
     def reset_meta(self):
         self.chara_skills = {}
@@ -1086,12 +1065,57 @@ class SkillProcessHelper:
         self.action_ids = {}
 
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
-        sconf, action = convert_skill_common(skill, lv)
+        action = 0
+        if lv >= skill.get("_AdvancedSkillLv1", float("inf")):
+            skey_pattern = "_AdvancedActionId{}"
+            action = skill.get(skey_pattern.format(1))
+        if isinstance(action, int):
+            skey_pattern = "_ActionId{}"
+            action = skill.get("_ActionId1")
 
-        sconf = hit_attr_adj(action, sconf["startup"], sconf, skip_nohitattr=False, pattern=re.compile(f".*LV0{lv}$"), meta=self, skill=skill)
+        startup, recovery, followed_by = hit_sr(action, startup=0)
+
+        if not recovery:
+            AdvConf.MISSING_ENDLAG.append(skill.get("_Name"))
+
+        sconf = {
+            "sp": skill.get(f"_SpLv{lv}", skill.get("_Sp", 0)),
+            "startup": startup,
+            "recovery": recovery,
+        }
+
+        interrupt, cancel = convert_following_actions(0, followed_by)
+        if interrupt:
+            sconf["interrupt"] = interrupt
+        if cancel:
+            sconf["cancel"] = cancel
+
+        hitlabel_pattern = re.compile(f".*LV0{lv}$")
+        sconf = hit_attr_adj(
+            action,
+            sconf["startup"],
+            sconf,
+            skip_nohitattr=False,
+            pattern=hitlabel_pattern,
+            meta=self,
+            skill=skill,
+        )
         hitattrs = sconf.get("attr")
         if (not hitattrs or all(["dmg" not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f"_IsAffectedByTensionLv{lv}"):
             sconf["energizable"] = bool(skill[f"_IsAffectedByTensionLv{lv}"])
+
+        for idx in range(2, 5):
+            if rng_actions := skill.get(skey_pattern.format(idx)):
+                hit_attr_adj(
+                    rng_actions,
+                    sconf["startup"],
+                    sconf,
+                    skip_nohitattr=False,
+                    pattern=hitlabel_pattern,
+                    meta=self,
+                    skill=skill,
+                    attr_key=f"attr_R{idx}",
+                )
 
         if isinstance((transkills := skill.get("_TransSkill")), dict):
             for idx, ts in enumerate(transkills.items()):
@@ -1385,6 +1409,11 @@ class AdvConf(CharaData, SkillProcessHelper):
                 conf[act] = actconf
                 self.action_ids[actdata["_Id"]] = act
 
+        if conf["c"]["spiral"]:
+            mlvl = {1: 4, 2: 3}
+        else:
+            mlvl = {1: 3, 2: 2}
+
         for s in (1, 2):
             if sdata := res.get(f"_Skill{s}"):
                 skill = self.index["SkillData"].get(sdata, full_query=True)
@@ -1394,7 +1423,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
 
         if udrg := res.get("_UniqueDragonId"):
-            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift)
+            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift, mlvl=mlvl if res.get("_IsConvertDragonSkillLevel") else None)
             del conf["dragonform"]["d"]
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
@@ -1474,10 +1503,6 @@ class AdvConf(CharaData, SkillProcessHelper):
         # pprint(self.abilities)
         # for k, seq, skill in self.chara_skills.values():
 
-        if conf["c"]["spiral"]:
-            mlvl = {1: 4, 2: 3}
-        else:
-            mlvl = {1: 3, 2: 2}
         self.process_skill(res, conf, mlvl, all_levels=all_levels)
         self.edit_skill_idx = 0
         if edit := res.get("_EditSkillId"):
@@ -2327,7 +2352,7 @@ class DrgConf(DragonData, SkillProcessHelper):
                 pass
         return conf, k, action
 
-    def process_result(self, res, remap=True, hitattrshift=False):
+    def process_result(self, res, remap=True, hitattrshift=False, mlvl=None):
         super().process_result(res)
         self.reset_meta()
         self.hitattrshift = hitattrshift
@@ -2423,7 +2448,8 @@ class DrgConf(DragonData, SkillProcessHelper):
             dsfinal_act = self.chara_skills.get(dsfinal["_Id"], (None,))[0]
             if dsfinal and not dsfinal_act:
                 self.chara_skills[dsfinal["_Id"]] = ("ds99", 99, dsfinal, None)
-        self.process_skill(res, conf, {})
+
+        self.process_skill(res, conf, mlvl or {1: 2, 2: 2})
         if dsfinal_act:
             conf[dsfinal_act]["final"] = True
 
@@ -2451,11 +2477,11 @@ class DrgConf(DragonData, SkillProcessHelper):
                 fmt_conf(data, f=fp, lim=3)
         # pprint(DrgConf.COMMON_ACTIONS)
 
-    def get(self, name, by=None, hitattrshift=False):
+    def get(self, name, by=None, hitattrshift=False, mlvl=None):
         res = super().get(name, by=by, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res, remap=False, hitattrshift=hitattrshift)
+        return self.process_result(res, remap=False, hitattrshift=hitattrshift, mlvl=mlvl)
 
 
 class WepConf(WeaponBody, SkillProcessHelper):
