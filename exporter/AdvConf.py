@@ -159,10 +159,11 @@ def float_ceil(value, percent):
 
 
 INDENT = "    "
+PRETTY_PRINT_THIS = ("dragonform", "dservant")
 
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
-    if k == "dragonform" or k == "dragonform2":
+    if k in PRETTY_PRINT_THIS:
         lim += 1
     if depth >= lim:
         if k.startswith("attr"):
@@ -272,11 +273,14 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 partcond = (compare, (buffname, count))
             elif ctype == PartConditionType.AuraLevel:
                 partcond = ("ampcond", (condvalue["_aura"].value, condvalue["_target"], PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"]))
+
             if partcond is not None:
                 once_per_action = partcond_once_per_action[partcond]
                 once_per_action.update(partcond_once_per_action[None])
             else:
                 once_per_action = partcond_once_per_action[None]
+        else:
+            once_per_action = partcond_once_per_action[None]
         # get the hitattrs
         part_hitattr_map = {"_hitAttrLabelSubList": []}
         if raw_hitattrs := part.get("_allHitLabels"):
@@ -524,13 +528,15 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
 
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
+        attr_with_cond = None
         if partcond:
-            # look man i just want partattr to sort first
+            # look man i just want partcond to sort first
             attr_with_cond = {"cond": partcond}
+        elif ctype := part.get("_conditionType"):
+            attr_with_cond = {"DEBUG_CHECK_PARTCOND": ctype.name + str(part["_conditionValue"])}
+        if attr_with_cond:
             attr_with_cond.update(attr)
             attr = attr_with_cond
-        elif ctype := part.get("_conditionType"):
-            attr["DEBUG_CHECK_PARTCOND"] = ctype.name + str(part["_conditionValue"])
         iv = fr(part["_seconds"])
         if iv > 0:
             attr["iv"] = iv
@@ -730,14 +736,13 @@ def hit_sr(action, startup=None):
 
     for part in action["_Parts"]:
         # find startup
-        if s is None:
-            if part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
-                s = fr(part["_seconds"])
-            if (hitlabels := part.get("_allHitLabels")) and s is None:
-                for hl_list in hitlabels.values():
-                    for hitlabel in hl_list:
-                        if hitlabel["_TargetGroup"] != ActionTargetGroup.DUNOBJ:
-                            s = fr(part["_seconds"])
+        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
+            s = fr(part["_seconds"])
+        if s is None and (hitlabels := part.get("_allHitLabels")):
+            for hl_list in hitlabels.values():
+                for hitlabel in hl_list:
+                    if hitlabel["_TargetGroup"] != ActionTargetGroup.DUNOBJ:
+                        s = fr(part["_seconds"])
         # find recovery
         if part["commandType"] == CommandType.ACTIVE_CANCEL:
             if actid := part.get("_actionId"):
@@ -752,10 +757,10 @@ def hit_sr(action, startup=None):
                 motion = max(motion, 1.0)
     s = s or 0.0
     r = noaid_r
-    if r is None or r < s:
-        r = motion
+    if r is None or r < s or r == s == 0:
+        r = motion or None
     if r is None:
-        r = last_r
+        r = last_r or None
     if r is not None:
         r = fr(r - s)
     else:
@@ -1151,6 +1156,24 @@ class SkillProcessHelper:
                         skill.get("_Id"),
                     )
 
+        if isinstance((ocskill := skill.get("_OverChargeSkillId")), dict):
+            n = 1
+            prev_sid = skill.get("_Id")
+            prev_entry = None
+            while prev_sid in self.chara_skills:
+                prev_entry = self.chara_skills[prev_sid]
+                if not "_overcharge" in prev_entry[0]:
+                    break
+                n += 1
+                prev_sid = prev_entry[3]
+            base = k.split("_", 1)[0]
+            self.chara_skills[ocskill["_Id"]] = (
+                f"{base}_overcharge{n}",
+                seq,
+                ocskill,
+                skill.get("_Id"),
+            )
+
         if ab := skill.get(f"_Ability{lv}"):
             self.parse_skill_ab(k, seq, skill, action, sconf, ab)
 
@@ -1387,6 +1410,11 @@ class AdvConf(CharaData, SkillProcessHelper):
         if self.utp_chara is not None:
             conf["c"]["utp"] = [self.utp_chara[0]] + [int(v) for v in self.utp_chara[1].split("/")]
 
+        if avoid_on_c := res.get("_AvoidOnCombo"):
+            actdata = self.index["PlayerAction"].get(avoid_on_c)
+            conf["dodge_on_x"] = convert_dodge(actdata)
+            self.action_ids[actdata["_Id"]] = "dodge_on_x"
+
         if burst := res.get("_BurstAttack"):
             burst = self.index["PlayerAction"].get(res["_BurstAttack"])
             if burst and (marker := burst.get("_BurstMarkerId")):
@@ -1423,8 +1451,9 @@ class AdvConf(CharaData, SkillProcessHelper):
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
 
         if udrg := res.get("_UniqueDragonId"):
-            conf["dragonform"] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift, mlvl=mlvl if res.get("_IsConvertDragonSkillLevel") else None)
-            del conf["dragonform"]["d"]
+            udform_key = "dservant" if self.utp_chara and self.utp_chara[0] == 2 else "dragonform"
+            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift, mlvl=mlvl if res.get("_IsConvertDragonSkillLevel") else None)
+            del conf[udform_key]["d"]
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
             self.set_animation_reference(res)
@@ -1525,10 +1554,14 @@ class AdvConf(CharaData, SkillProcessHelper):
             # build fake servant attrs
             servant_attrs = {}
             for servant_id, dact in self.SERVANT_TO_DACT:
-                if not (dact_conf := conf["dragonform"].get(dact)) or not (dact_attrs := dact_conf.get("attr")):
+                if not (dact_conf := conf["dservant"].get(dact)) or not (dact_attrs := dact_conf.get("attr")):
                     continue
                 servant_attrs[servant_id] = []
                 for attr in dact_attrs:
+                    try:
+                        del attr["sp"]
+                    except KeyError:
+                        pass
                     attr = dict(attr)
                     if servant_id == 6:
                         # man i fucking hate cykagames
@@ -2477,11 +2510,11 @@ class DrgConf(DragonData, SkillProcessHelper):
                 fmt_conf(data, f=fp, lim=3)
         # pprint(DrgConf.COMMON_ACTIONS)
 
-    def get(self, name, by=None, hitattrshift=False, mlvl=None):
+    def get(self, name, by=None, remap=False, hitattrshift=False, mlvl=None):
         res = super().get(name, by=by, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res, remap=False, hitattrshift=hitattrshift, mlvl=mlvl)
+        return self.process_result(res, remap=remap, hitattrshift=hitattrshift, mlvl=mlvl)
 
 
 class WepConf(WeaponBody, SkillProcessHelper):
@@ -2634,7 +2667,7 @@ if __name__ == "__main__":
         if args.d == "all":
             view.export_all_to_folder(out_dir=out_dir)
         else:
-            d = view.get(args.d)
+            d = view.get(args.d, remap=True)
             fmt_conf(d, f=sys.stdout)
     elif args.wp:
         view = WpConf(index)

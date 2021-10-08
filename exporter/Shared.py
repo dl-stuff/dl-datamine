@@ -668,8 +668,6 @@ class SkillDetail(DBView):
 
 
 class SkillData(DBView):
-    TRANS_PREFIX = "_Trans"
-
     def __init__(self, index):
         super().__init__(
             index,
@@ -745,11 +743,13 @@ class SkillData(DBView):
                 trans_skill_group[next_trans_skill["_Id"]] = next_trans_skill
                 seen_id.add(next_trans_skill["_Id"])
             skill_data["_TransSkill"] = trans_skill_group
-
         self.link(skill_data, "_TransBuff", "PlayerAction")
+
         # ChainGroupId
         if full_chainSkill:
             self.link(skill_data, "_ChainGroupId", "SkillChainData", by="_GroupId")
+
+        self.link(skill_data, "_OverChargeSkillId", "SkillData")
 
         skill_detail = self.index["SkillDetail"].get(skill_data["_Id"], by="_SkillId")
         if skill_detail:

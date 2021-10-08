@@ -281,7 +281,7 @@ def build_db_data(meta, ref, seq, data):
     #     print(db_data['_Id'])
     # seen_id.add(db_data['_Id'])
     cond_data = data["_conditionData"]
-    if cond_data["_conditionType"] and any(cond_data["_conditionValue"]):
+    if cond_data["_conditionType"]:
         db_data["_conditionType"] = cond_data["_conditionType"]
         db_data["_conditionValue"] = cond_data["_conditionValue"]
     return db_data, hitlabel_data

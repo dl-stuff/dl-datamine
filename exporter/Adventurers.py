@@ -180,11 +180,9 @@ class CharaData(DBView):
         else:
             res = self.all_abilities(res)
 
-        if "_BurstAttack" in res and res["_BurstAttack"] and (ba := self.index["PlayerAction"].get(res["_BurstAttack"])):
-            res["_BurstAttack"] = ba
-
-        if "_DashAttack" in res and res["_DashAttack"] and (da := self.index["PlayerAction"].get(res["_DashAttack"])):
-            res["_DashAttack"] = da
+        self.link(res, "_BurstAttack", "PlayerAction")
+        self.link(res, "_DashAttack", "PlayerAction")
+        self.link(res, "_AvoidOnCombo", "PlayerAction")
 
         self.index["ActionParts"].animation_reference = None
         return res
@@ -278,4 +276,4 @@ if __name__ == "__main__":
     index = DBViewIndex()
     # view = ManaCircle(index)
     view = CharaData(index)
-    view.export_one_to_folder(pk=10350506)
+    view.export_one_to_folder(pk=10250504)
