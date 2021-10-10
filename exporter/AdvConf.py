@@ -1931,6 +1931,11 @@ def ab_aff_k(**kwargs):
         return res
 
 
+def ab_typenum_k(**kwargs):
+    if a_vals := kwargs.get("var_str"):
+        return ["affnumkiller", [float(i) / 100 for i in a_vals.split("/")]]
+
+
 def ab_tribe_k(**kwargs):
     if a_id := kwargs.get("var_a"):
         res = [f"k_{TRIBE_TYPES.get(a_id, a_id)}", kwargs.get("upval") / 100]
@@ -2032,6 +2037,7 @@ ABILITY_CONVERT = {
     AbilityType.DpChargeMyParty: ab_dpcharge,
     AbilityType.AbnoramlExtension: ab_afftime,
     AbilityType.CrisisRate: ab_crisis,
+    AbilityType.AbnormalTypeNumKiller: ab_typenum_k,
 }
 SPECIAL = {
     448: ["spu", 0.08],
