@@ -60,6 +60,7 @@ DEFAULT_AFF_IV = {
     "stormlash": 2.9,
     "scorchrend": 2.9,
 }
+AFF_RELIEF = 1
 DISPEL = 100
 GENERIC_BUFF = (
     "skill_A",
@@ -513,7 +514,9 @@ TARGET_OVERWRITE_KEY = {
 
 
 def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_ab=False):
-    if actcond.get("_EfficacyType") == DISPEL and (rate := actcond.get("_Rate", 0)):
+    if actcond.get("_EfficacyType") == AFF_RELIEF and (rate := actcond.get("_Rate", 0)) and target in {ActionTargetGroup.MYSELF, ActionTargetGroup.MYPARTY, ActionTargetGroup.ALLY}:
+        attr["relief"] = [[actcond.get("_Type")], rate]
+    elif actcond.get("_EfficacyType") == DISPEL and (rate := actcond.get("_Rate", 0)):
         attr["dispel"] = rate
     else:
         alt_buffs = []
