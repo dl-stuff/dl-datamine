@@ -205,7 +205,7 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
             else:
                 f.write("\n")
         f.write(INDENT * depth)
-        f.write("}")
+        f.write("}\n")
 
 
 def fr(num):
