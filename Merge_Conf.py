@@ -117,6 +117,7 @@ def merge_conf(name, kind, diff=None):
     print("merge", sim_path)
     with open(sim_path, "w") as fn:
         fmt_conf(simconf, f=fn, lim=depth)
+        fn.write("\n")
     # fmt_conf(simconf, f=sys.stdout)
 
 
@@ -170,6 +171,7 @@ if __name__ == "__main__":
             data[k] = dict(sorted(v.items()))
         with open(args.fmt, "w") as fn:
             fmt_conf(data, f=fn, lim=3)
+            fn.write("\n")
     else:
         diff = None
         if args.diff:

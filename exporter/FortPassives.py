@@ -106,6 +106,7 @@ def write_fort_passives(out_dir):
         out_path = os.path.join(out_dir, "fort.json")
         with open(out_path, "w") as fn:
             fmt_conf(fort_passives, f=fn)
+            fn.write("\n")
 
 
 if __name__ == "__main__":

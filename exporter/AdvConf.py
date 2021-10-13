@@ -205,7 +205,7 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
             else:
                 f.write("\n")
         f.write(INDENT * depth)
-        f.write("}\n")
+        f.write("}")
 
 
 def fr(num):
@@ -1071,6 +1071,7 @@ class BaseConf(WeaponType):
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 # json.dump(res, fp, indent=2, ensure_ascii=False)
                 fmt_conf(res, f=fp)
+                fp.write("\n")
 
 
 class SkillProcessHelper:
@@ -1748,6 +1749,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     output = os.path.join(advout_dir, out_name)
                     with open(output, "w", newline="", encoding="utf-8") as fp:
                         fmt_conf(outconf, f=fp)
+                        fp.write("\n")
                 outconf = self.process_result(res)
                 out_name = self.outfile_name(outconf, ext)
                 if ss_res := self.skillshare_data(res):
@@ -1757,6 +1759,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 output = os.path.join(advout_dir, out_name)
                 with open(output, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(outconf, f=fp)
+                    fp.write("\n")
             except Exception as e:
                 print(res["_Id"], res.get("_SecondName", res.get("_Name")), flush=True)
                 raise e
@@ -1764,9 +1767,11 @@ class AdvConf(CharaData, SkillProcessHelper):
             print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
         with open(skillshare_out, "w", newline="") as fp:
             fmt_conf(skillshare_data, f=fp)
+            fp.write("\n")
         self.sort_exability_data(exability_data)
         with open(exability_out, "w", newline="") as fp:
             fmt_conf(exability_data, f=fp, lim=3, sortlim=2)
+            fp.write("\n")
 
 
 HP_GEQ = (
@@ -2384,6 +2389,7 @@ class WpConf(AbilityCrest):
         with open(output, "w", newline="", encoding="utf-8") as fp:
             # json.dump(res, fp, indent=2, ensure_ascii=False)
             fmt_conf(outdata, f=fp)
+            fp.write("\n")
         # print('Skipped:', skipped)
 
     def get(self, name):
@@ -2550,6 +2556,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             output = os.path.join(out_dir, f"{ele}.json")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(data, f=fp, lim=3)
+                fp.write("\n")
         # pprint(DrgConf.COMMON_ACTIONS)
 
     def get(self, name, by=None, remap=False, hitattrshift=False, mlvl=None):
@@ -2628,6 +2635,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
             output = os.path.join(out_dir, f"{wt}.json")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(data, f=fp, lim=4)
+                fp.write("\n")
         #     else:
         #         skipped.append(res["_Name"])
         # print('Skipped:', ','.join(skipped))
@@ -2659,6 +2667,7 @@ class AuraConf(AuraData):
         output = os.path.join(out_dir, "amp.json")
         with open(output, "w", newline="", encoding="utf-8") as fp:
             fmt_conf(outdata, f=fp)
+            fp.write("\n")
 
 
 if __name__ == "__main__":
