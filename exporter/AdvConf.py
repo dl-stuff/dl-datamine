@@ -159,7 +159,7 @@ def float_ceil(value, percent):
 
 
 INDENT = "    "
-PRETTY_PRINT_THIS = ("dragonform", "dservant")
+PRETTY_PRINT_THIS = ("dragonform", "dservant", "repeat")
 
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
@@ -194,9 +194,9 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
             k, v = kv
             f.write(INDENT * (depth + 1))
             f.write('"')
-            f.write(k)
+            f.write(str(k))
             f.write('": ')
-            res = fmt_conf(v, k, depth + 1, f, lim, sortlim)
+            res = fmt_conf(v, str(k), depth + 1, f, lim, sortlim)
             if res is not None:
                 f.write(res)
             if idx < end:
@@ -728,10 +728,11 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
                     attr["coei"] = 1
 
 
-def hit_sr(action, startup=None):
+def hit_sr(action, startup=None, explicit_any=True):
     s, r, followed_by = startup, None, set()
     last_r = None
     noaid_r = None
+    noaid_follow = None
     motion = 0
 
     for part in action["_Parts"]:
@@ -745,10 +746,12 @@ def hit_sr(action, startup=None):
                         s = fr(part["_seconds"])
         # find recovery
         if part["commandType"] == CommandType.ACTIVE_CANCEL:
-            if actid := part.get("_actionId"):
-                followed_by.add((part["_seconds"], actid, part.get("_actionType")))
-            elif noaid_r is None:
+            action_id = part.get("_actionId")
+            if action_id is None and noaid_r is None:
                 noaid_r = part["_seconds"]
+                noaid_follow = (part["_seconds"], "any", part.get("_actionType"))
+            if action_id:
+                followed_by.add((part["_seconds"], action_id, part.get("_actionType")))
             last_r = part["_seconds"]
         if part["commandType"] == CommandType.PLAY_MOTION:
             if (animdata := part.get("_animation")) and isinstance(animdata, dict):
@@ -756,11 +759,16 @@ def hit_sr(action, startup=None):
             elif part.get("_motionState") in GENERIC_BUFF:
                 motion = max(motion, 1.0)
     s = s or 0.0
-    r = noaid_r
-    if r is None or r < s or r == s == 0:
-        r = motion or None
-    if r is None:
-        r = last_r or None
+    if explicit_any and (noaid_r is None or noaid_r <= motion):
+        possible_r = (motion, noaid_r, last_r)
+        if noaid_follow:
+            followed_by.add(noaid_follow)
+    else:
+        possible_r = (noaid_r, motion, last_r)
+    ridx = 0
+    while ridx < len(possible_r) and (r is None or r < s or r == s == 0):
+        r = possible_r[ridx]
+        ridx += 1
     if r is not None:
         r = fr(r - s)
     else:
@@ -814,6 +822,9 @@ def remap_stuff(conf, action_ids, parent_key=None, servant_attrs=None):
                         idx = "dodge"
                     elif value[1] in (ActionCancelType.BurstAttack,):
                         idx = "fs"
+                        # fs can never interrupt or cancel fs see Catherine
+                        if parent_key.startswith("fs"):
+                            continue
                     elif isinstance(idx, int):
                         continue
                     new_subdict[idx] = value[0]
@@ -1068,6 +1079,11 @@ class SkillProcessHelper:
         self.enhanced_fs = {}
         self.ab_alt_attrs = defaultdict(lambda: [])
         self.action_ids = {}
+        # for advs only
+        self.alt_actions = []
+        self.utp_chara = None
+        self.dragon_hitattrshift = False
+        self.sigil_mode = None
 
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
         action = 0
@@ -1089,12 +1105,6 @@ class SkillProcessHelper:
             "recovery": recovery,
         }
 
-        interrupt, cancel = convert_following_actions(0, followed_by)
-        if interrupt:
-            sconf["interrupt"] = interrupt
-        if cancel:
-            sconf["cancel"] = cancel
-
         hitlabel_pattern = re.compile(f".*LV0{lv}$")
         sconf = hit_attr_adj(
             action,
@@ -1108,6 +1118,12 @@ class SkillProcessHelper:
         hitattrs = sconf.get("attr")
         if (not hitattrs or all(["dmg" not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f"_IsAffectedByTensionLv{lv}"):
             sconf["energizable"] = bool(skill[f"_IsAffectedByTensionLv{lv}"])
+
+        interrupt, cancel = convert_following_actions(0, followed_by)
+        if interrupt:
+            sconf["interrupt"] = interrupt
+        if cancel:
+            sconf["cancel"] = cancel
 
         for idx in range(2, 5):
             if rng_actions := skill.get(skey_pattern.format(idx)):
@@ -1241,6 +1257,58 @@ class SkillProcessHelper:
                 #             esk["_Id"],
                 #         )
 
+    def search_abs(self, ab):
+        if not ab:
+            return
+        for i in (1, 2, 3):
+            ab_type = ab.get(f"_AbilityType{i}")
+            if ab_type == AbilityType.ReferenceOther:
+                for sfx in ("a", "b", "c"):
+                    self.search_abs(ab.get(f"_VariousId{i}{sfx}"))
+            elif ab_type == AbilityType.ChangeState:
+                hitattr = ab.get(f"_VariousId{i}str")
+                if not hitattr:
+                    actcond = ab.get(f"_VariousId{i}a")
+                    if actcond:
+                        hitattr = {"_ActionCondition1": actcond}
+                if hitattr:
+                    if sid := ab.get("_OnSkill"):
+                        self.ab_alt_attrs[sid].append((ab, hitattr))
+                    elif actcond := hitattr.get("_ActionCondition1"):
+                        if isinstance((eba := actcond.get("_EnhancedBurstAttack")), dict):
+                            base_name = snakey(self.name.lower()).replace("_", "")
+                            group = base_name
+                            while group in self.enhanced_fs and self.enhanced_fs[group][1] != eba:
+                                eid = next(self.efs_counter)
+                                group = f"{base_name}{eid}"
+                            self.enhanced_fs[group] = group, eba, eba.get("_BurstMarkerId")
+            elif ab_type == AbilityType.EnhancedSkill:
+                s = int(ab["_TargetAction1"].name[-1])
+                alt_skill = ab[f"_VariousId{i}a"]
+                eid = next(self.eskill_counter)
+                if existing_skill := self.chara_skills.get(alt_skill["_Id"]):
+                    group = existing_skill[0].split("_")[-1]
+                else:
+                    eid = next(self.eskill_counter)
+                    group = "enhanced" if eid == 1 else f"enhanced{eid}"
+                self.chara_skills[alt_skill["_Id"]] = (
+                    f"s{s}_{group}",
+                    s,
+                    alt_skill,
+                    alt_skill["_Id"],
+                )
+            elif ab_type == AbilityType.EnhancedBurstAttack:
+                self.alt_actions.append(("fs", ab[f"_VariousId{i}a"]))
+            elif ab_type == AbilityType.UniqueAvoid:
+                self.alt_actions.append(("dodge", ab[f"_VariousId{i}a"]))
+            elif ab_type == AbilityType.UniqueTransform:
+                self.utp_chara = (ab.get(f"_VariousId{i}a", 0), ab.get(f"_VariousId{i}str"))
+            elif ab_type == AbilityType.HitAttributeShift:
+                self.dragon_hitattrshift = True
+            elif ab_type == AbilityType.ChangeMode and ab.get(f"_ConditionType") == AbilityCondition.BUFF_DISAPPEARED and ab["_ConditionValue"]["_Id"] == 1152:
+                # 1152 is sigil debuff
+                self.sigil_mode = ab.get(f"_VariousId{i}a") + 1
+
     def process_skill(self, res, conf, mlvl, all_levels=False):
         # exceptions exist
         while self.chara_skills:
@@ -1284,41 +1352,6 @@ class SkillProcessHelper:
             for fs, fsc in convert_fs(eba, emk).items():
                 conf[f"{fs}_{efs}"] = fsc
                 self.action_ids[eba["_Id"]] = f"{fs}_{efs}"
-
-
-def search_abs(meta, ab):
-    if not ab:
-        return
-    for i in (1, 2, 3):
-        ab_type = ab.get(f"_AbilityType{i}")
-        if ab_type == AbilityType.ReferenceOther:
-            for sfx in ("a", "b", "c"):
-                search_abs(meta, ab.get(f"_VariousId{i}{sfx}"))
-        elif ab_type == AbilityType.ChangeState:
-            hitattr = ab.get(f"_VariousId{i}str")
-            if not hitattr:
-                actcond = ab.get(f"_VariousId{i}a")
-                if actcond:
-                    hitattr = {"_ActionCondition1": actcond}
-            if hitattr:
-                if sid := ab.get("_OnSkill"):
-                    meta.ab_alt_attrs[sid].append((ab, hitattr))
-                elif actcond := hitattr.get("_ActionCondition1"):
-                    if isinstance((eba := actcond.get("_EnhancedBurstAttack")), dict):
-                        base_name = snakey(meta.name.lower()).replace("_", "")
-                        group = base_name
-                        while group in meta.enhanced_fs and meta.enhanced_fs[group][1] != eba:
-                            eid = next(meta.efs_counter)
-                            group = f"{base_name}{eid}"
-                        meta.enhanced_fs[group] = group, eba, eba.get("_BurstMarkerId")
-        elif ab_type == AbilityType.EnhancedBurstAttack:
-            meta.alt_actions.append(("fs", ab[f"_VariousId{i}a"]))
-        elif ab_type == AbilityType.UniqueAvoid:
-            meta.alt_actions.append(("dodge", ab[f"_VariousId{i}a"]))
-        elif ab_type == AbilityType.UniqueTransform:
-            meta.utp_chara = (ab.get(f"_VariousId{i}a", 0), ab.get(f"_VariousId{i}str"))
-        elif ab_type == AbilityType.HitAttributeShift:
-            meta.dragon_hitattrshift = True
 
 
 class AdvConf(CharaData, SkillProcessHelper):
@@ -1402,18 +1435,16 @@ class AdvConf(CharaData, SkillProcessHelper):
             conf["c"]["gun"] = []
         self.name = conf["c"]["name"]
 
-        self.alt_actions = []
-        self.utp_chara = None
-        self.dragon_hitattrshift = False
         for ab in ab_lst:
-            search_abs(self, ab)
+            self.search_abs(ab)
+
         if self.utp_chara is not None:
             conf["c"]["utp"] = [self.utp_chara[0]] + [int(v) for v in self.utp_chara[1].split("/")]
 
         if avoid_on_c := res.get("_AvoidOnCombo"):
             actdata = self.index["PlayerAction"].get(avoid_on_c)
             conf["dodge_on_x"] = convert_dodge(actdata)
-            self.action_ids[actdata["_Id"]] = "dodge_on_x"
+            self.action_ids[actdata["_Id"]] = "dodge"
 
         if burst := res.get("_BurstAttack"):
             burst = self.index["PlayerAction"].get(res["_BurstAttack"])
@@ -1474,6 +1505,8 @@ class AdvConf(CharaData, SkillProcessHelper):
                     #     continue
                 if self.utp_chara is not None and m == 2:
                     mode_name = "_ddrive"
+                elif self.sigil_mode is not None and m == self.sigil_mode:
+                    mode_name = "_sigil"
                 else:
                     try:
                         mode_name = "_" + snakey(mode["_ActionId"]["_Parts"][0]["_actionConditionId"]["_Text"].split(" ")[0].lower())
@@ -1721,8 +1754,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 with open(output, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(outconf, f=fp)
             except Exception as e:
-                print(res["_Id"])
-                pprint(outconf)
+                print(res["_Id"], res.get("_SecondName", res.get("_Name")), flush=True)
                 raise e
         if AdvConf.MISSING_ENDLAG:
             print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
@@ -2425,7 +2457,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             ("dshift", "_Transform"),
         ):
             try:
-                s, r, _ = hit_sr(res[key], startup=0.0)
+                s, r, _ = hit_sr(res[key], startup=0.0, explicit_any=False)
             except KeyError:
                 continue
                 # try:
