@@ -1135,7 +1135,7 @@ class SkillProcessHelper:
                     pattern=hitlabel_pattern,
                     meta=self,
                     skill=skill,
-                    attr_key=f"attr_R{idx}",
+                    attr_key=f"DEBUG_attr_R{idx}",
                 )
 
         if isinstance((transkills := skill.get("_TransSkill")), dict):
