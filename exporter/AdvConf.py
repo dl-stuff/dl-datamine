@@ -50,6 +50,7 @@ DEFAULT_AFF_IV = {
     "stormlash": 2.9,
     "scorchrend": 2.9,
 }
+AFF_RELIEF = 1
 DISPEL = 100
 GENERIC_BUFF = (
     "skill_A",
@@ -562,7 +563,9 @@ TARGET_OVERWRITE_KEY = {
 
 
 def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_ab=False):
-    if actcond.get("_EfficacyType") == DISPEL and (rate := actcond.get("_Rate", 0)):
+    if actcond.get("_EfficacyType") == AFF_RELIEF and (rate := actcond.get("_Rate", 0)) and target in {ActionTargetGroup.MYSELF, ActionTargetGroup.MYPARTY, ActionTargetGroup.ALLY}:
+        attr["relief"] = [[actcond.get("_Type")], rate]
+    elif actcond.get("_EfficacyType") == DISPEL and (rate := actcond.get("_Rate", 0)):
         attr["dispel"] = rate
     else:
         alt_buffs = []
@@ -1477,6 +1480,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             if sdata := res.get(f"_Skill{s}"):
                 skill = self.index["SkillData"].get(sdata, full_query=True)
                 self.chara_skills[sdata] = (f"s{s}", s, skill, None)
+
         if (edit := res.get("_EditSkillId")) and edit not in self.chara_skills:
             skill = self.index["SkillData"].get(res[f"_EditSkillId"], full_query=True)
             self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
@@ -2101,6 +2105,11 @@ def ab_aff_k(**kwargs):
         return res
 
 
+def ab_typenum_k(**kwargs):
+    if a_vals := kwargs.get("var_str"):
+        return ["affnumkiller", [float(i) / 100 for i in a_vals.split("/")]]
+
+
 def ab_tribe_k(**kwargs):
     if a_id := kwargs.get("var_a"):
         res = [f"k_{TRIBE_TYPES.get(a_id, a_id)}", kwargs.get("upval") / 100]
@@ -2202,6 +2211,7 @@ ABILITY_CONVERT = {
     AbilityType.DpChargeMyParty: ab_dpcharge,
     AbilityType.AbnoramlExtension: ab_afftime,
     AbilityType.CrisisRate: ab_crisis,
+    AbilityType.AbnormalTypeNumKiller: ab_typenum_k,
 }
 SPECIAL_AB = {
     448: ["spu", 0.08],
