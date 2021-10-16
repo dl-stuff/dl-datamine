@@ -499,6 +499,8 @@ class ActionParts(DBView):
             try:
                 r["_charaCommand"] = CharacterControl(r["_charaCommand"])
                 r["_charaCommandArgs"] = json.loads(r["_charaCommandArgs"])
+                if r["_charaCommand"] == CharacterControl.ApplyBuffDebuff and (actcond := self.index["ActionCondition"].get(r["_charaCommandArgs"].get("_id", -1))):
+                    r["_charaCommandArgs"]["_id"] = actcond
             except (KeyError, ValueError):
                 pass
 

@@ -352,9 +352,10 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             gen = int(abd / abi)
             delay = abi
             try:
-                part_hitattr_map["_abHitAttrLabel"]["msl"] += fr(abi)
+                part_hitattr_map["_abHitAttrLabel"]["msl"] += abi
             except KeyError:
-                part_hitattr_map["_abHitAttrLabel"]["msl"] = fr(abi)
+                part_hitattr_map["_abHitAttrLabel"]["msl"] = abi
+            part_hitattr_map["_abHitAttrLabel"]["msl"] = fr(part_hitattr_map["_abHitAttrLabel"]["msl"])
             ref_attrs = [part_hitattr_map["_abHitAttrLabel"]]
         elif (bci := part.get("_collisionHitInterval", 0)) and ((bld := part.get("_bulletDuration", 0)) > bci or (bld := part.get("_duration", 0)) > bci) and ("_hitLabel" in part_hitattr_map or "_hitAttrLabel" in part_hitattr_map):
             gen = int(bld / bci)
@@ -534,7 +535,10 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             # look man i just want partcond to sort first
             attr_with_cond = {"cond": partcond}
         elif ctype := part.get("_conditionType"):
-            attr_with_cond = {"DEBUG_CHECK_PARTCOND": ctype.name + str(part["_conditionValue"])}
+            if ctype == PartConditionType.AllyHpRateLowest and "heal" in attr:
+                attr["heal"] = [attr["heal"], "lowest"]
+            else:
+                attr_with_cond = {"DEBUG_PARTCOND": ctype.name + str(part["_conditionValue"])}
         if attr_with_cond:
             attr_with_cond.update(attr)
             attr = attr_with_cond
@@ -869,7 +873,7 @@ def convert_following_actions(startup, followed_by, default=None):
             interrupt_by[act] = (0.0, None)
             cancel_by[act] = (0.0, None)
     for t, act, kind in followed_by:
-        if t < startup:
+        if fr(t) < startup:
             if not act in interrupt_by or interrupt_by[act][0] > t:
                 interrupt_by[act] = (fr(t), kind)
         else:
@@ -883,12 +887,12 @@ def convert_following_actions(startup, followed_by, default=None):
     return interrupt_by, cancel_by
 
 
-def convert_x(xn, xlen=5, pattern=None, convert_follow=True, is_dragon=False):
+def convert_x(xn, pattern=None, convert_follow=True, is_dragon=False):
     s, r, followed_by = hit_sr(xn)
     xconf = {"startup": s, "recovery": r}
     xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
 
-    if xn.get("_IsLoopAction"):
+    if xn.get("_IsLoopAction") and any((xn["_Id"] == fb[1] for fb in followed_by)):
         xconf["loop"] = 1
 
     if convert_follow:
@@ -925,48 +929,90 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
         if fsconf[key]:
             fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
     else:
-        for mpart in marker["_Parts"]:
-            if mpart["commandType"] == CommandType.GEN_MARKER:
+        mpart = None
+        max_CHLV = 1
+        CHLV = re.compile(r".*_LV02_CHLV0(\d)$")
+        for part in burst["_Parts"]:
+            if part.get("_allHitLabels"):
+                for hl_list in part["_allHitLabels"].values():
+                    for hitlabel in hl_list:
+                        if res := CHLV.match(hitlabel["_Id"]):
+                            max_CHLV = max(max_CHLV, int(res.group(1)))
+        for part in marker["_Parts"]:
+            if part["commandType"] == CommandType.GEN_MARKER:
+                mpart = part
                 break
-        charge = mpart.get("_chargeSec", 0.5)
-        fsconf[key] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
-        if not is_dragon and (clv := mpart.get("_chargeLvSec")):
-            clv = list(map(float, [charge] + json.loads(clv)))
+        charge = 0.5
+        if mpart is not None:
+            charge = mpart.get("_chargeSec", 0.5)
+        if not is_dragon and max_CHLV > 1:
+            clv = list(map(float, [charge] + json.loads(mpart.get("_chargeLvSec"))))
+            if mpart.get("_useForEachChargeTime"):
+                clv = clv[:max_CHLV]
+            elif aoci := mpart.get("_activateOnChargeImpact"):
+                idx = 0
+                for idx, value in enumerate(json.loads(aoci)):
+                    if value == 0:
+                        break
+                clv = clv[: min(idx + 1, max_CHLV)]
             totalc = 0
+            base_fs_conf = {"charge": fr(charge), "startup": startup, "recovery": recovery}
             for idx, c in enumerate(clv):
                 if idx == 0:
-                    clv_attr = hit_attr_adj(burst, startup, fsconf[f"fs"].copy(), re.compile(f".*_LV02$"))
+                    clv_pattern = re.compile(r".*_LV02$")
                 else:
-                    clv_attr = hit_attr_adj(
-                        burst,
-                        startup,
-                        fsconf[f"fs"].copy(),
-                        re.compile(f".*_LV02_CHLV0{idx+1}$"),
-                    )
+                    clv_pattern = re.compile(f".*_LV02_CHLV0{idx+1}$")
+                clv_attr = hit_attr_adj(burst, startup, base_fs_conf.copy(), clv_pattern)
                 totalc += c
                 if clv_attr:
-                    fsn = f"fs{idx+1}"
+                    fsn = f"{key}{idx+1}"
                     fsconf[fsn] = clv_attr
                     fsconf[fsn]["charge"] = fr(totalc)
-                    (
-                        fsconf[fsn]["interrupt"],
-                        fsconf[fsn]["cancel"],
-                    ) = convert_following_actions(startup, followed_by, ("s",))
-            if "fs2" in fsconf and "attr" not in fsconf["fs"]:
-                del fsconf["fs"]
-            elif "fs1" in fsconf:
-                fsconf["fs"] = fsconf["fs1"]
-                del fsconf["fs1"]
+                    fsconf[fsn]["interrupt"], fsconf[fsn]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
         else:
-            fsconf[key] = hit_attr_adj(
-                burst,
-                startup,
-                fsconf[key],
-                hitattr_pattern,
-                skip_nohitattr=False,
-            )
-            if fsconf[key]:
-                fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
+            fsconf[key] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
+            fsconf[key] = hit_attr_adj(burst, startup, fsconf[key], hitattr_pattern, skip_nohitattr=False)
+            fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
+        # charge = mpart.get("_chargeSec", 0.5)
+        # fsconf[key] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
+        # if not is_dragon and (clv_max := mpart.get("_chargeLvMax")) and (clv := mpart.get("_chargeLvSec")):
+        #     clv = list(map(float, [charge] + json.loads(clv)))
+        #     totalc = 0
+        #     for idx in range(0, clv_max):
+        #         c = clv[idx]
+        #         if idx == 0:
+        #             clv_attr = hit_attr_adj(burst, startup, fsconf[f"fs"].copy(), re.compile(f".*_LV02$"))
+        #         else:
+        #             clv_attr = hit_attr_adj(
+        #                 burst,
+        #                 startup,
+        #                 fsconf[f"fs"].copy(),
+        #                 re.compile(f".*_LV02_CHLV0{idx+1}$"),
+        #             )
+        #         totalc += c
+        #         if clv_attr:
+        #             fsn = f"fs{idx+1}"
+        #             fsconf[fsn] = clv_attr
+        #             fsconf[fsn]["charge"] = fr(totalc)
+        #             (
+        #                 fsconf[fsn]["interrupt"],
+        #                 fsconf[fsn]["cancel"],
+        #             ) = convert_following_actions(startup, followed_by, ("s",))
+        #     if "fs2" in fsconf and "attr" not in fsconf["fs"]:
+        #         del fsconf["fs"]
+        #     elif "fs1" in fsconf:
+        #         fsconf["fs"] = fsconf["fs1"]
+        #         del fsconf["fs1"]
+        # else:
+        #     fsconf[key] = hit_attr_adj(
+        #         burst,
+        #         startup,
+        #         fsconf[key],
+        #         hitattr_pattern,
+        #         skip_nohitattr=False,
+        #     )
+        #     if fsconf[key]:
+        #         fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
     if not is_dragon and cancel is not None:
         fsconf["fsf"] = {
             "charge": fr(0.1 + cancel["_Parts"][0]["_duration"]),
@@ -1042,7 +1088,7 @@ class BaseConf(WeaponType):
                             for n, xn in enumerate(xalt[f"_{prefix}ActionId"]):
                                 n += 1
                                 xn_key = f"x{n}_{mode_name}{prefix.lower()}"
-                                if xaltconf := convert_x(xn, xlen=xalt["_MaxComboNum"]):
+                                if xaltconf := convert_x(xn):
                                     conf[xn_key] = xaltconf
                                 self.action_ids[xn["_Id"]] = f"x{n}"
                                 if hitattrs := convert_all_hitattr(xn, re.compile(r".*H0\d_LV02$")):
@@ -1508,7 +1554,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                         continue
                     # if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
                     #     continue
-                if self.utp_chara is not None and m == 2:
+                if m == 2 and self.utp_chara is not None and self.utp_chara[0] != 1:
                     mode_name = "_ddrive"
                 elif self.sigil_mode is not None and m == self.sigil_mode:
                     mode_name = "_sigil"
@@ -1532,9 +1578,11 @@ class AdvConf(CharaData, SkillProcessHelper):
                     marker = burst.get("_BurstMarkerId")
                     if not marker:
                         marker = self.index["PlayerAction"].get(burst["_Id"] + 4)
+                    fs = None
                     for fs, fsc in convert_fs(burst, marker).items():
                         conf[f"{fs}{mode_name}"] = fsc
-                    self.action_ids[burst["_Id"]] = f"{fs}{mode_name}"
+                    if fs:
+                        self.action_ids[burst["_Id"]] = "fs"
                     if not mode_name:
                         base_mode_burst = burst["_Id"]
                 if ((xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict)) and base_mode_x != xalt["_Id"]:
@@ -1547,14 +1595,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                                     xn_key = f"x{n}_{prefix.lower()}"
                                 else:
                                     xn_key = f"x{n}{mode_name}{prefix.lower()}"
-                                if xaltconf := convert_x(
-                                    xn,
-                                    xlen=xalt["_MaxComboNum"],
-                                    pattern=xalt_pattern,
-                                ):
+                                if xaltconf := convert_x(xn, pattern=xalt_pattern):
                                     conf[xn_key] = xaltconf
                                     self.action_ids[xn["_Id"]] = xn_key
-                                elif xalt_pattern is not None and (xaltconf := convert_x(xn, xlen=xalt["_MaxComboNum"])):
+                                elif xalt_pattern is not None and (xaltconf := convert_x(xn)):
                                     conf[xn_key] = xaltconf
                                     self.action_ids[xn["_Id"]] = xn_key
                     if not mode_name:
@@ -2510,7 +2554,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         for n, xn in enumerate(dcombo):
             n += 1
             xn_key = f"dx{n}"
-            if dxconf := convert_x(xn, xlen=dcmax, convert_follow=True, is_dragon=True):
+            if dxconf := convert_x(xn, convert_follow=True, is_dragon=True):
                 conf[xn_key] = dxconf
                 self.action_ids[xn["_Id"]] = xn_key
             if hitattrshift:
@@ -2747,7 +2791,7 @@ if __name__ == "__main__":
             if xalt.get(f"_{prefix}ActionId"):
                 for n, xn in enumerate(xalt[f"_{prefix}ActionId"]):
                     n += 1
-                    if xaltconf := convert_x(xn, xlen=xalt["_MaxComboNum"]):
+                    if xaltconf := convert_x(xn):
                         conf[f"x{n}_{prefix.lower()}"] = xaltconf
         fmt_conf(conf, f=sys.stdout)
     elif args.w:
@@ -2757,7 +2801,7 @@ if __name__ == "__main__":
     elif args.act:
         view = PlayerAction(index)
         action = view.get(int(args.act))
-        pprint(hit_sr(action))
+        pprint(convert_x(action))
     elif args.amp:
         view = AuraConf(index)
         view.export_all_to_folder(out_dir=out_dir)

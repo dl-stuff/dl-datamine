@@ -337,6 +337,9 @@ def build_marker(meta, ref, seq, data):
             db_data["_chargeLvSec"] = charge_lvl_sec
     if not db_data["_chargeSec"] and not db_data["_chargeLvSec"]:
         return None, None
+    if aoci := db_data.get("_activateOnChargeImpact"):
+        if not any(aoci):
+            db_data["_activateOnChargeImpact"] = None
     return db_data, hitlabel_data
 
 
@@ -397,8 +400,10 @@ ACTION_PART = DBTableMetadata(
         # ROTATION
         # '_rotation': DBTableMetadata.BLOB,
         # MARKER
+        "_useForEachChargeTime": DBTableMetadata.INT,
         "_chargeSec": DBTableMetadata.REAL,
         "_chargeLvSec": DBTableMetadata.BLOB,
+        "_activateOnChargeImpact": DBTableMetadata.BLOB,
         # '_chargeAfterSec': DBTableMetadata.REAL,
         # '_ignoredByPlayerAI': DBTableMetadata.INT,
         # '_invisibleForPlayerAI': DBTableMetadata.INT,
@@ -484,7 +489,7 @@ ACTION_PART = DBTableMetadata(
         "_autoFireEffectTrigger": DBTableMetadata.INT,
         "_autoFireEffectTriggerResetTime": DBTableMetadata.REAL,
         "_autoFireAutoSearchEnemyRadius": DBTableMetadata.REAL,
-        # servant
+        # SERVANT
         "_servantActionCommandId": DBTableMetadata.INT,
     },
 )
