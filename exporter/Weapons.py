@@ -123,9 +123,7 @@ class WeaponType(DBView):
     def __init__(self, index):
         super().__init__(index, "WeaponType")
 
-    def process_result(self, res, full_query=True):
-        if not full_query:
-            return res
+    def process_result(self, res):
         for act in WeaponType.ACTION_IDS:
             if act in res and res[act] and (action := self.index["PlayerAction"].get(res[act])):
                 res[act] = action
@@ -137,7 +135,7 @@ class WeaponType(DBView):
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         out_dir = os.path.join(out_dir, "_weapon_types")
-        super().export_all_to_folder(out_dir, ext, full_query=True)
+        super().export_all_to_folder(out_dir, ext)
 
 
 if __name__ == "__main__":

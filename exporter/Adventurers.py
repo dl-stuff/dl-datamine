@@ -148,6 +148,7 @@ class CharaData(DBView):
 
     def set_animation_reference(self, res):
         self.index["ActionParts"].animation_reference = (WEAPON_LABEL[res["_WeaponType"]], f'{res["_BaseId"]:06}{res["_VariationId"]:02}')
+        return self.index["ActionParts"].animation_reference
 
     def process_result(self, res, condense=True):
         self.set_animation_reference(res)
