@@ -348,8 +348,10 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             delay = part.get("_generateDelay", 0)
             ref_attrs = part_hitattrs
         elif (abd := part.get("_abDuration", 0)) >= (abi := part.get("_abHitInterval", 0)) and "_abHitAttrLabel" in part_hitattr_map:
-            # weird rounding shenanigans can occur due to float bullshit
             gen = int(abd / abi)
+            # some frame rate bullshit idk
+            if gen * abi < abd - 10 / 60:
+                gen += 1
             delay = abi
             try:
                 part_hitattr_map["_abHitAttrLabel"]["msl"] += abi
