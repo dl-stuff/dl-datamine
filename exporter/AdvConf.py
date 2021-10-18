@@ -1,5 +1,3 @@
-import ctypes
-from enum import Enum
 import sys
 import os
 import pathlib
@@ -7,7 +5,6 @@ import json
 import re
 import itertools
 from collections import defaultdict
-from typing import OrderedDict
 from tqdm import tqdm
 from pprint import pprint
 import argparse
@@ -161,13 +158,14 @@ def float_ceil(value, percent):
 
 INDENT = "    "
 PRETTY_PRINT_THIS = ("dragonform", "dservant", "repeat")
+MULTILINE_LIST = ("abilities", "chain")
 
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
     if k in PRETTY_PRINT_THIS:
         lim += 1
     if depth >= lim:
-        if k.startswith("attr") or k == "ability":
+        if k.startswith("attr") or k in MULTILINE_LIST:
             r_str_lst = []
             end = len(data) - 1
             for idx, d in enumerate(data):
@@ -271,7 +269,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 buffname = snakey(actcond.get("_Text") or "buff" + str(actcond.get("_Id")) or "mystery_buff", with_ext=False).lower()
                 count = condvalue["_count"]
                 compare = "var" + PART_COMPARISON_TO_VARS[condvalue["_compare"]]
-                partcond = (compare, (buffname, count))
+                partcond = (compare, (actcond.get("_Id"), count))
             elif ctype == PartConditionType.AuraLevel:
                 partcond = ("ampcond", (condvalue["_aura"].value, condvalue["_target"], PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"]))
 
@@ -487,12 +485,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
     if cp := hitattr.get("_RecoveryCP"):
         attr["cp"] = cp
     if heal := hitattr.get("_RecoveryValue"):
-        if target in (ActionTargetGroup.MYPARTY, ActionTargetGroup.ALLY):
-            attr["heal"] = [heal, "team"]
-        elif target == ActionTargetGroup.ALLY_HP_LOWEST:
-            attr["heal"] = [heal, "lowest"]
-        else:
-            attr["heal"] = heal
+        attr["heal"] = heal
     # if (counter := hitattr.get("_DamageCounterCoef")) :
     #     attr["counter"] = counter
     if crit := hitattr.get("_AdditionCritical"):
@@ -533,6 +526,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
 
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
+        attr["target"] = target.name
         attr_with_cond = None
         if partcond:
             # look man i just want partcond to sort first
@@ -1135,7 +1129,7 @@ class SkillProcessHelper:
         # for advs only
         self.alt_actions = []
         self.utp_chara = None
-        self.dragon_hitattrshift = False
+        self.hitattrshift = False
         self.sigil_mode = None
 
     def convert_skill(self, k, seq, skill, lv, no_loop=False):
@@ -1243,16 +1237,19 @@ class SkillProcessHelper:
                 skill.get("_Id"),
             )
 
+        # if ab := skill.get(f"_Ability{lv}"):
+        #     self.parse_skill_ab(k, seq, skill, action, sconf, ab)
+
         if ab := skill.get(f"_Ability{lv}"):
-            self.parse_skill_ab(k, seq, skill, action, sconf, ab)
+            # jank
+            sconf["abilities"] = self.index["AbilityConf"].get(ab["_Id"], source="abilities")
 
         return sconf, k, action
 
-    def process_skill(self, res, conf, mlvl, all_levels=False):
+    def process_skill(self, res, conf, mlvl):
         # exceptions exist
         while self.chara_skills:
             k, seq, skill, prev_id = next(iter(self.chara_skills.values()))
-            self.all_chara_skills[skill.get("_Id")] = (k, seq, skill, prev_id)
             if seq == 99:
                 lv = mlvl[res["_EditSkillLevelNum"]]
             else:
@@ -1260,6 +1257,7 @@ class SkillProcessHelper:
             cskill, k, action = self.convert_skill(k, seq, skill, lv)
             conf[k] = cskill
             self.action_ids[action.get("_Id")] = k
+            self.all_chara_skills[skill.get("_Id")] = (k, seq, skill, prev_id)
             del self.chara_skills[skill.get("_Id")]
 
         for efs, eba, emk in self.enhanced_fs.values():
@@ -1274,7 +1272,6 @@ class AdvConf(CharaData, SkillProcessHelper):
         10350302,  # summer norwin
         10650101,  # gala sarisse
     )
-    SPECIAL_EDIT_SKILL = {103505044: 2, 105501025: 1, 109501023: 1, 104501034: 1}
     EX_CATEGORY_NAMES = {
         1: "Lance",
         2: "Blade",
@@ -1309,16 +1306,16 @@ class AdvConf(CharaData, SkillProcessHelper):
         (7, "ds2"),
     )
 
-    def process_result(self, res, condense=True, all_levels=False, force_50mc=False):
+    def process_result(self, res, condense=True, force_50mc=False):
         self.set_animation_reference(res)
         self.index["AbilityConf"].set_meta(self)
         self.reset_meta()
 
-        ab_lst = []
         if force_50mc:
             res = dict(res)
             res["_MaxLimitBreakCount"] = 4
         spiral = res["_MaxLimitBreakCount"] == 5
+        ablist = []
         for i in (1, 2, 3):
             found = 1
             for j in (3, 2, 1):
@@ -1326,8 +1323,8 @@ class AdvConf(CharaData, SkillProcessHelper):
                     if force_50mc and found > 0:
                         found -= 1
                         continue
-                    if ability := self.index["AbilityConf"].get(ab):
-                        ab_lst.extend(ability)
+                    if ability := self.index["AbilityConf"].get(ab, source=f"ability{i}"):
+                        ablist.extend(ability)
                     break
 
         res = self.condense_stats(res)
@@ -1340,7 +1337,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 "ele": ELEMENTS[res["_ElementalType"]].lower(),
                 "wt": WEAPON_TYPES[res["_WeaponType"]].lower(),
                 "spiral": spiral,
-                "ability": ab_lst,
+                "abilities": ablist,
                 # 'skipped': skipped
             }
         }
@@ -1352,12 +1349,15 @@ class AdvConf(CharaData, SkillProcessHelper):
         self.name = conf["c"]["name"]
 
         if self.utp_chara is not None:
-            conf["c"]["utp"] = [self.utp_chara[0]] + [int(v) for v in self.utp_chara[1].split("/")]
+            conf["c"]["utp"] = self.utp_chara
 
         if avoid_on_c := res.get("_AvoidOnCombo"):
             actdata = self.index["PlayerAction"].get(avoid_on_c)
             conf["dodge_on_x"] = convert_dodge(actdata)
             self.action_ids[actdata["_Id"]] = "dodge"
+        for dodge in map(res.get, ("_Avoid", "_BackAvoidOnCombo")):
+            if dodge:
+                self.action_ids[dodge] = "dodge"
 
         if burst := res.get("_BurstAttack"):
             burst = self.index["PlayerAction"].get(res["_BurstAttack"])
@@ -1391,13 +1391,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                 skill = self.index["SkillData"].get(sdata, full_query=True)
                 self.chara_skills[sdata] = (f"s{s}", s, skill, None)
 
-        if (edit := res.get("_EditSkillId")) and edit not in self.chara_skills:
-            skill = self.index["SkillData"].get(res[f"_EditSkillId"], full_query=True)
-            self.chara_skills[res["_EditSkillId"]] = (f"s99", 99, skill, None)
-
         if udrg := res.get("_UniqueDragonId"):
             udform_key = "dservant" if self.utp_chara and self.utp_chara[0] == 2 else "dragonform"
-            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.dragon_hitattrshift, mlvl=mlvl if res.get("_IsConvertDragonSkillLevel") else None)
+            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", hitattrshift=self.hitattrshift, mlvl=mlvl if res.get("_IsConvertDragonSkillLevel") else None)
             del conf[udform_key]["d"]
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
@@ -1478,22 +1474,19 @@ class AdvConf(CharaData, SkillProcessHelper):
         # pprint(self.abilities)
         # for k, seq, skill in self.chara_skills.values():
 
-        self.process_skill(res, conf, mlvl, all_levels=all_levels)
-        self.edit_skill_idx = 0
         if edit := res.get("_EditSkillId"):
-            try:
-                self.edit_skill_idx = self.SPECIAL_EDIT_SKILL[edit]
-            except KeyError:
-                self.edit_skill_idx = self.all_chara_skills[edit][1]
+            if edit not in self.chara_skills:
+                skill = self.index["SkillData"].get(edit, full_query=True)
+                self.chara_skills[edit] = (f"s99", 99, skill, None)
+                res["_EditSkillId"] = skill
+            else:
+                res["_EditSkillId"] = self.chara_skills[edit][2]
 
+        self.process_skill(res, conf, mlvl)
         try:
             self.action_ids.update(self.base_conf.action_ids)
         except AttributeError:
             pass
-
-        for dodge in map(res.get, ("_Avoid", "_BackAvoidOnCombo")):
-            if dodge:
-                self.action_ids[dodge] = "dodge"
 
         servant_attrs = None
         if self.utp_chara and self.utp_chara[0] == 2:
@@ -1520,11 +1513,15 @@ class AdvConf(CharaData, SkillProcessHelper):
 
         return conf
 
-    def get(self, name, all_levels=False):
+    def get(self, name, exss=False):
         res = super().get(name, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res, all_levels=all_levels)
+        conf = self.process_result(res)
+        if exss:
+            if ex_res := self.exability_data(res):
+                conf["DEBUG_COAB"] = ex_res
+        return conf
 
     @staticmethod
     def outfile_name(conf, ext, variant=None):
@@ -1533,53 +1530,39 @@ class AdvConf(CharaData, SkillProcessHelper):
         return snakey(conf["c"]["name"]) + ext
 
     def skillshare_data(self, res):
-        res_data = {}
+        ss_conf = {}
         if res["_HoldEditSkillCost"] != 10:
-            res_data["limit"] = res["_HoldEditSkillCost"]
+            ss_conf["limit"] = res["_HoldEditSkillCost"]
         if res["_EditSkillRelationId"] > 1:
             modifiers = self.index["EditSkillCharaOffset"].get(res["_EditSkillRelationId"], by="_EditSkillRelationId")[0]
             if modifiers["_SpOffset"] > 1:
-                res_data["mod_sp"] = modifiers["_SpOffset"]
+                ss_conf["mod_sp"] = modifiers["_SpOffset"]
             if modifiers["_StrengthOffset"] != 0.699999988079071:
-                res_data["mod_att"] = modifiers["_StrengthOffset"]
+                ss_conf["mod_att"] = modifiers["_StrengthOffset"]
             if modifiers["_BuffDebuffOffset"] != 1:
-                res_data["mod_buff"] = modifiers["_BuffDebuffOffset"]
-        if res.get("_EditSkillId", 0) > 0 and res.get("_EditSkillCost", 0) > 0:
-            skill = self.index["SkillData"].get(res["_EditSkillId"])
-            res_data["s"] = self.edit_skill_idx
+                ss_conf["mod_buff"] = modifiers["_BuffDebuffOffset"]
+        if res.get("_EditSkillCost", 0) > 0 and (skill := res.get("_EditSkillId")):
+            # skill = self.index["SkillData"].get(res["_EditSkillId"])
+            # ss_conf["s"] = self.
+            ss_conf["s"] = self.all_chara_skills[skill["_Id"]][0]
             if res["_MaxLimitBreakCount"] >= 5:
                 sp_lv = 4
             else:
                 sp_lv = 3
             if res["_EditSkillLevelNum"] == 2:
                 sp_lv -= 1
-            # res_data['name'] = snakey(skill['_Name'])
-            res_data["cost"] = res["_EditSkillCost"]
-            res_data["type"] = skill["_SkillType"]
-            # sp_s_list = [
-            #     skill['_SpEdit'],
-            #     skill['_SpLv2Edit'],
-            #     skill['_SpLv3Edit'],
-            #     skill['_SpLv4Edit'],
-            # ]
-            res_data["sp"] = skill[f"_SpLv{sp_lv}Edit"]
-        return res_data
+            ss_conf["cost"] = res["_EditSkillCost"]
+            ss_conf["type"] = skill["_SkillType"]
+            ss_conf["sp"] = skill[f"_SpLv{sp_lv}Edit"]
+        return ss_conf
 
     def exability_data(self, res):
-        ex_res = self.index["ExAbilityData"].get(res["_ExAbilityData5"])
-        ex_ab, ex_skipped = convert_exability(ex_res)
-        chain_res = self.index["AbilityData"].get(res.get("_ExAbility2Data5"), full_query=True)
-        chain_ab, chain_skipped = convert_ability(chain_res, chains=True)
-        if len(chain_ab) > 1:
-            print(res)
+        ex_ab = self.index["ExAbilityConf"].get(res["_ExAbilityData5"], source="coab")
+        chain_ab = self.index["AbilityConf"].get(res.get("_ExAbility2Data5"), source="chain")
         entry = {
-            "category": ex_res.get("_Category"),
             "ex": ex_ab,
             "chain": chain_ab,
-            # "skipped": ex_skipped + chain_skipped,
         }
-        if not chain_res.get("_ElementalType") and chain_ab:
-            entry["ALL_ELE_CHAIN"] = True
         return entry
 
     def sort_exability_data(self, exability_data):
@@ -1648,7 +1631,6 @@ class AdvConf(CharaData, SkillProcessHelper):
         exability_out = os.path.join(out_dir, f"exability{ext}")
         advout_dir = os.path.join(out_dir, "adv")
         check_target_path(advout_dir)
-        skillshare_data = {}
         exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
 
         for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
@@ -1662,8 +1644,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                         fp.write("\n")
                 outconf = self.process_result(res)
                 out_name = self.outfile_name(outconf, ext)
-                if ss_res := self.skillshare_data(res):
-                    skillshare_data[snakey(outconf["c"]["name"])] = ss_res
                 if ex_res := self.exability_data(res):
                     exability_data[snakey(outconf["c"]["ele"])][snakey(outconf["c"]["name"])] = ex_res
                 output = os.path.join(advout_dir, out_name)
@@ -1675,9 +1655,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                 raise e
         if AdvConf.MISSING_ENDLAG:
             print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
-        with open(skillshare_out, "w", newline="") as fp:
-            fmt_conf(skillshare_data, f=fp)
-            fp.write("\n")
         self.sort_exability_data(exability_data)
         with open(exability_out, "w", newline="") as fp:
             fmt_conf(exability_data, f=fp, lim=3, sortlim=2)
@@ -1686,37 +1663,20 @@ class AdvConf(CharaData, SkillProcessHelper):
 
 # ALWAYS_KEEP = {400127, 400406, 400077, 400128, 400092, 400410}
 class WpConf(AbilityCrest):
-    HDT_PRINT = {
-        "name": "High Dragon Print",
-        "icon": "400072_02",
-        "hp": 83,
-        "att": 20,
-        "rarity": 1,
-        "union": 0,
-        "a": [["res_hdt", 0.25]],
-    }
-    SKIP_AB = (AbilityType.ResistAbs,)
-    # 7(burn) and 13(poison) have self inflictions, do not skip
-    SKIP_BOON = (0, 8, 9, 10, 13, 14, 15, 16)
-
     def __init__(self, index):
         super().__init__(index)
         self.boon_names = {res["_Id"]: res["_Name"] for res in self.index["UnionAbility"].get_all()}
 
     def process_result(self, res):
-        ab_lst = []
+        ablist = []
         for i in (1, 2, 3):
-            k = f"_Abilities{i}3"
-            if ab := res.get(k):
-                ab_lst.append(self.index["AbilityData"].get(ab, full_query=True))
-        converted, skipped = convert_all_ability(ab_lst, skip_abtype=WpConf.SKIP_AB)
+            ab = res.get(f"_Abilities{i}3")
+            if ability := self.index["AbilityConf"].get(ab, source=f"ability{i}"):
+                ablist.extend(ability)
 
         boon = res.get("_UnionAbilityGroupId", 0)
-        if boon in WpConf.SKIP_BOON:
-            if not converted:
-                return
-            # if converted[0][0].startswith("sts") or converted[0][0].startswith("sls"):
-            #     return
+        if not boon and not ablist:
+            return
 
         if res.get("_IsHideChangeImage"):
             icon = f'{res["_BaseId"]}_01'
@@ -1729,8 +1689,7 @@ class WpConf(AbilityCrest):
             "hp": res["_MaxHp"],
             "rarity": res["_CrestSlotType"],
             "union": boon,
-            "a": converted,
-            # 'skipped': skipped
+            "abilities": ablist,
         }
         return conf
 
@@ -1754,7 +1713,6 @@ class WpConf(AbilityCrest):
             else:
                 skipped.append((res["_BaseId"], res["_Name"]))
                 # skipped.append(res["_Name"])
-        outdata["High_Dragon_Print"] = WpConf.HDT_PRINT
         for qual_name, duplicates in collisions.items():
             if len({dupe["union"] for dupe in duplicates}) == len(duplicates):
                 for dupe in duplicates:
@@ -1826,11 +1784,11 @@ class DrgConf(DragonData, SkillProcessHelper):
         else:
             ab_seq = 5
 
-        ab_lst = []
+        ablist = []
         for i in (1, 2):
-            if ab := res.get(f"_Abilities{i}{ab_seq}"):
-                ab_lst.append(ab)
-        converted, skipped = convert_all_ability(ab_lst)
+            ab = res.get(f"_Abilities{i}{ab_seq}")
+            if ability := self.index["AbilityConf"].get(ab, source=f"ability{i}"):
+                ablist.extend(ability)
 
         conf = {
             "d": {
@@ -1839,7 +1797,7 @@ class DrgConf(DragonData, SkillProcessHelper):
                 "att": att,
                 "hp": hp,
                 "ele": ELEMENTS.get(res["_ElementalType"]).lower(),
-                "a": converted,
+                "abilities": ablist,
             }
         }
         # if skipped:
@@ -1957,13 +1915,13 @@ class WepConf(WeaponBody, SkillProcessHelper):
             ele_type = res["_ElementalType"].lower()
         except AttributeError:
             ele_type = "any"
-        ab_lst = []
+        ablist = []
         for i in (1, 2, 3):
             for j in (3, 2, 1):
-                if ab := res.get(f"_Abilities{i}{j}"):
-                    ab_lst.append(ab)
-                    break
-        converted, skipped = convert_all_ability(ab_lst)
+                ab = res.get(f"_Abilities{i}{j}")
+                if ability := self.index["AbilityConf"].get(ab, source=f"ability{i}"):
+                    ablist.extend(ability)
+                break
         conf = {
             "w": {
                 "name": res["_Name"],
@@ -1978,7 +1936,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
                 #     4: res.get('_CrestSlotType2MaxCount', 0)
                 # },
                 "tier": tier,
-                "a": converted
+                "abilities": ablist
                 # 'skipped': skipped
             }
         }
@@ -2053,8 +2011,8 @@ class AbilityConf(AbilityData):
     TARGET_ACT = {
         AbilityTargetAction.COMBO: "x",
         AbilityTargetAction.BURST_ATTACK: "fs",
-        AbilityTargetAction.SKILL_1: ("s1", "ds1"),
-        AbilityTargetAction.SKILL_2: ("s2", "ds2"),
+        AbilityTargetAction.SKILL_1: "s1",
+        AbilityTargetAction.SKILL_2: "s2",
         AbilityTargetAction.SKILL_3: "s3",
         AbilityTargetAction.SKILL_ALL: "s",
         AbilityTargetAction.HUMAN_SKILL_1: "s1",
@@ -2067,22 +2025,37 @@ class AbilityConf(AbilityData):
 
     def __init__(self, index):
         super().__init__(index)
-        self.seen = None
         self.meta = None
+        self.source = None
 
     def set_meta(self, meta):
-        self.seen = set()
         self.meta = meta
+        self.source = None
 
-    def varids(self, res, i):
-        for a in ("a", "b", "c", ""):
+    def _varids(self, res, i):
+        for a in ("a", "b", "c"):
             try:
                 key = f"_VariousId{i}{a}"
                 yield res[key]
             except KeyError:
                 continue
 
+    def _varid_a(self, res, i):
+        try:
+            return res[f"_VariousId{i}a"]
+        except KeyError:
+            return res[f"_VariousId{i}"]
+
+    def _upval(self, res, i):
+        try:
+            return res[f"_AbilityType{i}UpValue"]
+        except KeyError:
+            return res[f"_AbilityType{i}UpValue0"]
+
     # AbilityCondition
+    def ac_NONE(self, res):
+        return None
+
     def ac_HP_MORE(self, res):
         return ["hp", ">=", int(res["_ConditionValue"])]
 
@@ -2365,40 +2338,46 @@ class AbilityConf(AbilityData):
         AbilityStat.ChargeSpeed: "cspd",
     }
 
+    def _at_upval(self, name, res, i, div=100):
+        return [name, self._upval(res, i) / div]
+
+    def _at_aff(self, name, res, i, div=100):
+        return [name, AFFLICTION_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i) / div]
+
     def at_StatusUp(self, res, i):
         try:
-            stat = AbilityStat(res[f"_VariousId{i}a"])
+            stat = AbilityStat(self._varid_a(res, i))
         except KeyError:
             stat = AbilityStat(res[f"_VariousId{i}"])
-        return ["stat", AbilityConf.STAT_TO_MOD[stat], res[f"_AbilityType{i}UpValue"] / 100]
+        return ["stat", AbilityConf.STAT_TO_MOD[stat], self._upval(res, i) / 100]
 
     def at_ResistAbs(self, res, i):
-        return ["affres", AFFLICTION_TYPES[res[f"_VariousId{i}a"]].lower(), res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_aff("affres", res, i)
 
     def at_ActAddAbs(self, res, i):
-        return ["edge", AFFLICTION_TYPES[res[f"_VariousId{i}a"]].lower(), res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_aff("edge", res, i)
 
     def at_ActKillerTribe(self, res, i):
-        return ["killer", TRIBE_TYPES[res[f"_VariousId{i}a"]].lower(), res[f"_AbilityType{i}UpValue"] / 100]
+        return ["killer", TRIBE_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i) / 100]
 
     def at_ActDamageUp(self, res, i):
-        return ["dmg", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("dmg", res, i)
 
     def at_ActCriticalUp(self, res, i):
-        return ["crit", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("crit", res, i)
 
     def at_ActRecoveryUp(self, res, i):
-        return ["rcv", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("rcv", res, i)
 
     def at_ActBreakUp(self, res, i):
-        return ["odaccel", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("odaccel", res, i)
 
     def at_AddRecoverySp(self, res, i):
-        return ["stat", "sp", res[f"_AbilityType{i}UpValue"] / 100]
+        return ["stat", "sp", self._upval(res, i) / 100]
 
     def at_ChangeState(self, res, i):
         buffs = []
-        for bid in self.varids(res, i):
+        for bid in self._varids(res, i):
             if bid:
                 buffs.append(bid)
         if buffs:
@@ -2410,39 +2389,89 @@ class AbilityConf(AbilityData):
             return ["hitattr", hitattr]
 
     def at_SpCharge(self, res, i):
-        return ["prep", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("prep", res, i)
 
     def at_BuffExtension(self, res, i):
-        return ["bufftime", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("bufftime", res, i)
 
     def at_DebuffExtension(self, res, i):
-        return ["debufftime", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("debufftime", res, i)
 
     def at_AbnormalKiller(self, res, i):
-        return ["killer", AFFLICTION_TYPES[res[f"_VariousId{i}a"]].lower(), res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_aff("punisher", res, i)
 
     def at_CriticalDamageUp(self, res, i):
-        return ["critdmg", AFFLICTION_TYPES[res[f"_VariousId{i}a"]].lower(), res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("critdmg", res, i)
 
     def at_DpCharge(self, res, i):
-        return ["dprep", res[f"_AbilityType{i}UpValue"] / 100]
+        return self._at_upval("dprep", res, i)
 
     def at_ResistElement(self, res, i):
-        return ["eleres", ELEMENTS[res[f"_VariousId{i}a"]].lower(), res[f"_AbilityType{i}UpValue"] / 100]
+        return ["eleres", ELEMENTS[self._varid_a(res, i)].lower(), self._upval(res, i) / 100]
 
-    # ModeGaugeSuppression
+    def at_DragonDamageUp(self, res, i):
+        return ["stat", "da", self._upval(res, i) / 100]
+
+    def at_HitAttribute(self, res, i):
+        return self.at_ChangeState(res, i)
+
+    def at_HitAttributeShift(self, res, i):
+        if self.meta is not None:
+            self.meta.hitattrshift = True
+        return ["hitattrshift"]
+
+    def at_EnhancedSkill(self, res, i):
+        skill_id = self._varid_a(res, i)
+        target = AbilityTargetAction(res[f"_TargetAction{i}"])
+        seq = int(target.name[-1:])
+        if self.meta is not None:
+            if not skill_id in self.meta.all_chara_skills:
+                skill_data = self.index["SkillData"].get(skill_id)
+                self.meta.chara_skills[skill_id] = (f"s{seq}_{self.source}", seq, skill_data, None)
+        return ["altskill", self.source]
+
+    def at_EnhancedBurstAttack(self, res, i):
+        burst_id = self._varid_a(res, i)
+        if self.meta is not None:
+            burst = self.index["PlayerAction"].get(burst_id)
+            self.meta.enhanced_fs[self.source] = self.source, burst, burst.get("_BurstMarkerId")
+        return ["altfs", self.source]
+
+    def at_AbnoramlExtension(self, res, i):
+        return self._at_aff("afftime", res, i)
+
+    def at_DragonTimeSpeedRate(self, res, i):
+        value = 100 / (100 + self._upval(res, i))
+        return ["stat", "dt", value]
+
+    def at_DpChargeMyParty(self, res, i):
+        return self._at_upval("dprep", res, i)
+
+    def at_CriticalUpDependsOnBuffTypeCount(self, res, i):
+        return self._at_upval("crit", res, i)
+
+    def at_ChainTimeExtension(self, res, i):
+        return self._at_upval("ctime", res, i)
+
+    def at_UniqueTransform(self, res, i):
+        if self.meta is not None:
+            self.meta.utp_chara = [res[f"_VariousId{i}a"], *(int(v) for v in res[f"_VariousId{i}str"].split("/"))]
+        return None
 
     # processing
-    def process_result(self, res):
+    def process_result(self, res, source=None):
+        if source is not None:
+            self.source = source
         conf = {}
         # cond
+        condtype = AbilityCondition(res["_ConditionType"])
         try:
-            condtype = AbilityCondition(res["_ConditionType"])
             res["_ConditionType"] = condtype
-            if cond := getattr(self, f"at_{condtype.name}")(res):
+            if cond := getattr(self, f"ac_{condtype.name}")(res):
                 conf["cond"] = cond
-        except (AttributeError, KeyError):
-            pass
+        except AttributeError:
+            # if the cond is not implemented, skip
+            return []
         # cd
         if cd := res.get("_CoolTime"):
             conf["cd"] = cd
@@ -2451,47 +2480,268 @@ class AbilityConf(AbilityData):
             conf["count"] = count
         # ele
         if ele := res.get("_ElementalType"):
-            conf["ele"] = ELEMENTS[ele.lower()]
+            conf["ele"] = ELEMENTS[ele].lower()
         # wt
         if wt := res.get("_WeaponType"):
-            conf["wt"] = WEAPON_TYPES[wt.lower()]
+            conf["wt"] = WEAPON_TYPES[wt].lower()
         # ab
         ablist = []
-        reflist = []
+        conflist = []
         for i in (1, 2, 3):
             abtype = AbilityType(res[f"_AbilityType{i}"])
             if abtype == AbilityType.ReferenceOther:
-                for value in self.varids(res, i):
+                for value in self._varids(res, i):
                     if not value or not (subab := self.get(value)):
                         continue
-                    # if list(subab.keys()) == ["ab"]:
-                    #     ablist.extend(subab["ab"])
-                    # else:
-                    #
-                    reflist.extend(subab)
+                    conflist.extend(subab)
             else:
                 try:
-                    ab = getattr(self, f"at_{abtype.name}")(res, i)
-                    target = AbilityTargetAction(res.get(f"_TargetAction{i}", 0))
-                    if target != AbilityTargetAction.NONE:
-                        ab.append(AbilityConf.TARGET_ACT[target])
-                    ablist.append(ab)
+                    if ab := getattr(self, f"at_{abtype.name}")(res, i):
+                        target = AbilityTargetAction(res.get(f"_TargetAction{i}", 0))
+                        if target != AbilityTargetAction.NONE:
+                            ab.append(AbilityConf.TARGET_ACT[target])
+                        ablist.append(ab)
                 except (AttributeError, ValueError):
                     pass
-
+        if source is not None:
+            self.source = None
         if ablist:
             conf["ab"] = ablist
-        conflist = [conf]
-        if reflist:
-            if list(conf.keys()) == ["ab"]:
-                conflist.extend(reflist)
-            else:
-                conf["ref"] = reflist
-        return conflist
+            conflist.append(conf)
+        return list(filter(None, conflist))
+
+
+class ExAbilityConf(AbilityConf):
+    def __init__(self, index):
+        DBView.__init__(self, index, "ExAbilityData", labeled_fields=["_Name", "_Details"])
+
+    def process_result(self, res, source=None):
+        conf = {"category": res["_Category"]}
+        if not (conflist := super().process_result(res, source=source)):
+            return
+        conf.update(conflist[0])
+        return conf
 
 
 class ActCondConf(ActionCondition):
-    pass
+    def __init__(self, index):
+        super().__init__(index)
+        self.meta = None
+        self.all_actcond_conf = {}
+
+    def set_meta(self, meta):
+        self.meta = meta
+
+    def process_result(self, res):
+        # _Id INTEGER PRIMARY KEY
+        actcond_id = res["_Id"]
+        conf = {}
+        # _Type INTEGER
+        try:
+            conf["aff"] = AFFLICTION_TYPES.get(res["_Type"], res["_Type"]).lower()
+        except KeyError:
+            pass
+
+        # _Text TEXT
+        # _TextEx TEXT
+        # _BlockExaustFlag INTEGER
+        # _InternalFlag INTEGER
+        # _UniqueIcon INTEGER
+        # _BuffIconId INTEGER
+        # _ResistBuffReset INTEGER
+        # _ResistDebuffReset INTEGER
+        # _UnifiedManagement INTEGER
+        # _Overwrite INTEGER
+        # _OverwriteIdenticalOwner INTEGER
+        # _OverwriteGroupId INTEGER
+        # _MaxDuplicatedCount INTEGER
+        # _UsePowerUpEffect INTEGER
+        # _NotUseStartEffect INTEGER
+        # _StartEffectCommon TEXT
+        # _StartEffectAdd TEXT
+        # _LostOnDragon INTEGER
+        # _KeepOnDragonShift INTEGER
+        # _RestoreOnReborn INTEGER
+        # _Rate INTEGER
+        # _EfficacyType INTEGER
+        # _RemoveConditionId INTEGER
+        # _DebuffCategory INTEGER
+        # _RemoveDebuffCategory INTEGER
+        # _DurationSec REAL
+        # _DurationNum INTEGER
+        # _MinDurationSec REAL
+        # _DurationTimeScale INTEGER
+        # _IsAddDurationNum INTEGER
+        # _MaxDurationNum INTEGER
+        # _CoolDownTimeSec REAL
+        # _RemoveAciton INTEGER
+        # _DurationNumConsumedHeadText TEXT
+        # _SlipDamageIntervalSec REAL
+        # _SlipDamageFixed INTEGER
+        # _SlipDamageRatio REAL
+        # _SlipDamageMax INTEGER
+        # _SlipDamagePower REAL
+        # _SlipDamageGroup INTEGER
+        # _RateIncreaseByTime REAL
+        # _RateIncreaseDuration REAL
+        # _RegenePower REAL
+        # _DebuffGrantRate REAL
+        # _EventProbability INTEGER
+        # _EventCoefficient REAL
+        # _DamageCoefficient REAL
+        # _TargetAction INTEGER
+        # _TargetElemental INTEGER
+        # _ConditionAbs INTEGER
+        # _ConditionDebuff INTEGER
+        # _RateHP REAL
+        # _RateAttack REAL
+        # _RateDefense REAL
+        # _RateDefenseB REAL
+        # _RateCritical REAL
+        # _RateSkill REAL
+        # _RateBurst REAL
+        # _RateRecovery REAL
+        # _RateRecoverySp REAL
+        # _RateRecoverySpExceptTargetSkill INTEGER
+        # _RateRecoveryDp REAL
+        # _RateRecoveryUtp REAL
+        # _RateAttackSpeed REAL
+        # _RateChargeSpeed REAL
+        # _RateBurstSpeed REAL
+        # _MoveSpeedRate REAL
+        # _MoveSpeedRateB REAL
+        # _RatePoison REAL
+        # _RateBurn REAL
+        # _RateFreeze REAL
+        # _RateParalysis REAL
+        # _RateDarkness REAL
+        # _RateSwoon REAL
+        # _RateCurse REAL
+        # _RateSlowMove REAL
+        # _RateSleep REAL
+        # _RateFrostbite REAL
+        # _RateFlashheat REAL
+        # _RateCrashWind REAL
+        # _RateDarkAbs REAL
+        # _RateDestroyFire REAL
+        # _RatePoisonKiller REAL
+        # _RateBurnKiller REAL
+        # _RateFreezeKiller REAL
+        # _RateParalysisKiller REAL
+        # _RateDarknessKiller REAL
+        # _RateSwoonKiller REAL
+        # _RateCurseKiller REAL
+        # _RateSlowMoveKiller REAL
+        # _RateSleepKiller REAL
+        # _RateFrostbiteKiller REAL
+        # _RateFlashheatKiller REAL
+        # _RateCrashWindKiller REAL
+        # _RateDarkAbsKiller REAL
+        # _RateDestroyFireKiller REAL
+        # _RatePoisonAdd REAL
+        # _RateBurnAdd REAL
+        # _RateFreezeAdd REAL
+        # _RateParalysisAdd REAL
+        # _RateDarknessAdd REAL
+        # _RateSwoonAdd REAL
+        # _RateCurseAdd REAL
+        # _RateSlowMoveAdd REAL
+        # _RateSleepAdd REAL
+        # _RateFrostbiteAdd REAL
+        # _RateFlashheatAdd REAL
+        # _RateCrashWindAdd REAL
+        # _RateDarkAbsAdd REAL
+        # _RateDestroyFireAdd REAL
+        # _RateFire REAL
+        # _RateWater REAL
+        # _RateWind REAL
+        # _RateLight REAL
+        # _RateDark REAL
+        # _EnhancedFire REAL
+        # _EnhancedWater REAL
+        # _EnhancedWind REAL
+        # _EnhancedLight REAL
+        # _EnhancedDark REAL
+        # _EnhancedFire2 REAL
+        # _EnhancedWater2 REAL
+        # _EnhancedWind2 REAL
+        # _EnhancedLight2 REAL
+        # _EnhancedDark2 REAL
+        # _EnhancedNoElement REAL
+        # _EnhancedDisadvantagedElement REAL
+        # _RateMagicCreature REAL
+        # _RateNatural REAL
+        # _RateDemiHuman REAL
+        # _RateBeast REAL
+        # _RateUndead REAL
+        # _RateDeamon REAL
+        # _RateHuman REAL
+        # _RateDragon REAL
+        # _RateDamageCut REAL
+        # _RateDamageCut2 REAL
+        # _RateDamageCutB REAL
+        # _RateWeakInvalid REAL
+        # _HealInvalid INTEGER
+        # _TensionUpInvalid INTEGER
+        # _ValidRegeneHP REAL
+        # _ValidRegeneSP REAL
+        # _ValidRegeneDP REAL
+        # _ValidSlipHp REAL
+        # _RequiredRecoverHp INTEGER
+        # _RateGetHpRecovery REAL
+        # _UniqueRegeneSp01 REAL
+        # _AutoRegeneS1 REAL
+        # _AutoRegeneSW REAL
+        # _RateReraise REAL
+        # _RateArmored REAL
+        # _RateDamageShield REAL
+        # _RateDamageShield2 REAL
+        # _RateDamageShield3 REAL
+        # _RateSacrificeShield REAL
+        # _SacrificeShieldType INTEGER
+        # _Malaise01 INTEGER
+        # _Malaise02 INTEGER
+        # _Malaise03 INTEGER
+        # _RateNicked REAL
+        # _CurseOfEmptiness INTEGER
+        # _CurseOfEmptinessInvalid INTEGER
+        # _TransSkill REAL
+        # _GrantSkill INTEGER
+        # _DisableAction INTEGER
+        # _DisableActionFlags INTEGER
+        # _DisableMove INTEGER
+        # _InvincibleLv INTEGER
+        # _AutoAvoid REAL
+        # _ComboShift INTEGER
+        # _EnhancedBurstAttack INTEGER
+        # _EnhancedSkill1 INTEGER
+        # _EnhancedSkill2 INTEGER
+        # _EnhancedSkillWeapon INTEGER
+        # _EnhancedCritical REAL
+        # _Tension INTEGER
+        # _Inspiration INTEGER
+        # _Cartridge INTEGER
+        # _ModeStack INTEGER
+        # _StackData INTEGER
+        # _StackNum INTEGER
+        # _Sparking INTEGER
+        # _RateHpDrain REAL
+        # _HpDrainLimitRate REAL
+        # _SelfDamageRate REAL
+        # _HpConsumptionRate REAL
+        # _HpConsumptionCoef REAL
+        # _RemoveTrigger INTEGER
+        # _DamageLink TEXT
+        # _AdditionAttack TEXT
+        # _AdditionAttackHitEffect TEXT
+        # _ExtraBuffType INTEGER
+        # _EnhancedSky INTEGER
+        # _InvalidBuffId INTEGER
+        # _ModifyChargeLevel INTEGER
+        # _Hiding INTEGER
+        # _LevelUpId INTEGER
+        # _LevelDownId INTEGER
+        # _ExcludeFromBuffExtension INTEGER
 
 
 if __name__ == "__main__":
@@ -2536,7 +2786,7 @@ if __name__ == "__main__":
         if args.a == "all":
             view.export_all_to_folder(out_dir=out_dir)
         else:
-            adv_conf = view.get(args.a, all_levels=False)
+            adv_conf = view.get(args.a, exss=True)
             fmt_conf(adv_conf, f=sys.stdout)
     elif args.d:
         view = DrgConf(index)
