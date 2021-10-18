@@ -367,13 +367,13 @@ class DBView:
 
 class DBViewIndex:
     @staticmethod
-    def all_subclasses(c):
+    def all_subclasses(c=DBView):
         return set(c.__subclasses__()).union([s for c in c.__subclasses__() for s in DBViewIndex.all_subclasses(c)])
 
     def __init__(self, db_file=DB_FILE):
         super().__init__()
         self.db = DBManager(db_file=db_file)
-        self.class_dict = {view_class.__name__: view_class for view_class in DBViewIndex.all_subclasses(DBView)}
+        self.class_dict = {view_class.__name__: view_class for view_class in DBViewIndex.all_subclasses()}
         self.instance_dict = {}
 
     def __getitem__(self, key):

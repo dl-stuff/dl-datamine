@@ -1,10 +1,12 @@
 import os
-from loader.Database import DBManager, DBViewIndex, check_target_path
-from exporter.Mappings import ELEMENTS, WEAPON_TYPES
-from exporter.AdvConf import fmt_conf
-from exporter.Shared import FortPlantData
 
-# hax
+from loader.Database import DBViewIndex, DBManager
+from exporter.Shared import FortPlantData
+from exporter.Mappings import ELEMENTS, WEAPON_TYPES
+
+from exporter.conf.common import fmt_conf
+
+# dum
 FortPlantData(DBViewIndex())
 
 COUNT_WEAPON_BONUS = "SELECT _WeaponType, SUM(_WeaponPassiveEffAtk) AS _Bonus FROM WeaponBody GROUP BY _WeaponType"
@@ -107,25 +109,3 @@ def write_fort_passives(out_dir):
         with open(out_path, "w") as fn:
             fmt_conf(fort_passives, f=fn)
             fn.write("\n")
-
-
-if __name__ == "__main__":
-    write_fort_passives("./out/gen")
-    exit()
-    adv_ele_passives, adv_wep_passives, drg_passives = count_fort_passives(include_album=True)
-
-    print("===Adventurer Bonus===")
-    for ele, bonus in adv_ele_passives.items():
-        hp, atk = bonus
-        print(f"{ele[1]}:\t{hp:.1f}% {atk:.1f}%")
-    print()
-    for wep, bonus in adv_wep_passives.items():
-        hp, atk = bonus
-        print(f"{wep[1]}:\t{hp:.1f}% {atk:.1f}%")
-    print("")
-    print("===Dragon Bonus===")
-    for ele, bonus in drg_passives.items():
-        hp, atk = bonus
-        print(f"{ele[1]}:\t{hp:.1f}% {atk:.1f}%")
-
-    check_target_path("./out")

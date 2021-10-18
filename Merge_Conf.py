@@ -4,7 +4,7 @@ import json
 import pprint
 import shutil
 import subprocess
-from exporter.AdvConf import fmt_conf
+from exporter.conf.common import fmt_conf
 
 SIM = "../dl/conf"
 GEN = "./out/gen"
