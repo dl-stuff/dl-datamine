@@ -6,7 +6,7 @@ from exporter.Shared import snakey
 from exporter.Dragons import DragonData
 from exporter.Mappings import ELEMENTS
 
-from exporter.conf.common import SkillProcessHelper, convert_all_hitattr, convert_fs, convert_x, hit_sr, hit_attr_adj, remap_stuff, check_target_path, fmt_conf
+from exporter.conf.common import SkillProcessHelper, convert_all_hitattr, convert_fs, convert_x, hit_sr, hitattr_adj, remap_stuff, check_target_path, fmt_conf
 
 
 class DrgConf(DragonData, SkillProcessHelper):
@@ -32,8 +32,8 @@ class DrgConf(DragonData, SkillProcessHelper):
         conf["uses"] = skill.get("_MaxUseNum", 1)
         if self.hitattrshift:
             del conf["attr"]
-            hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
-            hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d(_HAS)?_LV0{lv}.*"), attr_key="attr_HAS")
+            hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
+            hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d(_HAS)?_LV0{lv}.*"), attr_key="attr_HAS")
         else:
             try:
                 attr = conf["attr"]
@@ -124,7 +124,7 @@ class DrgConf(DragonData, SkillProcessHelper):
                 conf[xn_key] = dxconf
                 self.action_ids[xn["_Id"]] = xn_key
             if hitattrshift:
-                hit_attr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
+                hitattr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
 
         for act, seq, key in (
             ("ds1", 1, "_Skill1"),

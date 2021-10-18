@@ -24,7 +24,7 @@ DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
 
 INDENT = "    "
 PRETTY_PRINT_THIS = ("dragonform", "dservant", "repeat")
-MULTILINE_LIST = ("abilities", "chain")
+MULTILINE_LIST = ("abilities", "ref", "chain")
 DUMMY_PART = {"_seconds": 0}
 
 
@@ -323,9 +323,9 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                     continue
                 buffname = snakey(actcond.get("_Text") or "buff" + str(actcond.get("_Id")) or "mystery_buff", with_ext=False).lower()
                 count = condvalue["_count"]
-                partcond = ("actcond", (actcond.get("_Id"), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count))
+                partcond = ("actcond", actcond.get("_Id"), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count)
             elif ctype == PartConditionType.AuraLevel:
-                partcond = ("amp", (condvalue["_aura"].value, condvalue["_target"], PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"]))
+                partcond = ("amp", (condvalue["_aura"].value, condvalue["_target"]), PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"])
 
             if partcond is not None:
                 once_per_action = partcond_once_per_action[partcond]
@@ -338,7 +338,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         part_hitattr_map = {"_hitAttrLabelSubList": []}
         if raw_hitattrs := part.get("_allHitLabels"):
             for source, hitattr_lst in raw_hitattrs.items():
-                for hitattr in hitattr_lst:
+                for hitattr in reversed(hitattr_lst):
                     if isinstance(hitattr, str):
                         continue
                     if (not pattern or pattern.match(hitattr["_Id"])) and (
@@ -468,12 +468,13 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                     break
                 delay = float(delay)
                 for attr in part_hitattrs:
+                    attrcond = ["buff", buffcond["_Id"], ">=", idx + 1]
                     if idx == 0:
                         if delay:
                             attr[timekey] = fr(attr.get(timekey, 0) + delay)
                         if "cond" in attr:
-                            attr["cond"] = ["and", attr["cond"], ["var>=", [buffname, idx + 1]]]
-                        attr["cond"] = ["var>=", [buffname, idx + 1]]
+                            attr["cond"] = ["and", attr["cond"], attrcond]
+                        attr["cond"] = attrcond
                     else:
                         gattr, _ = clean_hitattr(attr.copy(), once_per_action)
                         if not gattr:
@@ -481,8 +482,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                         if delay:
                             gattr[timekey] = fr(attr.get(timekey, 0) + delay)
                         if "cond" in gattr:
-                            gattr["cond"] = ["and", gattr["cond"], ["var>=", [buffname, idx + 1]]]
-                        gattr["cond"] = ["var>=", [buffname, idx + 1]]
+                            gattr["cond"] = ["and", gattr["cond"], attrcond]
+                        gattr["cond"] = attrcond
                         gen_attrs.append(gattr)
         part_hitattrs.extend(gen_attrs)
         hitattrs.extend(part_hitattrs)
@@ -490,7 +491,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     return hitattrs
 
 
-def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None, attr_key="attr", next_idx=0):
+def hitattr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, skill=None, attr_key="attr", next_idx=0):
     if hitattrs := convert_all_hitattr(action, pattern=pattern, meta=meta, skill=skill):
         for attr in hitattrs:
             if not isinstance(attr, int) and "iv" in attr:
@@ -504,7 +505,7 @@ def hit_attr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, 
 
     next_res = None
     if nextaction := action.get("_NextAction"):
-        next_res = hit_attr_adj(
+        next_res = hitattr_adj(
             nextaction,
             0.0,
             conf,
@@ -546,7 +547,7 @@ def convert_following_actions(startup, followed_by, default=None):
 def convert_x(xn, pattern=None, convert_follow=True, is_dragon=False):
     s, r, followed_by = hit_sr(xn)
     xconf = {"startup": s, "recovery": r}
-    xconf = hit_attr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
+    xconf = hitattr_adj(xn, s, xconf, skip_nohitattr=False, pattern=pattern)
 
     if xn.get("_IsLoopAction") and any((xn["_Id"] == fb[1] for fb in followed_by)):
         xconf["loop"] = 1
@@ -557,14 +558,16 @@ def convert_x(xn, pattern=None, convert_follow=True, is_dragon=False):
     return xconf
 
 
-def convert_dodge(action, convert_follow=True):
+def convert_misc(action, convert_follow=True):
     s, r, followed_by = hit_sr(action)
-    dodgeconf = {"startup": s, "recovery": r}
-    if not (dodgeconf := hit_attr_adj(action, s, dodgeconf, skip_nohitattr=True, pattern=re.compile(r".*H0\d_LV01$"))):
+    actconf = {"startup": s, "recovery": r}
+    if not (actconf := hitattr_adj(action, s, actconf, skip_nohitattr=True)):
         return None
-    if convert_follow:
-        dodgeconf["interrupt"], dodgeconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
-    return dodgeconf
+    if r is not None and convert_follow:
+        actconf["interrupt"], actconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
+    else:
+        del actconf["recovery"]
+    return actconf
 
 
 def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
@@ -577,7 +580,7 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
         hitattr_pattern = re.compile(r".*_LV02$")
         key = "fs"
     if not isinstance(marker, dict):
-        fsconf[key] = hit_attr_adj(
+        fsconf[key] = hitattr_adj(
             burst,
             startup,
             {"startup": startup, "recovery": recovery},
@@ -619,7 +622,7 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
                     clv_pattern = re.compile(r".*_LV02$")
                 else:
                     clv_pattern = re.compile(f".*_LV02_CHLV0{idx+1}$")
-                clv_attr = hit_attr_adj(burst, startup, base_fs_conf.copy(), clv_pattern)
+                clv_attr = hitattr_adj(burst, startup, base_fs_conf.copy(), clv_pattern)
                 totalc += c
                 if clv_attr:
                     fsn = f"{key}{idx+1}"
@@ -628,7 +631,7 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
                     fsconf[fsn]["interrupt"], fsconf[fsn]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
         else:
             fsconf[key] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
-            fsconf[key] = hit_attr_adj(burst, startup, fsconf[key], hitattr_pattern, skip_nohitattr=False)
+            fsconf[key] = hitattr_adj(burst, startup, fsconf[key], hitattr_pattern, skip_nohitattr=False)
             fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
     if not is_dragon and cancel is not None:
         fsconf["fsf"] = {
@@ -712,6 +715,7 @@ class SkillProcessHelper:
         self.utp_chara = None
         self.hitattrshift = False
         self.chara_modes = {}
+        self.cp1_gauge = 0
 
     def convert_skill(self, k, seq, skill, lv):
         action = 0
@@ -734,7 +738,7 @@ class SkillProcessHelper:
         }
 
         hitlabel_pattern = re.compile(f".*LV0{lv}$")
-        sconf = hit_attr_adj(
+        sconf = hitattr_adj(
             action,
             sconf["startup"],
             sconf,
@@ -755,7 +759,7 @@ class SkillProcessHelper:
 
         for idx in range(2, 5):
             if rng_actions := skill.get(skey_pattern.format(idx)):
-                hit_attr_adj(
+                hitattr_adj(
                     rng_actions,
                     sconf["startup"],
                     sconf,
@@ -829,6 +833,24 @@ class SkillProcessHelper:
 
         return sconf, k, action
 
+    def convert_alt_actions(self, conf):
+        for act, actdata in self.alt_actions:
+            if not actdata:
+                continue
+            actconf = None
+            if act == "fs" and (marker := actdata.get("_BurstMarkerId")):
+                actconf = convert_fs(actdata, marker)["fs"]
+                if act in conf:
+                    act = f"{act}_abalt"
+            else:
+                actconf = convert_misc(actdata)
+                if act == "dodge":
+                    # hax for lv1 of the ability
+                    self.action_ids[actdata["_Id"] - 1] = act
+            if actconf:
+                conf[act] = actconf
+                self.action_ids[actdata["_Id"]] = act
+
     def process_skill(self, res, conf, mlvl):
         # exceptions exist
         while self.chara_skills:
@@ -847,6 +869,8 @@ class SkillProcessHelper:
             for fs, fsc in convert_fs(eba, emk).items():
                 conf[f"{fs}_{efs}"] = fsc
                 self.action_ids[eba["_Id"]] = f"{fs}_{efs}"
+
+        self.convert_alt_actions(conf)
 
 
 class AuraConf(AuraData):
@@ -1100,7 +1124,13 @@ class AbilityConf(AbilityData):
         return ["hp", "<", int(res["_ConditionValue"])]
 
     def ac_CP1_CONDITION(self, res):
-        return ["cp", ">=", int(res["_ConditionValue"])]
+        cp_value = int(res["_ConditionValue"])
+        if self.meta is not None:
+            self.meta.cp1_gauge = max(cp_value, self.meta.cp1_gauge)
+        if cp_value > 0:
+            return ["cp", ">=", cp_value]
+        else:
+            return ["event", "cp_full"]
 
     def ac_REQUIRED_BUFF_AND_SP1_MORE(self, res):
         # return [["buff", res["_RequiredBuff"]], "and", ["sp", "s1", ">=", res[""]]]
@@ -1204,9 +1234,9 @@ class AbilityConf(AbilityData):
     STAT_TO_MOD = {
         AbilityStat.Hp: "hp",
         AbilityStat.Atk: "att",
-        AbilityStat.Def: "defense",
-        AbilityStat.Spr: "sp",
-        AbilityStat.Dpr: "dh",
+        AbilityStat.Def: "def",
+        AbilityStat.Spr: "sph",
+        AbilityStat.Dpr: "dph",
         AbilityStat.DragonTime: "dt",
         AbilityStat.AttackSpeed: "spd",
         AbilityStat.BurstSpeed: "fspd",
@@ -1221,10 +1251,9 @@ class AbilityConf(AbilityData):
 
     def at_StatusUp(self, res, i):
         try:
-            stat = AbilityStat(self._varid_a(res, i))
+            return ["stat", AbilityConf.STAT_TO_MOD[AbilityStat(self._varid_a(res, i))], self._upval(res, i)]
         except KeyError:
-            stat = AbilityStat(res[f"_VariousId{i}"])
-        return ["stat", AbilityConf.STAT_TO_MOD[stat], self._upval(res, i)]
+            return None
 
     def at_ResistAbs(self, res, i):
         return self._at_aff("affres", res, i)
@@ -1236,7 +1265,7 @@ class AbilityConf(AbilityData):
         return ["killer", TRIBE_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i)]
 
     def at_ActDamageUp(self, res, i):
-        return self._at_upval("dmg", res, i)
+        return self._at_upval("actdmg", res, i)
 
     def at_ActCriticalUp(self, res, i):
         return self._at_upval("crit", res, i)
@@ -1256,11 +1285,11 @@ class AbilityConf(AbilityData):
             if bid:
                 buffs.append(bid)
         if buffs:
-            return ["actcond", *buffs]
+            return ["actcond", ActionTargetGroup.MYSELF.name, *buffs]
         else:
             hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART, {}, set())
-            if set(hitattr.keys()) == {"actcond", "target"} and hitattr["target"] == "MYSELF":
-                return ["actcond", hitattr["actcond"]]
+            if set(hitattr.keys()) == {"actcond", "target"}:
+                return ["actcond", hitattr["target"], hitattr["actcond"]]
             return ["hitattr", hitattr]
 
     def at_SpCharge(self, res, i):
@@ -1327,7 +1356,7 @@ class AbilityConf(AbilityData):
         return self._at_upval("crit", res, i)
 
     def at_ChainTimeExtension(self, res, i):
-        return self._at_upval("ctime", res, i)
+        return self._at_upval("ctime", res, i, div=1)
 
     def at_UniqueTransform(self, res, i):
         if self.meta is not None:
@@ -1345,6 +1374,8 @@ class AbilityConf(AbilityData):
         # mode name stuff
         if res["_ConditionType"] == AbilityCondition.BUFF_DISAPPEARED and res["_ConditionValue"] == 1152:
             mode_name = "sigil"
+        elif res["_ConditionType"] == AbilityCondition.CP1_CONDITION:
+            mode_name = "modecp"
         else:
             mode_name = f"mode{m}"
         if self.meta is not None:
@@ -1352,7 +1383,11 @@ class AbilityConf(AbilityData):
         return ["mode", mode_name]
 
     def at_ModifyBuffDebuffDurationTime(self, res, i):
-        return ["actcond_time", self._varid_a(res, i), self._upval(res, i, 1)]
+        # this is actually a percent, based on _DurationSec/(_DurationTimeScale or 1)
+        return ["acduration", self._varid_a(res, i), self._upval(res, i)]
+
+    def at_CpCoef(self, res, i):
+        return ["stat", "cph", self._upval(res, i)]
 
     def at_UniqueAvoid(self, res, i):
         # can this take a cond? unclear
@@ -1361,6 +1396,61 @@ class AbilityConf(AbilityData):
             avoid = self.index["PlayerAction"].get(avoid_id)
             self.meta.alt_actions.append(("dodge", avoid))
         return None
+
+    def at_ChangeStateHostile(self, res, i):
+        ab = self.at_ChangeState(res, i)
+        ab[1] = ActionTargetGroup.HOSTILE.name
+        return ab
+
+    def at_CpContinuationDown(self, res, i):
+        return self._at_upval("cpdegen", res, i, div=1)
+
+    def at_AddCpRate(self, res, i):
+        return self._at_upval("cprep", res, i)
+
+    def at_RunOptionAction(self, res, i):
+        # act_id = self._varid_a(res, i)
+        # if self.meta is not None:
+        #     act = self.index["PlayerAction"].get(act_id)
+        #     actname = f"~misc_{self.source}"
+        #     self.meta.alt_actions.append((actname, act))
+        # return ["runact", actname]
+        if (act := self.index["PlayerAction"].get(self._varid_a(res, i))) and (actconf := convert_misc(act, convert_follow=False)):
+            hitattr = actconf["attr"][0]
+            for key in list(hitattr):
+                if key.startswith("DEBUG_"):
+                    del hitattr[key]
+            if set(hitattr.keys()) == {"actcond", "target"}:
+                return ["actcond", hitattr["target"], hitattr["actcond"]]
+            return ["hitattr", hitattr]
+        return None
+
+    def at_ConsumeSpToRecoverHp(self, res, i):
+        return ["fromhp", "sp", self._upval(res, i)]  # only instance of this has a SR, unclear what happens on normal adv
+
+    def at_CrestGroupScoreUp(self, res, i):
+        return ["psalm", res["_BaseCrestGroupId"], res["_TriggerBaseCrestGroupCount"], self._upval(res, i)]
+
+    def at_ModifyBuffDebuffDurationTimeByRecoveryHp(self, res, i):
+        return ["acduration_healed", res[f"_VariousId{i}a"], self._upval(res, i), res[f"_VariousId{i}b"], res[f"_VariousId{i}c"]]
+
+    def at_CrisisRate(self, res, i):
+        return self._at_upval("crisis", res, i)
+
+    def at_ActDamageDown(self, res, i):
+        return self._at_upval("actdmgdown", res, i)
+
+    def at_RunOptionActionRemoteToo(self, res, i):
+        return self.at_RunOptionAction(res, i)
+
+    def at_ConsumeUtpToRecoverHp(self, res, i):
+        return ["fromhp", "utp", self._upval(res, i)]
+
+    def at_DpGaugeCap(self, res, i):
+        return self._at_upval("dprepmax", res, i)
+
+    def at_AbnormalTypeNumKiller(self, res, i):
+        return ["affnumkiller", ["/".split(res[f"_VariousId{i}str"])]]
 
     # processing
     def process_result(self, res, source=None):
@@ -1374,8 +1464,7 @@ class AbilityConf(AbilityData):
             if cond := getattr(self, f"ac_{condtype.name}")(res):
                 conf["cond"] = cond
         except AttributeError:
-            # if the cond is not implemented, skip
-            return []
+            condtype = False
         # cd
         if cd := res.get("_CoolTime"):
             conf["cd"] = cd
@@ -1403,15 +1492,16 @@ class AbilityConf(AbilityData):
                     if ab := getattr(self, f"at_{abtype.name}")(res, i):
                         target = AbilityTargetAction(res.get(f"_TargetAction{i}", 0))
                         if target != AbilityTargetAction.NONE:
-                            ab.append(AbilityConf.TARGET_ACT[target])
+                            ab.append(f"-t:{AbilityConf.TARGET_ACT[target]}")
                         ablist.append(ab)
                 except (AttributeError, ValueError):
                     pass
+        if ablist and condtype:
+            conf["ab"] = ablist
+            conflist.insert(0, conf)
+
         if source is not None:
             self.source = None
-        if ablist:
-            conf["ab"] = ablist
-            conflist.append(conf)
         return list(filter(None, conflist))
 
 

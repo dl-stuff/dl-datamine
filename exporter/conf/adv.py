@@ -10,7 +10,7 @@ from exporter.Adventurers import CharaData, ExAbilityData
 from exporter.Shared import snakey
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
-from exporter.conf.common import SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_dodge, convert_all_hitattr, fr, fmt_conf, remap_stuff
+from exporter.conf.common import SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_misc, convert_all_hitattr, fr, fmt_conf, remap_stuff
 
 
 class BaseConf(WeaponType):
@@ -154,20 +154,17 @@ class AdvConf(CharaData, SkillProcessHelper):
         if res["_Id"] == 10450404:
             conf["c"]["name"] = "Sophie (Persona)"
         if conf["c"]["wt"] == "gun":
-            conf["c"]["gun"] = []
+            conf["c"]["gun"] = set()
         self.name = conf["c"]["name"]
-
-        if self.utp_chara is not None:
-            conf["c"]["utp"] = self.utp_chara
 
         if avoid_on_c := res.get("_AvoidOnCombo"):
             actdata = self.index["PlayerAction"].get(avoid_on_c)
-            conf["dodge_on_x"] = convert_dodge(actdata)
+            conf["dodge_on_x"] = convert_misc(actdata)
             self.action_ids[actdata["_Id"]] = "dodge"
         for dodge in map(res.get, ("_Avoid", "_BackAvoidOnCombo")):
             if dodge:
                 actdata = self.index["PlayerAction"].get(dodge)
-                if dodgeconf := convert_dodge(actdata):
+                if dodgeconf := convert_misc(actdata):
                     conf["dodge"] = dodgeconf
                 self.action_ids[dodge] = "dodge"
 
@@ -199,6 +196,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                     if ability := self.index["AbilityConf"].get(ab, source=f"ability{i}"):
                         ablist.extend(ability)
                     break
+        if self.utp_chara is not None:
+            conf["c"]["utp"] = self.utp_chara
+        if self.cp1_gauge is not None:
+            conf["c"]["cp"] = self.cp1_gauge
         conf["c"]["abilities"] = ablist
 
         if udrg := res.get("_UniqueDragonId"):
@@ -208,22 +209,6 @@ class AdvConf(CharaData, SkillProcessHelper):
             # dum
             self.set_animation_reference(res)
 
-        for act, actdata in self.alt_actions:
-            if not actdata:
-                continue
-            actconf = None
-            if act == "fs" and (marker := actdata.get("_BurstMarkerId")):
-                actconf = convert_fs(actdata, marker)["fs"]
-                if act in conf:
-                    act = f"{act}_abalt"
-            elif act == "dodge":
-                actconf = convert_dodge(actdata)
-                # hax for lv1 of the ability
-                self.action_ids[actdata["_Id"] - 1] = "dodge"
-            if actconf:
-                conf[act] = actconf
-                self.action_ids[actdata["_Id"]] = act
-
         base_mode_burst, base_mode_x = None, None
         for m in range(1, 5):
             if mode := res.get(f"_ModeId{m}"):
@@ -232,7 +217,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     if not mode:
                         continue
                 if gunkind := mode.get("_GunMode"):
-                    conf["c"]["gun"].append(gunkind)
+                    conf["c"]["gun"].add(gunkind)
                     if mode["_Id"] in BaseConf.GUN_MODES:
                         continue
                     # if not any([mode.get(f'_Skill{s}Id') for s in (1, 2)]):
@@ -288,7 +273,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                         if xalt["_MaxComboNum"] < 5:
                             conf["default"] = {"x_max": xalt["_MaxComboNum"]}
         try:
-            conf["c"]["gun"] = list(set(conf["c"]["gun"]))
+            conf["c"]["gun"] = list(conf["c"]["gun"])
         except KeyError:
             pass
 

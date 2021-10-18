@@ -1,4 +1,5 @@
 import json
+from pprint import pprint
 import re
 import os
 from collections import defaultdict
@@ -89,15 +90,6 @@ class ActionCondition(DBView):
             output = os.path.join(out_dir, out_name)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 json.dump(res_list, fp, indent=2, ensure_ascii=False, default=str)
-
-    def check_overwrite_groups(self):
-        all_res = self.get_all(where="_OverwriteGroupId != 0")
-        sorted_actconds = defaultdict(lambda: [])
-        for res in all_res:
-            sorted_actconds[res["_OverwriteGroupId"]].append({k: v for k, v in res.items() if not k.startswith("_Text") and k != "_Text"})
-        from pprint import pprint
-
-        pprint(dict(sorted_actconds))
 
 
 class ActionGrant(DBView):
@@ -799,12 +791,6 @@ class AbnormalStatusType(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = PlayerActionHitAttribute(index)
-    # view.check_overwrite_groups()
-    # view = SkillData(index)
-    # test = view.get(106505012)
-    # print(test)
-    res = view.get("S152_002_01_LV0[0-9]", mode=DBManager.GLOB)
-    from pprint import pprint
+    view = ActionParts(index)
 
-    pprint(res)
+    pprint(view.get(59141000001))
