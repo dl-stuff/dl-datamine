@@ -4,7 +4,7 @@ import json
 import sys
 import os
 from tqdm import tqdm
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 from loader.Actions import CommandType
 from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, snakey, check_target_path
@@ -865,10 +865,14 @@ class SkillProcessHelper:
             self.all_chara_skills[skill.get("_Id")] = (k, seq, skill, prev_id)
             del self.chara_skills[skill.get("_Id")]
 
-        for efs, eba, emk in self.enhanced_fs.values():
-            for fs, fsc in convert_fs(eba, emk).items():
-                conf[f"{fs}_{efs}"] = fsc
-                self.action_ids[eba["_Id"]] = f"{fs}_{efs}"
+        for efs, eba in self.enhanced_fs.values():
+            for fs, fsc in convert_fs(eba, eba.get("_BurstMarkerId")).items():
+                if efs is None:
+                    fsn = fs
+                else:
+                    fsn = f"{fs}_{efs}"
+                conf[fsn] = fsc
+                self.action_ids[eba["_Id"]] = "fs"
 
         self.convert_alt_actions(conf)
 
@@ -918,15 +922,20 @@ class AbilityConf(AbilityData):
         AbilityTargetAction.HUMAN_SKILL_3: "s3",
         AbilityTargetAction.HUMAN_SKILL_4: "s4",
     }
+    ABL_GROUPS = {}
 
     def __init__(self, index):
         super().__init__(index)
         self.meta = None
         self.source = None
+        self.use_ablim_groups = False
+        if not self.ABL_GROUPS:
+            self.ABL_GROUPS = {r["_Id"]: r for r in self.index["AbilityLimitedGroup"].get_all()}
 
-    def set_meta(self, meta):
+    def set_meta(self, meta, use_ablim_groups=False):
         self.meta = meta
         self.source = None
+        self.use_ablim_groups = use_ablim_groups or False
 
     def _varids(self, res, i):
         for a in ("a", "b", "c"):
@@ -1246,12 +1255,15 @@ class AbilityConf(AbilityData):
     def _at_upval(self, name, res, i, div=100):
         return [name, self._upval(res, i, div=div)]
 
+    def _at_mod(self, res, i, *modargs, div=100):
+        return ["mod", self._upval(res, i, div=div), *modargs]
+
     def _at_aff(self, name, res, i, div=100):
-        return [name, AFFLICTION_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i, div=div)]
+        return self._at_mod(res, i, f"{name}_{AFFLICTION_TYPES[self._varid_a(res, i)].lower()}", div=div)
 
     def at_StatusUp(self, res, i):
         try:
-            return ["stat", AbilityConf.STAT_TO_MOD[AbilityStat(self._varid_a(res, i))], self._upval(res, i)]
+            return self._at_mod(res, i, AbilityConf.STAT_TO_MOD[AbilityStat(self._varid_a(res, i))])
         except KeyError:
             return None
 
@@ -1262,22 +1274,24 @@ class AbilityConf(AbilityData):
         return self._at_aff("edge", res, i)
 
     def at_ActKillerTribe(self, res, i):
-        return ["killer", TRIBE_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i)]
+        # return ["killer", TRIBE_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i)]
+        return self._at_mod(res, i, f"killer_{TRIBE_TYPES[self._varid_a(res, i)].lower()}")
 
     def at_ActDamageUp(self, res, i):
+        # return self._at_mod(res, i, "actdmg")
         return self._at_upval("actdmg", res, i)
 
     def at_ActCriticalUp(self, res, i):
-        return self._at_upval("crit", res, i)
+        return self._at_mod(res, i, "crit")
 
     def at_ActRecoveryUp(self, res, i):
-        return self._at_upval("rcv", res, i)
+        return self._at_mod(res, i, "rcv")
 
     def at_ActBreakUp(self, res, i):
-        return self._at_upval("odaccel", res, i)
+        return self._at_mod(res, i, "odaccel")
 
     def at_AddRecoverySp(self, res, i):
-        return ["stat", "sp", self._upval(res, i)]
+        return self._at_mod(res, i, "sph")
 
     def at_ChangeState(self, res, i):
         buffs = []
@@ -1292,32 +1306,43 @@ class AbilityConf(AbilityData):
                 return ["actcond", hitattr["target"], hitattr["actcond"]]
             return ["hitattr", hitattr]
 
+    def at_DebuffGrantUp(self, res, i):
+        return self._at_mod(res, i, "debuffrate")
+
     def at_SpCharge(self, res, i):
         return self._at_upval("prep", res, i)
 
     def at_BuffExtension(self, res, i):
-        return self._at_upval("bufftime", res, i)
+        return self._at_mod(res, i, "bufftime")
 
     def at_DebuffExtension(self, res, i):
-        return self._at_upval("debufftime", res, i)
+        return self._at_mod(res, i, "debufftime")
 
     def at_AbnormalKiller(self, res, i):
-        return self._at_aff("punisher", res, i)
+        return self._at_aff("killer", res, i)
+
+    def at_ActionGrant(self, res, i):
+        action_grant = self.index["ActionGrant"].get(self._varid_a(res, i), full_query=False)
+        res[f"_TargetAction{i}"] = action_grant["_TargetAction"]
+        return ["actgrant", action_grant["_GrantCondition"]]
 
     def at_CriticalDamageUp(self, res, i):
-        return self._at_upval("critdmg", res, i)
+        return self._at_mod(res, i, "critdmg")
 
     def at_DpCharge(self, res, i):
         return self._at_upval("dprep", res, i)
 
     def at_ResistElement(self, res, i):
-        return ["eleres", ELEMENTS[self._varid_a(res, i)].lower(), self._upval(res, i)]
+        return self._at_mod(res, i, "eleres", ELEMENTS[self._varid_a(res, i)].lower())
 
     def at_DragonDamageUp(self, res, i):
-        return ["stat", "da", self._upval(res, i)]
+        return self._at_mod(res, i, "da")
 
     def at_HitAttribute(self, res, i):
         return self.at_ChangeState(res, i)
+
+    def at_PassiveGrant(self, res, i):
+        return self.at_ActionGrant(res, i)
 
     def at_HitAttributeShift(self, res, i):
         if self.meta is not None:
@@ -1339,21 +1364,21 @@ class AbilityConf(AbilityData):
         burst_id = self._varid_a(res, i)
         if self.meta is not None:
             burst = self.index["PlayerAction"].get(burst_id)
-            self.meta.alt_actions.append(("fs", burst))
+            self.meta.enhanced_fs[None] = burst
         return None
 
     def at_AbnoramlExtension(self, res, i):
-        return self._at_aff("afftime", res, i)
+        return self._at_aff(res, i, "afftime")
 
     def at_DragonTimeSpeedRate(self, res, i):
         value = 100 / (100 + self._upval(res, i))
-        return ["stat", "dt", value]
+        return ["mod", value, "dt"]
 
     def at_DpChargeMyParty(self, res, i):
         return self._at_upval("dprep", res, i)
 
     def at_CriticalUpDependsOnBuffTypeCount(self, res, i):
-        return self._at_upval("crit", res, i)
+        return self._at_mod(res, i, "crit")
 
     def at_ChainTimeExtension(self, res, i):
         return self._at_upval("ctime", res, i, div=1)
@@ -1364,7 +1389,7 @@ class AbilityConf(AbilityData):
         return None
 
     def at_EnhancedElementDamage(self, res, i):
-        return ["eledmg", ELEMENTS.get(self._varid_a(res, i)).lower(), self._upval(res, i)]
+        return self._at_mod(res, i, "eledmg", ELEMENTS[self._varid_a(res, i)].lower())
 
     def at_UtpCharge(self, res, i):
         return self._at_upval("utprep", res, i)
@@ -1387,7 +1412,7 @@ class AbilityConf(AbilityData):
         return ["acduration", self._varid_a(res, i), self._upval(res, i)]
 
     def at_CpCoef(self, res, i):
-        return ["stat", "cph", self._upval(res, i)]
+        return self._at_mod(res, i, "cph")
 
     def at_UniqueAvoid(self, res, i):
         # can this take a cond? unclear
@@ -1438,7 +1463,7 @@ class AbilityConf(AbilityData):
         return self._at_upval("crisis", res, i)
 
     def at_ActDamageDown(self, res, i):
-        return self._at_upval("actdmgdown", res, i)
+        return self._at_mod(res, i, "actdmgdown")
 
     def at_RunOptionActionRemoteToo(self, res, i):
         return self.at_RunOptionAction(res, i)
@@ -1493,6 +1518,12 @@ class AbilityConf(AbilityData):
                         target = AbilityTargetAction(res.get(f"_TargetAction{i}", 0))
                         if target != AbilityTargetAction.NONE:
                             ab.append(f"-t:{AbilityConf.TARGET_ACT[target]}")
+                        if self.use_ablim_groups and (lim_group := self.ABL_GROUPS.get(res[f"_AbilityLimitedGroupId{i}"])):
+                            idx = lim_group.get("_Id")
+                            # mix = lim_group.get("_IsEffectMix", 0)
+                            # mlim = int(lim_group.get("_MaxLimitedValue", 0))
+                            if id:
+                                ab.append(f"-lg:{idx}")
                         ablist.append(ab)
                 except (AttributeError, ValueError):
                     pass
@@ -1506,6 +1537,8 @@ class AbilityConf(AbilityData):
 
 
 class ActCondConf(ActionCondition):
+    EXCLUDE_FALSY = False
+
     def __init__(self, index):
         super().__init__(index)
         self.meta = None
@@ -1514,208 +1547,298 @@ class ActCondConf(ActionCondition):
     def set_meta(self, meta):
         self.meta = meta
 
+    def _process_metadata(self, conf, res):
+        # no clue: _ResistBuffReset/_ResistDebuffReset/_UnifiedManagement/_DebuffCategory/_RemoveDebuffCategory
+        # visuals, prob: _UsePowerUpEffect/_NotUseStartEffect/_StartEffectCommon/_StartEffectAdd/_DurationNumConsumedHeadText
+        # _KeepOnDragonShift: assume this is default
+        # _RestoreOnReborn: no revive in sim
+        if res["_Text"]:
+            conf["text"] = res["_Text"]
+        flag = res["_InternalFlag"]
+        if not (flag & 1):  # NoIcon = 1
+            # TODO: get generic icons
+            conf["icon"] = res["_BuffIconId"]
+        if flag >> 1 & 1:  # NoCount = 2
+            conf["hide"] = 1
+        if res["_OverwriteGroupId"]:
+            conf["ow"] = res["_OverwriteGroupId"]
+        elif res["_OverwriteIdenticalOwner"] or res["_Overwrite"]:
+            conf["ow"] = -1
+        if res["_MaxDuplicatedCount"]:
+            if not "ow" in conf or res["_MaxDuplicatedCount"] > 1:
+                conf["maxstack"] = res["_MaxDuplicatedCount"]
+        elif res["_StackData"] == 5:  # StackBuffData
+            conf["maxstack"] = 4
+        if 0 < res["_Rate"] < 100:
+            conf["_Rate"] = res["_Rate"] / 100
+        if res["_LostOnDragon"]:
+            conf["lost_on_drg"] = res["_LostOnDragon"]
+        if res["_CurseOfEmptinessInvalid"]:
+            conf["coei"] = res["_CurseOfEmptinessInvalid"]
+
+    RATE_TO_MOD = {
+        "_RateHP": ("hp", "buff"),
+        "_RateAttack": ("att", "buff"),
+        "_RateDefense": ("def", "buff"),
+        "_RateDefenseB": ("defb", "buff"),
+        "_RateCritical": ("crit", "buff"),
+        "_RateSkill": ("s", "buff"),
+        "_RateBurst": ("fs", "buff"),
+        "_RateRecovery": ("rcv", "buff"),
+        "_RateRecoveryDp": ("dph", "buff"),
+        "_RateRecoveryUtp": ("utph", "buff"),
+        "_RateAttackSpeed": ("aspd", "buff"),
+        "_RateChargeSpeed": ("cspd", "buff"),
+        "_RateBurstSpeed": ("fspd", "buff"),
+        "_MoveSpeedRate": ("mspd", "buff"),  # imba
+        "_MoveSpeedRateB": ("mspdb", "buff"),  # very imba
+        "_RateFire": ("resist_flame", "buff"),
+        "_RateWater": ("resist_water", "buff"),
+        "_RateWind": ("resist_wind", "buff"),
+        "_RateLight": ("resist_light", "buff"),
+        "_RateDark": ("resist_shadow", "buff"),
+        "_EnhancedFire2": ("dmg_flame", "buff"),
+        "_EnhancedWater2": ("dmg_water", "buff"),
+        "_EnhancedWind2": ("dmg_wind", "buff"),
+        "_EnhancedLight2": ("dmg_light", "buff"),
+        "_EnhancedDark2": ("dmg_shadow", "buff"),
+        "_EnhancedNoElement": ("dmg_nullele", "buff"),
+        "_EnhancedDisadvantagedElement": ("dmg_weakele", "buff"),
+        # skipping the _Rate<tribe> stuff since no one uses it
+        "_RateDamageCut": ("resist", "buff"),
+        "_RateDamageCut2": ("resist", "buff2"),
+        "_RateDamageCutB": ("resist", "buffB"),
+        "_RateGetHpRecovery": ("getrcv", "buff"),
+        "_RateArmored": ("kbres", "buff"),
+        "_EnhancedCritical": ("critdmg", "buff"),
+    }
+    RATE_TO_AFFKEY = {
+        "_RatePoison": "poison",
+        "_RateBurn": "burn",
+        "_RateFreeze": "freeze",
+        "_RateParalysis": "paralysis",
+        "_RateDarkness": "blind",
+        "_RateSwoon": "stun",
+        "_RateCurse": "curse",
+        "_RateSlowMove": "slowmove",
+        "_RateSleep": "sleep",
+        "_RateFrostbite": "frostbite",
+        "_RateFlashheat": "flashburn",
+        "_RateCrashWind": "stormlash",
+        "_RateDarkAbs": "shadowblight",
+        "_RateDestroyFire": "scorchrend",
+    }
+
+    def _process_values(self, conf, res):
+        # _RemoveAciton: maybe this disables ur fs?
+        # unused: _TargetAction/_ConditionAbs/_Enhanced<ele>
+        mods = []
+        try:
+            aff = AFFLICTION_TYPES[res["_Type"]].lower()
+        except KeyError:
+            aff = None
+        if res["_EfficacyType"] == 100:
+            conf["dispel"] = 1
+        elif res["_EfficacyType"] == 1:
+            conf["relief"] = aff
+        else:
+            conf["aff"] = aff
+        if res["_RemoveConditionId"]:
+            conf["remove"] = res["_RemoveConditionId"]
+        if duration := res["_DurationSec"]:
+            if res["_MinDurationSec"]:
+                duration = fr((duration + res["_MinDurationSec"]) / 2)
+            res["duration"] = duration
+            if res["_DurationTimeScale"]:
+                res["duration_scale"] = res["_DurationTimeScale"]
+        elif res["_DurationNum"]:
+            res["count"] = res["_DurationNum"]
+            if res["_MaxDurationNum"]:
+                res["maxcount"] = res["_MaxDurationNum"]
+                res["addcount"] = res["_IsAddDurationNum"]
+        if res["_CoolDownTimeSec"]:
+            res["cd"] = res["_CoolDownTimeSec"]
+        # general slip damage stuff
+        # will leave these values at negative
+        slip = {}
+        if res["_SlipDamageFixed"]:
+            slip["true"] = res["_SlipDamageFixed"]
+        if res["_SlipDamageRatio"]:
+            slip["percent"] = res["_SlipDamageRatio"]
+        # _SlipDamageMax: not used
+        if res["_SlipDamagePower"]:
+            slip["dmg"] = res["_SlipDamagePower"]
+        if res["_RegenePower"]:
+            slip["heal"] = res["_RegenePower"]
+        if res["_SlipDamageIntervalSec"]:
+            slip["iv"] = res["_SlipDamageIntervalSec"]
+        if slip:
+            if res["_ValidSlipHp"]:
+                if res["_SlipDamageGroup"] == 0:
+                    # bleed
+                    slip["kind"] = "bleed"
+                else:
+                    # corrosion
+                    slip["can_die"] = 1
+                    slip["add"] = res["_RateIncreaseByTime"]
+                    slip["addiv"] = res["_RateIncreaseDuration"]
+                    slip["heal"] = res["_RequiredRecoverHp"]
+                    slip["kind"] = "corrosion"
+            elif res["_ValidRegeneHP"]:
+                slip["kind"] = "hp"
+            elif res["_ValidRegeneSP"]:
+                slip["kind"] = "sp"
+            elif res["_AutoRegeneS1"]:
+                slip["kind"] = "sp"
+                slip["target"] = "s1"
+            elif res["_UniqueRegeneSp01"]:
+                slip["kind"] = "sp"
+                slip["target"] = "s2"
+            elif res["_AutoRegeneSW"]:
+                slip["kind"] = "sp"
+                slip["target"] = "s3"
+            elif res["_ValidRegeneDP"]:
+                slip["kind"] = "dp"
+            for k, v in slip:
+                if isinstance(v, float):
+                    slip[k] = fr(v)
+            conf["slip"] = slip
+
+        if res["_DebuffGrantRate"]:
+            conf["debuffrate"] = res["_DebuffGrantRate"]
+        if res["_EventProbability"] and aff == "blind":
+            conf[aff] = res["_EventProbability"] / 100
+        if res["_DamageCoefficient"] and aff == "bog":
+            # there is also _EventCoefficient presumably for movement speed
+            conf[aff] = res["_DamageCoefficient"]
+        if res["_TargetElemental"]:
+            conf["ele"] = ele_bitmap(res["_TargetElemental"])
+        if res["_ConditionDebuff"] == 16:
+            conf["ifbleed"] = 1
+        # generic buffs start
+        for key, modargs in ActCondConf.RATE_TO_MOD.items():
+            if res[key]:
+                mods.append((res[key], *modargs))
+
+        if res["_RateRecoverySp"]:
+            if n := res["_RateRecoverySpExceptTargetSkill"]:
+                for i in range(0, 4):
+                    if not (n >> i):
+                        mods.append(f"sph_s{i+1}", res["_RateRecoverySp"])
+            else:
+                mods.append("sph", res["_RateRecoverySp"])
+
+        for key, aff in ActCondConf.RATE_TO_AFFKEY.items():
+            if res[key]:
+                mods.append((res[key], f"resist_{aff}", "passive"))
+            if killer := res[f"{key}Killer"]:
+                mods.append((killer, f"killer_{aff}", "passive"))
+            if edge := res[f"{key}Add"]:
+                mods.append((edge, f"edge_{aff}", "passive"))
+
+        if res["_HealInvalid"]:
+            mods.append((-1, "getrcv", "buff"))
+
+        for k, v in mods:
+            if isinstance(v, float):
+                slip[k] = fr(v)
+        conf["mods"] = mods
+
+        if res["_TensionUpInvalid"]:
+            conf["no_energy"] = res["_TensionUpInvalid"]
+
+        shield = []
+        if res["_RateDamageShield"]:
+            shield.append(res["_RateDamageShield"])
+        if res["_RateDamageShield2"]:
+            shield.append(res["_RateDamageShield2"])
+        if res["_RateDamageShield3"]:
+            shield.append(res["_RateDamageShield3"])
+        if shield:
+            conf["shield"] = shield
+
+        if res["_RateSacrificeShield"]:
+            # dunno what _SacrificeShieldType imply
+            conf["lifeshield"] = res["_RateSacrificeShield"]
+
+        if res["_CurseOfEmptinessInvalid"]:
+            conf["coei"] = res["_CurseOfEmptinessInvalid"]
+
+        if res["_TransSkill"]:
+            conf["phaseup"] = int(res["_TransSkill"])
+
+        if res["_GrantSkill"]:
+            action_grant = self.index["ActionGrant"].get(self._varid_a(res, i), full_query=False)
+            target = AbilityTargetAction(action_grant["_TargetAction"])
+            conf["actgrant"] = [action_grant["_GrantCondition"], f"-t:{AbilityConf.TARGET_ACT[target]}"]
+
+        if res["_AutoAvoid"]:
+            conf["avoid"] = res["_AutoAvoid"]
+
+        alt = {}
+        if res["_Text"]:
+            ekey = snakey(res["_Text"], with_ext=False).replace("_", "")
+        else:
+            ekey = f"b{res['_Id']}"
+        if res["_EnhancedBurstAttack"]:
+            if self.meta is not None:
+                self.meta.enhanced_fs[ekey] = self.index["PlayerAction"].get(res["_EnhancedBurstAttack"])
+            alt["fs"] = ekey
+        if res["_EnhancedSkill1"]:
+            if self.meta is not None:
+                esid = res["_EnhancedSkill1"]
+                if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
+                    self.meta.chara_skills[esid] = ("s1", 1, self.index["PlayerAction"].get(res["_EnhancedSkill1"]), esid)
+            alt["s1"] = ekey
+        if res["_EnhancedSkill2"]:
+            if self.meta is not None:
+                esid = res["_EnhancedSkill2"]
+                if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
+                    self.meta.chara_skills[esid] = ("s2", 2, self.index["PlayerAction"].get(res["_EnhancedSkill2"]), esid)
+            alt["s2"] = ekey
+        if res["_EnhancedSkillWeapon"]:
+            if self.meta is not None:
+                esid = res["_EnhancedSkillWeapon"]
+                if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
+                    self.meta.chara_skills[esid] = ("s3", 3, self.index["PlayerAction"].get(res["_EnhancedSkillWeapon"]), esid)
+            alt["s3"] = ekey
+        if alt:
+            conf["alt"] = alt
+
+        if res["_Tension"]:
+            conf["energy"] = res["_Tension"]
+        if res["_Inspiration"]:
+            conf["inspiration"] = res["_Inspiration"]
+
+        if res["_RateHpDrain"]:
+            conf["drain"] = res["_RateHpDrain"]
+
+        if res["_HpConsumptionRate"]:
+            conf["selfdamage"] = res["_HpConsumptionRate"]
+
+        if res["_AdditionAttack"]:
+            addattack = self.index["PlayerActionHitAttribute"].get(res["_AdditionAttack"], full_query=False)
+            conf["echo"] = addattack["_DamageAdjustment"]
+
+        if res["_LevelUpId"]:
+            conf["-lv"] = res["_LevelUpId"]
+
+        if res["_LevelDownId"]:
+            conf["+lv"] = res["_LevelDownId"]
+
+        return conf
+
     def process_result(self, res):
-        # _Id INTEGER PRIMARY KEY
         actcond_id = res["_Id"]
         conf = {}
-        # _Type INTEGER
-        try:
-            conf["aff"] = AFFLICTION_TYPES.get(res["_Type"], res["_Type"]).lower()
-        except KeyError:
-            pass
+        self.all_actcond_conf[actcond_id] = conf
+        self._process_values(conf, res)
+        self._process_metadata(conf, res)
+        for k, v in conf:
+            if isinstance(v, float):
+                conf[k] = fr(v)
+        return conf
 
-        # _Text TEXT
-        # _TextEx TEXT
-        # _BlockExaustFlag INTEGER
-        # _InternalFlag INTEGER
-        # _UniqueIcon INTEGER
-        # _BuffIconId INTEGER
-        # _ResistBuffReset INTEGER
-        # _ResistDebuffReset INTEGER
-        # _UnifiedManagement INTEGER
-        # _Overwrite INTEGER
-        # _OverwriteIdenticalOwner INTEGER
-        # _OverwriteGroupId INTEGER
-        # _MaxDuplicatedCount INTEGER
-        # _UsePowerUpEffect INTEGER
-        # _NotUseStartEffect INTEGER
-        # _StartEffectCommon TEXT
-        # _StartEffectAdd TEXT
-        # _LostOnDragon INTEGER
-        # _KeepOnDragonShift INTEGER
-        # _RestoreOnReborn INTEGER
-        # _Rate INTEGER
-        # _EfficacyType INTEGER
-        # _RemoveConditionId INTEGER
-        # _DebuffCategory INTEGER
-        # _RemoveDebuffCategory INTEGER
-        # _DurationSec REAL
-        # _DurationNum INTEGER
-        # _MinDurationSec REAL
-        # _DurationTimeScale INTEGER
-        # _IsAddDurationNum INTEGER
-        # _MaxDurationNum INTEGER
-        # _CoolDownTimeSec REAL
-        # _RemoveAciton INTEGER
-        # _DurationNumConsumedHeadText TEXT
-        # _SlipDamageIntervalSec REAL
-        # _SlipDamageFixed INTEGER
-        # _SlipDamageRatio REAL
-        # _SlipDamageMax INTEGER
-        # _SlipDamagePower REAL
-        # _SlipDamageGroup INTEGER
-        # _RateIncreaseByTime REAL
-        # _RateIncreaseDuration REAL
-        # _RegenePower REAL
-        # _DebuffGrantRate REAL
-        # _EventProbability INTEGER
-        # _EventCoefficient REAL
-        # _DamageCoefficient REAL
-        # _TargetAction INTEGER
-        # _TargetElemental INTEGER
-        # _ConditionAbs INTEGER
-        # _ConditionDebuff INTEGER
-        # _RateHP REAL
-        # _RateAttack REAL
-        # _RateDefense REAL
-        # _RateDefenseB REAL
-        # _RateCritical REAL
-        # _RateSkill REAL
-        # _RateBurst REAL
-        # _RateRecovery REAL
-        # _RateRecoverySp REAL
-        # _RateRecoverySpExceptTargetSkill INTEGER
-        # _RateRecoveryDp REAL
-        # _RateRecoveryUtp REAL
-        # _RateAttackSpeed REAL
-        # _RateChargeSpeed REAL
-        # _RateBurstSpeed REAL
-        # _MoveSpeedRate REAL
-        # _MoveSpeedRateB REAL
-        # _RatePoison REAL
-        # _RateBurn REAL
-        # _RateFreeze REAL
-        # _RateParalysis REAL
-        # _RateDarkness REAL
-        # _RateSwoon REAL
-        # _RateCurse REAL
-        # _RateSlowMove REAL
-        # _RateSleep REAL
-        # _RateFrostbite REAL
-        # _RateFlashheat REAL
-        # _RateCrashWind REAL
-        # _RateDarkAbs REAL
-        # _RateDestroyFire REAL
-        # _RatePoisonKiller REAL
-        # _RateBurnKiller REAL
-        # _RateFreezeKiller REAL
-        # _RateParalysisKiller REAL
-        # _RateDarknessKiller REAL
-        # _RateSwoonKiller REAL
-        # _RateCurseKiller REAL
-        # _RateSlowMoveKiller REAL
-        # _RateSleepKiller REAL
-        # _RateFrostbiteKiller REAL
-        # _RateFlashheatKiller REAL
-        # _RateCrashWindKiller REAL
-        # _RateDarkAbsKiller REAL
-        # _RateDestroyFireKiller REAL
-        # _RatePoisonAdd REAL
-        # _RateBurnAdd REAL
-        # _RateFreezeAdd REAL
-        # _RateParalysisAdd REAL
-        # _RateDarknessAdd REAL
-        # _RateSwoonAdd REAL
-        # _RateCurseAdd REAL
-        # _RateSlowMoveAdd REAL
-        # _RateSleepAdd REAL
-        # _RateFrostbiteAdd REAL
-        # _RateFlashheatAdd REAL
-        # _RateCrashWindAdd REAL
-        # _RateDarkAbsAdd REAL
-        # _RateDestroyFireAdd REAL
-        # _RateFire REAL
-        # _RateWater REAL
-        # _RateWind REAL
-        # _RateLight REAL
-        # _RateDark REAL
-        # _EnhancedFire REAL
-        # _EnhancedWater REAL
-        # _EnhancedWind REAL
-        # _EnhancedLight REAL
-        # _EnhancedDark REAL
-        # _EnhancedFire2 REAL
-        # _EnhancedWater2 REAL
-        # _EnhancedWind2 REAL
-        # _EnhancedLight2 REAL
-        # _EnhancedDark2 REAL
-        # _EnhancedNoElement REAL
-        # _EnhancedDisadvantagedElement REAL
-        # _RateMagicCreature REAL
-        # _RateNatural REAL
-        # _RateDemiHuman REAL
-        # _RateBeast REAL
-        # _RateUndead REAL
-        # _RateDeamon REAL
-        # _RateHuman REAL
-        # _RateDragon REAL
-        # _RateDamageCut REAL
-        # _RateDamageCut2 REAL
-        # _RateDamageCutB REAL
-        # _RateWeakInvalid REAL
-        # _HealInvalid INTEGER
-        # _TensionUpInvalid INTEGER
-        # _ValidRegeneHP REAL
-        # _ValidRegeneSP REAL
-        # _ValidRegeneDP REAL
-        # _ValidSlipHp REAL
-        # _RequiredRecoverHp INTEGER
-        # _RateGetHpRecovery REAL
-        # _UniqueRegeneSp01 REAL
-        # _AutoRegeneS1 REAL
-        # _AutoRegeneSW REAL
-        # _RateReraise REAL
-        # _RateArmored REAL
-        # _RateDamageShield REAL
-        # _RateDamageShield2 REAL
-        # _RateDamageShield3 REAL
-        # _RateSacrificeShield REAL
-        # _SacrificeShieldType INTEGER
-        # _Malaise01 INTEGER
-        # _Malaise02 INTEGER
-        # _Malaise03 INTEGER
-        # _RateNicked REAL
-        # _CurseOfEmptiness INTEGER
-        # _CurseOfEmptinessInvalid INTEGER
-        # _TransSkill REAL
-        # _GrantSkill INTEGER
-        # _DisableAction INTEGER
-        # _DisableActionFlags INTEGER
-        # _DisableMove INTEGER
-        # _InvincibleLv INTEGER
-        # _AutoAvoid REAL
-        # _ComboShift INTEGER
-        # _EnhancedBurstAttack INTEGER
-        # _EnhancedSkill1 INTEGER
-        # _EnhancedSkill2 INTEGER
-        # _EnhancedSkillWeapon INTEGER
-        # _EnhancedCritical REAL
-        # _Tension INTEGER
-        # _Inspiration INTEGER
-        # _Cartridge INTEGER
-        # _ModeStack INTEGER
-        # _StackData INTEGER
-        # _StackNum INTEGER
-        # _Sparking INTEGER
-        # _RateHpDrain REAL
-        # _HpDrainLimitRate REAL
-        # _SelfDamageRate REAL
-        # _HpConsumptionRate REAL
-        # _HpConsumptionCoef REAL
-        # _RemoveTrigger INTEGER
-        # _DamageLink TEXT
-        # _AdditionAttack TEXT
-        # _AdditionAttackHitEffect TEXT
         # _ExtraBuffType INTEGER
         # _EnhancedSky INTEGER
         # _InvalidBuffId INTEGER

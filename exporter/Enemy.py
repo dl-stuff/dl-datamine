@@ -128,10 +128,7 @@ class EnemyActionHitAttribute(DBView):
     def process_result(self, res):
         res_list = [res] if isinstance(res, dict) else res
         for r in res_list:
-            if "_ActionCondition" in r and r["_ActionCondition"]:
-                act_cond = self.index["ActionCondition"].get(r["_ActionCondition"])
-                if act_cond:
-                    r["_ActionCondition"] = act_cond
+            self.link(r, "_ActionCondition", "ActionCondition")
         return res
 
 
@@ -164,6 +161,7 @@ class EnemyAction(DBView):
     def process_result(self, res):
         if "_ActionGroupName" in res and res["_ActionGroupName"] and (hitdiff := self.index["EnemyHitDifficulty"].get(res["_ActionGroupName"])):
             res["_ActionGroupName"] = hitdiff
+        # TODO: actually process the parts n shit maybe
         return res
 
 

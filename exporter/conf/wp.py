@@ -15,6 +15,7 @@ class WpConf(AbilityCrest):
         self.boon_names = {res["_Id"]: res["_Name"] for res in self.index["UnionAbility"].get_all()}
 
     def process_result(self, res):
+        self.index["AbilityConf"].set_meta(None, use_ablim_groups=True)
         ablist = []
         for i in (1, 2, 3):
             ab = res.get(f"_Abilities{i}3")
@@ -38,6 +39,8 @@ class WpConf(AbilityCrest):
             "union": boon,
             "abilities": ablist,
         }
+
+        self.index["AbilityConf"].set_meta(None, use_ablim_groups=False)
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
