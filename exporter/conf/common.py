@@ -1570,6 +1570,8 @@ class ActCondConf(ActionCondition):
             conf["icon"] = -1
         elif res["_BuffIconId"]:
             conf["icon"] = res["_BuffIconId"]
+        if res["_Text"]:
+            conf["_Text"]
         if flag >> 1 & 1:  # NoCount = 2
             conf["hide"] = 1
         if res["_OverwriteGroupId"]:
