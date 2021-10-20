@@ -46,6 +46,7 @@ class WpConf(AbilityCrest):
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         all_res = self.get_all()
         check_target_path(out_dir)
+        self.index["ActionCondition"].set_kind("wyrmprints")
         outdata = {}
         skipped = []
         collisions = defaultdict(list)
@@ -77,6 +78,7 @@ class WpConf(AbilityCrest):
             fmt_conf(outdata, f=fp)
             fp.write("\n")
         # print('Skipped:', skipped)
+        self.index["ActionCondition"].export_all_to_folder(out_dir)
 
     def get(self, name):
         res = super().get(name, full_query=False)

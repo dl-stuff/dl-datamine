@@ -104,11 +104,12 @@ def ele_bitmap(n):
 
 def confsort(a):
     k, _ = a
-    if k[0] == "x":
-        try:
-            return "x" + k.split("_")[1]
-        except IndexError:
-            return k
+    if isinstance(k, str):
+        if k[0] == "x":
+            try:
+                return "x" + k.split("_")[1]
+            except IndexError:
+                return k
     return k
 
 
@@ -244,8 +245,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr["fade"] = fr(attenuation)
 
     # attr_tag = None
-    if (actcond := hitattr.get("_ActionCondition1")) and actcond["_Id"] not in once_per_action:
-        once_per_action.add(actcond["_Id"])
+    if (actcond := hitattr.get("_ActionCondition1")) and actcond["id"] not in once_per_action:
+        once_per_action.add(actcond["id"])
         # attr_tag = actcond['_Id']
         # if (remove := actcond.get('_RemoveConditionId')):
         #     attr['del'] = remove
@@ -258,7 +259,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                 meta=meta,
                 skill=skill,
             )
-        attr["actcond"] = actcond["_Id"]
+        attr["actcond"] = actcond["id"]
 
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
@@ -1299,6 +1300,9 @@ class AbilityConf(AbilityData):
             if bid:
                 buffs.append(bid)
         if buffs:
+            for bid in buffs:
+                # how silly
+                self.index["ActionCondition"].get(bid)
             return ["actcond", ActionTargetGroup.MYSELF.name, *buffs]
         else:
             hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART, {}, set())
@@ -1364,7 +1368,7 @@ class AbilityConf(AbilityData):
         burst_id = self._varid_a(res, i)
         if self.meta is not None:
             burst = self.index["PlayerAction"].get(burst_id)
-            self.meta.enhanced_fs[None] = burst
+            self.meta.enhanced_fs[burst_id] = (None, burst)
         return None
 
     def at_AbnoramlExtension(self, res, i):
@@ -1542,21 +1546,29 @@ class ActCondConf(ActionCondition):
     def __init__(self, index):
         super().__init__(index)
         self.meta = None
+        self.kind = None
         self.all_actcond_conf = {}
 
     def set_meta(self, meta):
         self.meta = meta
+
+    def set_kind(self, kind):
+        self.meta = None
+        self.kind = kind
+        self.all_actcond_conf = {}
 
     def _process_metadata(self, conf, res):
         # no clue: _ResistBuffReset/_ResistDebuffReset/_UnifiedManagement/_DebuffCategory/_RemoveDebuffCategory
         # visuals, prob: _UsePowerUpEffect/_NotUseStartEffect/_StartEffectCommon/_StartEffectAdd/_DurationNumConsumedHeadText
         # _KeepOnDragonShift: assume this is default
         # _RestoreOnReborn: no revive in sim
-        if res["_Text"]:
-            conf["text"] = res["_Text"]
+        # if res["_Text"]:
+        #     conf["text"] = res["_Text"]
         flag = res["_InternalFlag"]
-        if not (flag & 1):  # NoIcon = 1
+        if flag & 1:  # NoIcon = 1
             # TODO: get generic icons
+            conf["icon"] = -1
+        elif res["_BuffIconId"]:
             conf["icon"] = res["_BuffIconId"]
         if flag >> 1 & 1:  # NoCount = 2
             conf["hide"] = 1
@@ -1570,7 +1582,7 @@ class ActCondConf(ActionCondition):
         elif res["_StackData"] == 5:  # StackBuffData
             conf["maxstack"] = 4
         if 0 < res["_Rate"] < 100:
-            conf["_Rate"] = res["_Rate"] / 100
+            conf["rate"] = res["_Rate"] / 100
         if res["_LostOnDragon"]:
             conf["lost_on_drg"] = res["_LostOnDragon"]
         if res["_CurseOfEmptinessInvalid"]:
@@ -1637,27 +1649,33 @@ class ActCondConf(ActionCondition):
             aff = AFFLICTION_TYPES[res["_Type"]].lower()
         except KeyError:
             aff = None
-        if res["_EfficacyType"] == 100:
-            conf["dispel"] = 1
-        elif res["_EfficacyType"] == 1:
-            conf["relief"] = aff
-        else:
-            conf["aff"] = aff
         if res["_RemoveConditionId"]:
             conf["remove"] = res["_RemoveConditionId"]
+        if res["_EfficacyType"] == 100:
+            conf["dispel"] = 1
+        elif res["_EfficacyType"] == 97:
+            conf["remove"] = "buff"
+        elif res["_EfficacyType"] == 98:
+            conf["remove"] = "debuff"
+        elif res["_EfficacyType"] == 99:
+            conf["remove"] = "actcond"
+        elif res["_EfficacyType"] == 1:
+            conf["relief"] = aff
+        elif aff:
+            conf["aff"] = aff
         if duration := res["_DurationSec"]:
             if res["_MinDurationSec"]:
                 duration = fr((duration + res["_MinDurationSec"]) / 2)
-            res["duration"] = duration
+            conf["duration"] = duration
             if res["_DurationTimeScale"]:
-                res["duration_scale"] = res["_DurationTimeScale"]
+                conf["duration_scale"] = res["_DurationTimeScale"]
         elif res["_DurationNum"]:
-            res["count"] = res["_DurationNum"]
+            conf["count"] = res["_DurationNum"]
             if res["_MaxDurationNum"]:
-                res["maxcount"] = res["_MaxDurationNum"]
-                res["addcount"] = res["_IsAddDurationNum"]
+                conf["maxcount"] = res["_MaxDurationNum"]
+                conf["addcount"] = res["_IsAddDurationNum"]
         if res["_CoolDownTimeSec"]:
-            res["cd"] = res["_CoolDownTimeSec"]
+            conf["cd"] = res["_CoolDownTimeSec"]
         # general slip damage stuff
         # will leave these values at negative
         slip = {}
@@ -1699,7 +1717,7 @@ class ActCondConf(ActionCondition):
                 slip["target"] = "s3"
             elif res["_ValidRegeneDP"]:
                 slip["kind"] = "dp"
-            for k, v in slip:
+            for k, v in slip.items():
                 if isinstance(v, float):
                     slip[k] = fr(v)
             conf["slip"] = slip
@@ -1718,42 +1736,40 @@ class ActCondConf(ActionCondition):
         # generic buffs start
         for key, modargs in ActCondConf.RATE_TO_MOD.items():
             if res[key]:
-                mods.append((res[key], *modargs))
+                mods.append((fr(res[key]), *modargs))
 
         if res["_RateRecoverySp"]:
             if n := res["_RateRecoverySpExceptTargetSkill"]:
                 for i in range(0, 4):
                     if not (n >> i):
-                        mods.append(f"sph_s{i+1}", res["_RateRecoverySp"])
+                        mods.append((fr(res["_RateRecoverySp"]), f"sph_s{i+1}"))
             else:
-                mods.append("sph", res["_RateRecoverySp"])
+                mods.append((fr(res["_RateRecoverySp"]), "sph"))
 
         for key, aff in ActCondConf.RATE_TO_AFFKEY.items():
             if res[key]:
-                mods.append((res[key], f"resist_{aff}", "passive"))
+                mods.append((fr(res[key]), f"resist_{aff}", "passive"))
             if killer := res[f"{key}Killer"]:
-                mods.append((killer, f"killer_{aff}", "passive"))
+                mods.append((fr(killer), f"killer_{aff}", "passive"))
             if edge := res[f"{key}Add"]:
-                mods.append((edge, f"edge_{aff}", "passive"))
+                mods.append((fr(edge), f"edge_{aff}", "passive"))
 
         if res["_HealInvalid"]:
             mods.append((-1, "getrcv", "buff"))
 
-        for k, v in mods:
-            if isinstance(v, float):
-                slip[k] = fr(v)
-        conf["mods"] = mods
+        if mods:
+            conf["mods"] = mods
 
         if res["_TensionUpInvalid"]:
             conf["no_energy"] = res["_TensionUpInvalid"]
 
-        shield = []
+        shield = {}
         if res["_RateDamageShield"]:
-            shield.append(res["_RateDamageShield"])
+            shield[1] = fr(res["_RateDamageShield"])
         if res["_RateDamageShield2"]:
-            shield.append(res["_RateDamageShield2"])
+            shield[2] = fr(res["_RateDamageShield2"])
         if res["_RateDamageShield3"]:
-            shield.append(res["_RateDamageShield3"])
+            shield[3] = fr(res["_RateDamageShield3"])
         if shield:
             conf["shield"] = shield
 
@@ -1768,7 +1784,7 @@ class ActCondConf(ActionCondition):
             conf["phaseup"] = int(res["_TransSkill"])
 
         if res["_GrantSkill"]:
-            action_grant = self.index["ActionGrant"].get(self._varid_a(res, i), full_query=False)
+            action_grant = self.index["ActionGrant"].get(res["_GrantSkill"], full_query=False)
             target = AbilityTargetAction(action_grant["_TargetAction"])
             conf["actgrant"] = [action_grant["_GrantCondition"], f"-t:{AbilityConf.TARGET_ACT[target]}"]
 
@@ -1777,31 +1793,29 @@ class ActCondConf(ActionCondition):
 
         alt = {}
         if res["_Text"]:
-            ekey = snakey(res["_Text"], with_ext=False).replace("_", "")
+            ekey = snakey(res["_Text"], with_ext=False).replace("_", "").lower()
         else:
             ekey = f"b{res['_Id']}"
         if res["_EnhancedBurstAttack"]:
-            if self.meta is not None:
-                self.meta.enhanced_fs[ekey] = self.index["PlayerAction"].get(res["_EnhancedBurstAttack"])
             alt["fs"] = ekey
-        if res["_EnhancedSkill1"]:
             if self.meta is not None:
-                esid = res["_EnhancedSkill1"]
-                if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
-                    self.meta.chara_skills[esid] = ("s1", 1, self.index["PlayerAction"].get(res["_EnhancedSkill1"]), esid)
-            alt["s1"] = ekey
-        if res["_EnhancedSkill2"]:
+                burst_id = res["_EnhancedBurstAttack"]
+                if not burst_id in self.meta.enhanced_fs:
+                    self.meta.enhanced_fs[burst_id] = (ekey, self.index["PlayerAction"].get(burst_id))
+                else:
+                    alt["fs"] = self.meta.enhanced_fs[burst_id][0]
+
+        for sn, skey in (("s1", "_EnhancedSkill1"), ("s2", "_EnhancedSkill2"), ("s3", "_EnhancedSkillWeapon")):
+            if not res[skey]:
+                continue
+            alt[sn] = ekey
             if self.meta is not None:
-                esid = res["_EnhancedSkill2"]
+                esid = res[skey]
                 if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
-                    self.meta.chara_skills[esid] = ("s2", 2, self.index["PlayerAction"].get(res["_EnhancedSkill2"]), esid)
-            alt["s2"] = ekey
-        if res["_EnhancedSkillWeapon"]:
-            if self.meta is not None:
-                esid = res["_EnhancedSkillWeapon"]
-                if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
-                    self.meta.chara_skills[esid] = ("s3", 3, self.index["PlayerAction"].get(res["_EnhancedSkillWeapon"]), esid)
-            alt["s3"] = ekey
+                    self.meta.chara_skills[esid] = (f"{sn}_{ekey}", 1, self.index["PlayerAction"].get(res[skey]), esid)
+                else:
+                    parts = self.meta.chara_skills[esid].split("_")
+                    alt[sn] = "default" if len(parts) == 1 else parts[1]
         if alt:
             conf["alt"] = alt
 
@@ -1826,24 +1840,43 @@ class ActCondConf(ActionCondition):
         if res["_LevelDownId"]:
             conf["+lv"] = res["_LevelDownId"]
 
-        return conf
+        if res["_ExcludeFromBuffExtension"]:
+            conf["nobufftime"] = 1
 
-    def process_result(self, res):
+    def process_result(self, res, include_id=True):
         actcond_id = res["_Id"]
         conf = {}
+        if include_id:
+            conf["id"] = actcond_id
         self.all_actcond_conf[actcond_id] = conf
         self._process_values(conf, res)
         self._process_metadata(conf, res)
-        for k, v in conf:
+        for k, v in conf.items():
             if isinstance(v, float):
                 conf[k] = fr(v)
         return conf
 
-        # _ExtraBuffType INTEGER
-        # _EnhancedSky INTEGER
-        # _InvalidBuffId INTEGER
-        # _ModifyChargeLevel INTEGER
-        # _Hiding INTEGER
-        # _LevelUpId INTEGER
-        # _LevelDownId INTEGER
-        # _ExcludeFromBuffExtension INTEGER
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
+        if self.all_actcond_conf:
+            out_dir = os.path.join(out_dir, "actcond")
+            check_target_path(out_dir)
+            output = os.path.join(out_dir, f"{self.kind}{ext}")
+            for conf in self.all_actcond_conf.values():
+                del conf["id"]
+            with open(output, "w", newline="", encoding="utf-8") as fp:
+                fmt_conf(self.all_actcond_conf, f=fp, lim=1)
+                fp.write("\n")
+        else:
+            check_target_path(out_dir)
+            all_res = self.get_all()
+            outdata = {}
+            not_parsed = []
+            for res in tqdm(all_res, desc="wp"):
+                if conf := self.process_result(res, include_id=False):
+                    outdata[str(res["_Id"])] = conf
+                else:
+                    not_parsed.append(f'[{res["_Id"]}] {res["_Text"]}'.strip())
+            output = os.path.join(out_dir, "actcond.json")
+            with open(output, "w", newline="", encoding="utf-8") as fp:
+                fmt_conf(outdata, f=fp, lim=1)
+                fp.write("\n")

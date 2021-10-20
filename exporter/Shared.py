@@ -71,6 +71,9 @@ class ActionCondition(DBView):
             self.seen_skills = set()
         return res
 
+    def get(self, pk, by=None, fields=None, where=None, order=None, mode=..., expand_one=True, full_query=True, **kwargs):
+        return super().get(pk, by=by, fields=fields, where=where, order=order, mode=mode, expand_one=expand_one, full_query=full_query, **kwargs)
+
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         # super().export_all_to_folder(out_dir, ext, fn_mode='a', full_actions=False)
         out_dir = os.path.join(out_dir, "_act_cond")
@@ -791,6 +794,9 @@ class AbnormalStatusType(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = ActionParts(index)
+    view = ActionCondition(index)
 
-    pprint(view.get(59141000001))
+    # ['[106] Enemy Positions Revealed', '[267]', '[294] Skill Chain', '[402] Immobile', '[418] Shapeshift Prep', '[419] Shapeshift Time Extended', '[420] Dragondrive Prep', '[444] Adamantine Shield', '[1144]', '[1178]', '[1179]', '[1670] Invulnerability', '[1671] Marked', '[1678] Invulnerability', '[1857] Marked', '[99999999]', '[130010101] Curse of Nihility', '[130020101] Curse of Nihility', '[901010101]']
+    import sys
+
+    pprint(view.get(sys.argv[1]))

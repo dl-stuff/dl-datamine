@@ -26,8 +26,8 @@ ALL_HANDLERS = {
     "wep": lambda index: WepConf(index).export_all_to_folder(out_dir=OUT_DIR),
     "wp": lambda index: WpConf(index).export_all_to_folder(out_dir=OUT_DIR),
     "aura": lambda index: AuraConf(index).export_all_to_folder(out_dir=OUT_DIR),
-    "fort": lambda _: write_fort_passives(OUT_DIR)
-    # actcond
+    "fort": lambda _: write_fort_passives(OUT_DIR),
+    # "actcond": lambda index: ActCondConf(index).export_all_to_folder(out_dir=OUT_DIR),
 }
 
 if __name__ == "__main__":
@@ -36,6 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("-q", help="query value (id or name)")
     args = parser.parse_args()
     index = DBViewIndex()
+    index.class_dict["ActionCondition"] = ActCondConf
 
     if args.k:
         if args.q:
