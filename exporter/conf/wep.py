@@ -11,14 +11,9 @@ from exporter.conf.common import SkillProcessHelper, remap_stuff, fmt_conf
 
 class WepConf(WeaponBody, SkillProcessHelper):
     def process_result(self, res):
-        super().process_result(res)
-        self.index["AbilityConf"].set_meta(self)
-        skin = res["_WeaponSkinId"]
-        tier = res.get("_MaxLimitOverCount", 0) + 1
-        try:
-            ele_type = res["_ElementalType"].lower()
-        except AttributeError:
-            ele_type = "any"
+        self.reset_meta()
+        self.set_ability_and_actcond_meta()
+
         ablist = []
         for i in (1, 2, 3):
             for j in (3, 2, 1):
@@ -26,6 +21,15 @@ class WepConf(WeaponBody, SkillProcessHelper):
                 if ability := self.index["AbilityConf"].get(ab, source=f"ability{i}"):
                     ablist.extend(ability)
                 break
+
+        super().process_result(res)
+        skin = res["_WeaponSkinId"]
+        tier = res.get("_MaxLimitOverCount", 0) + 1
+        try:
+            ele_type = res["_ElementalType"].lower()
+        except AttributeError:
+            ele_type = "any"
+
         conf = {
             "w": {
                 "name": res["_Name"],
@@ -45,7 +49,6 @@ class WepConf(WeaponBody, SkillProcessHelper):
             }
         }
 
-        self.reset_meta()
         dupe_skill = {}
         for act, seq, key in (("s3", 3, f"_ChangeSkillId3"),):
             if not (skill := res.get(key)):
@@ -58,7 +61,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
 
         remap_stuff(conf, self.action_ids)
 
-        self.index["AbilityConf"].set_meta(None)
+        self.unset_ability_and_actcond_meta()
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):

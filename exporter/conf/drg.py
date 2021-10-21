@@ -60,7 +60,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         conf = {}
         if not uniqueshift:
             ablist = []
-            self.index["AbilityConf"].set_meta(self)
+            self.set_ability_and_actcond_meta()
             for i in (1, 2):
                 if (ab := res.get(f"_Abilities{i}{ab_seq}")) and (ability := self.index["AbilityConf"].get(ab, source=f"ability{i}")):
                     ablist.extend(ability)
@@ -146,7 +146,7 @@ class DrgConf(DragonData, SkillProcessHelper):
 
         if not uniqueshift:
             remap_stuff(conf, self.action_ids)
-            self.index["AbilityConf"].set_meta(None)
+            self.unset_ability_and_actcond_meta()
 
         return conf
 

@@ -3,10 +3,10 @@ import os
 from tqdm import tqdm
 from collections import defaultdict
 
-from loader.Database import check_target_path
+from loader.Database import DBView, check_target_path
 
 from exporter.Weapons import WeaponType
-from exporter.Adventurers import CharaData, ExAbilityData
+from exporter.Adventurers import CharaData
 from exporter.Shared import snakey
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
@@ -31,11 +31,11 @@ class BaseConf(WeaponType):
         self.action_ids = {}
         return super().__init__(index)
 
-    def process_result(self, res, full_query=True):
+    def process_result(self, res):
         conf = {"lv2": {}}
         if res["_Label"] != "GUN":
             fs_id = res["_BurstPhase1"]
-            res = super().process_result(res, full_query=True)
+            res = super().process_result(res)
             # fs_delay = {}
             fsconf = convert_fs(res["_BurstPhase1"], res["_ChargeMarker"], res["_ChargeCancel"])
             # startup = fsconf["fs"]["startup"]
@@ -109,12 +109,17 @@ class BaseConf(WeaponType):
                 fp.write("\n")
 
 
-class ExAbilityConf(ExAbilityData, AbilityConf):
+class ExAbilityConf(AbilityConf):
+    def __init__(self, index):
+        DBView.__init__(self, index, "ExAbilityData", labeled_fields=["_Name", "_Details"])
+        self.meta = None
+        self.source = None
+        self.use_ablim_groups = False
+
     def process_result(self, res, source=None):
         conf = {"category": res["_Category"]}
-        if not (conflist := super().process_result(res, source=source)):
-            return
-        conf.update(conflist[0])
+        if conflist := super().process_result(res, source=source):
+            conf.update(conflist[0])
         return conf
 
 
@@ -132,6 +137,7 @@ class AdvConf(CharaData, SkillProcessHelper):
     def process_result(self, res, condense=True, force_50mc=False):
         self.set_animation_reference(res)
         self.reset_meta()
+        self.set_ability_and_actcond_meta()
 
         if force_50mc:
             res = dict(res)
@@ -184,7 +190,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                 skill = self.index["SkillData"].get(sdata, full_query=True)
                 self.chara_skills[sdata] = (f"s{s}", s, skill, None)
 
-        self.index["AbilityConf"].set_meta(self)
         ablist = []
         for i in (1, 2, 3):
             found = 1
@@ -198,7 +203,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     break
         if self.utp_chara is not None:
             conf["c"]["utp"] = self.utp_chara
-        if self.cp1_gauge is not None:
+        if self.cp1_gauge > 0:
             conf["c"]["cp"] = self.cp1_gauge
         conf["c"]["abilities"] = ablist
 
@@ -319,7 +324,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     servant_attrs[servant_id].append(attr)
         remap_stuff(conf, self.action_ids, servant_attrs=servant_attrs)
 
-        self.index["AbilityConf"].set_meta(None)
+        self.unset_ability_and_actcond_meta()
 
         return conf
 
@@ -382,17 +387,19 @@ class AdvConf(CharaData, SkillProcessHelper):
         all_ele_chains = {}
         for ele, exabs in exability_data.items():
             for name, entry in exabs.items():
-                cat = entry["category"]
+                cat = entry["ex"]["category"]
                 ex_by_ele[ele].add(cat)
-                if cat not in ex_by_category or (entry["ex"] and ex_by_category[cat]["ex"][0][1] < entry["ex"][0][1]):
-                    ex_by_category[cat] = {
-                        "category": cat,
-                        "ex": entry["ex"],
-                        "chain": [],
-                    }
+                if cat not in ex_by_category:
+                    ex_by_category[cat] = {"ex": entry["ex"], "chain": None}
+                else:
+                    existing_ex = ex_by_category[cat]["ex"]
+                    new_ex = entry["ex"]
+                    for e_ab, n_ab in zip(existing_ex["ab"], new_ex["ab"]):
+                        if any((n_v > e_v for e_v, n_v in zip(e_ab, n_ab))):
+                            ex_by_category[cat] = {"ex": entry["ex"], "chain": None}
+                            break
                 catagorized_names[cat].add(name)
-                if entry.get("ALL_ELE_CHAIN"):
-                    del entry["ALL_ELE_CHAIN"]
+                if entry["chain"] and not "ele" in entry["chain"]:
                     all_ele_chains[name] = entry
         extra_data = {}
         extra_data["generic"] = {}
@@ -400,10 +407,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         for cat, entry in ex_by_category.items():
             if cat not in catagorized_names:
                 continue
-            catname = sorted(catagorized_names[cat])[0]
-            if len(catagorized_names[cat]) > 1:
-                print(f"More than 1 name for EX category {cat}: {catagorized_names[cat]}, picked {catname}")
-            entry["category"] = catname
+            catname = f"ex{str(cat)}"
             if all((cat in eleset for eleset in ex_by_ele.values())):
                 extra_data["generic"][catname] = entry
                 for name in catagorized_names[cat]:
@@ -411,19 +415,11 @@ class AdvConf(CharaData, SkillProcessHelper):
                         try:
                             if not exabs[name]["chain"]:
                                 del exabs[name]
-                            else:
-                                exabs[name]["category"] = catname
                         except KeyError:
                             pass
             else:
-                if entry["ex"] and not entry["ex"][0][0].startswith("ele_"):
+                if "ab" in entry["ex"] and not (entry["ex"]["ab"][0] == "mod" and entry["ex"]["ab"][2] == "eledmg"):
                     extra_data["any"][catname] = entry
-                for name in catagorized_names[cat]:
-                    for exabs in exability_data.values():
-                        try:
-                            exabs[name]["category"] = catname
-                        except KeyError:
-                            pass
         extra_data["any"].update(all_ele_chains)
         exability_data.update(extra_data)
 

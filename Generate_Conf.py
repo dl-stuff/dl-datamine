@@ -46,3 +46,4 @@ if __name__ == "__main__":
     else:
         for handle in ALL_HANDLERS.values():
             handle(index)
+        index["ActionCondition"].export_all_to_folder(out_dir=OUT_DIR)

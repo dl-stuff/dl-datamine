@@ -32,7 +32,7 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
     if k in PRETTY_PRINT_THIS:
         lim += 1
     if depth >= lim:
-        if k.startswith("attr") or k in MULTILINE_LIST:
+        if isinstance(data, list) and (k.startswith("attr") or k in MULTILINE_LIST):
             r_str_lst = []
             end = len(data) - 1
             for idx, d in enumerate(data):
@@ -245,8 +245,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr["fade"] = fr(attenuation)
 
     # attr_tag = None
-    if (actcond := hitattr.get("_ActionCondition1")) and actcond["id"] not in once_per_action:
-        once_per_action.add(actcond["id"])
+    if (actcond := hitattr.get("_ActionCondition1")) and actcond["_Id"] not in once_per_action:
+        once_per_action.add(actcond["_Id"])
         # attr_tag = actcond['_Id']
         # if (remove := actcond.get('_RemoveConditionId')):
         #     attr['del'] = remove
@@ -259,7 +259,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                 meta=meta,
                 skill=skill,
             )
-        attr["actcond"] = actcond["id"]
+        attr["actcond"] = actcond["_Id"]
 
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
@@ -428,13 +428,13 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         #     print(adv.name)
         elif part.get("_loopFlag") and "_hitAttrLabel" in part_hitattr_map:
             loopnum = part.get("_loopNum", 0)
-            loopsec = part.get("_loopSec")
             delay = part.get("_seconds") + (part.get("_loopFrame", 0) / 60)
             if loopsec := part.get("_loopSec"):
                 gen = max(loopnum, int(loopsec // delay))
             else:
                 gen = loopnum
             gen += 1
+            gen = 1
             ref_attrs = [
                 part_hitattr_map["_hitAttrLabel"],
                 *part_hitattr_map["_hitAttrLabelSubList"],
@@ -457,7 +457,6 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if part.get("_generateNumDependOnBuffCount"):
             # possible that this can be used with _generateNum
             buffcond = part["_buffCountConditionId"]
-            buffname = snakey(buffcond["_Text"]).lower()
             gen = buffcond["_MaxDuplicatedCount"]
             try:
                 bullet_timing = map(float, json.loads(part["_markerDelay"]))
@@ -639,8 +638,9 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
             "charge": fr(0.1 + cancel["_Parts"][0]["_duration"]),
             "startup": 0.0,
             "recovery": 0.0,
+            "interrupt": {"s": (0.0, None)},
+            "interrupt": {"s": (0.0, None)},
         }
-        fsconf["fsf"]["interrupt"], fsconf["fsf"]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
 
     return fsconf
 
@@ -705,8 +705,7 @@ class SkillProcessHelper:
 
     def reset_meta(self):
         self.chara_skills = {}
-        self.eskill_counter = itertools.count(start=1)
-        self.efs_counter = itertools.count(start=1)
+        self.enhanced_counter = itertools.count(start=1)
         self.all_chara_skills = {}
         self.enhanced_fs = {}
         self.ab_alt_attrs = defaultdict(lambda: [])
@@ -717,6 +716,17 @@ class SkillProcessHelper:
         self.hitattrshift = False
         self.chara_modes = {}
         self.cp1_gauge = 0
+
+    def get_enhanced_key(self):
+        return f"enhanced{next(self.meta.enhanced_counter)}"
+
+    def set_ability_and_actcond_meta(self):
+        self.index["AbilityConf"].set_meta(self)
+        self.index["ActCondConf"].set_meta(self)
+
+    def unset_ability_and_actcond_meta(self):
+        self.index["AbilityConf"].set_meta(None)
+        self.index["ActCondConf"].set_meta(None)
 
     def convert_skill(self, k, seq, skill, lv):
         action = 0
@@ -899,7 +909,7 @@ class AuraConf(AuraData):
         all_res = self.get_all()
         check_target_path(out_dir)
         outdata = {}
-        for res in tqdm(all_res, desc="wp"):
+        for res in tqdm(all_res, desc="amp"):
             outdata[str(res["_Id"])] = self.process_result(res)
         output = os.path.join(out_dir, "amp.json")
         with open(output, "w", newline="", encoding="utf-8") as fp:
@@ -917,7 +927,7 @@ class AbilityConf(AbilityData):
         AbilityTargetAction.SKILL_3: "s3",
         AbilityTargetAction.SKILL_ALL: "s",
         AbilityTargetAction.HUMAN_SKILL_1: "s1",
-        AbilityTargetAction.HUMAN_SKILL_1: "s2",
+        AbilityTargetAction.HUMAN_SKILL_2: "s2",
         AbilityTargetAction.DRAGON_SKILL_1: "ds1",
         AbilityTargetAction.SKILL_4: "s4",
         AbilityTargetAction.HUMAN_SKILL_3: "s3",
@@ -929,6 +939,7 @@ class AbilityConf(AbilityData):
         super().__init__(index)
         self.meta = None
         self.source = None
+        self.enhanced_key = None
         self.use_ablim_groups = False
         if not self.ABL_GROUPS:
             self.ABL_GROUPS = {r["_Id"]: r for r in self.index["AbilityLimitedGroup"].get_all()}
@@ -936,6 +947,7 @@ class AbilityConf(AbilityData):
     def set_meta(self, meta, use_ablim_groups=False):
         self.meta = meta
         self.source = None
+        self.enhanced_key = None
         self.use_ablim_groups = use_ablim_groups or False
 
     def _varids(self, res, i):
@@ -1358,21 +1370,46 @@ class AbilityConf(AbilityData):
         target = AbilityTargetAction(res[f"_TargetAction{i}"])
         seq = int(target.name[-1:])
         if self.meta is not None:
-            if not skill_id in self.meta.all_chara_skills:
+            if skill_id not in self.meta.chara_skills and skill_id not in self.meta.all_chara_skills:
+                if res["_ConditionType"] is None:
+                    ekey = "default"
+                else:
+                    if self.enhanced_key is None:
+                        self.enhanced_key = self.meta.get_enhanced_key()
+                    ekey = self.enhanced_key
                 skill_data = self.index["SkillData"].get(skill_id)
-                self.meta.chara_skills[skill_id] = (f"s{seq}_{self.source}", seq, skill_data, None)
-        return ["altskill", self.source]
+                self.meta.chara_skills[skill_id] = (f"s{seq}_{ekey}", seq, skill_data, None)
+            else:
+                try:
+                    parts = self.meta.chara_skills[skill_id].split("_")
+                except KeyError:
+                    parts = self.meta.all_chara_skills[skill_id].split("_")
+                ekey = "default" if len(parts) == 1 else parts[1]
+            if ekey == "default":
+                return None
+            return ["altskill", ekey]
 
     def at_EnhancedBurstAttack(self, res, i):
-        # for some reason they only use this for albert and otherwise resort to ChangeState
+        # will assume only albert uses this and unconditionally for now
         burst_id = self._varid_a(res, i)
         if self.meta is not None:
-            burst = self.index["PlayerAction"].get(burst_id)
-            self.meta.enhanced_fs[burst_id] = (None, burst)
-        return None
+            if burst_id not in self.meta.enhanced_fs:
+                burst = self.index["PlayerAction"].get(burst_id)
+                if res["_ConditionType"] is None:
+                    ekey = "default"
+                else:
+                    if self.enhanced_key is None:
+                        self.enhanced_key = self.meta.get_enhanced_key()
+                    ekey = self.enhanced_key
+                self.meta.enhanced_fs[burst_id] = (ekey, burst)
+            else:
+                ekey = self.meta.enhanced_fs[burst_id][0]
+            if ekey == "default":
+                return None
+            return ["altskill", ekey]
 
     def at_AbnoramlExtension(self, res, i):
-        return self._at_aff(res, i, "afftime")
+        return self._at_aff("afftime", res, i)
 
     def at_DragonTimeSpeedRate(self, res, i):
         value = 100 / (100 + self._upval(res, i))
@@ -1483,17 +1520,18 @@ class AbilityConf(AbilityData):
 
     # processing
     def process_result(self, res, source=None):
+        self.enhanced_key = None
         if source is not None:
             self.source = source
         conf = {}
         # cond
         condtype = AbilityCondition(res["_ConditionType"])
-        res["_ConditionType"] = condtype
         try:
             if cond := getattr(self, f"ac_{condtype.name}")(res):
                 conf["cond"] = cond
         except AttributeError:
-            condtype = False
+            condtype = None
+        res["_ConditionType"] = condtype
         # cd
         if cd := res.get("_CoolTime"):
             conf["cd"] = cd
@@ -1546,19 +1584,13 @@ class ActCondConf(ActionCondition):
     def __init__(self, index):
         super().__init__(index)
         self.meta = None
-        self.kind = None
         self.all_actcond_conf = {}
 
     def set_meta(self, meta):
         self.meta = meta
 
-    def set_kind(self, kind):
-        self.meta = None
-        self.kind = kind
-        self.all_actcond_conf = {}
-
     def _process_metadata(self, conf, res):
-        # no clue: _ResistBuffReset/_ResistDebuffReset/_UnifiedManagement/_DebuffCategory/_RemoveDebuffCategory
+        # no clue: _UnifiedManagement/_DebuffCategory/_RemoveDebuffCategory
         # visuals, prob: _UsePowerUpEffect/_NotUseStartEffect/_StartEffectCommon/_StartEffectAdd/_DurationNumConsumedHeadText
         # _KeepOnDragonShift: assume this is default
         # _RestoreOnReborn: no revive in sim
@@ -1566,20 +1598,19 @@ class ActCondConf(ActionCondition):
         #     conf["text"] = res["_Text"]
         flag = res["_InternalFlag"]
         if flag & 1:  # NoIcon = 1
-            # TODO: get generic icons
-            conf["icon"] = -1
+            conf["icon"] = 0
         elif res["_BuffIconId"]:
             conf["icon"] = res["_BuffIconId"]
         if res["_Text"]:
-            conf["_Text"]
+            conf["text"] = res["_Text"]
         if flag >> 1 & 1:  # NoCount = 2
             conf["hide"] = 1
         if res["_OverwriteGroupId"]:
-            conf["ow"] = res["_OverwriteGroupId"]
+            conf["overwrite"] = res["_OverwriteGroupId"]
         elif res["_OverwriteIdenticalOwner"] or res["_Overwrite"]:
-            conf["ow"] = -1
+            conf["overwrite"] = -1
         if res["_MaxDuplicatedCount"]:
-            if not "ow" in conf or res["_MaxDuplicatedCount"] > 1:
+            if not "overwrite" in conf or res["_MaxDuplicatedCount"] > 1:
                 conf["maxstack"] = res["_MaxDuplicatedCount"]
         elif res["_StackData"] == 5:  # StackBuffData
             conf["maxstack"] = 4
@@ -1589,6 +1620,8 @@ class ActCondConf(ActionCondition):
             conf["lost_on_drg"] = res["_LostOnDragon"]
         if res["_CurseOfEmptinessInvalid"]:
             conf["coei"] = res["_CurseOfEmptinessInvalid"]
+        if res["_ResistBuffReset"] or res["_ResistDebuffReset"]:
+            conf["unremovable"] = 1
 
     RATE_TO_MOD = {
         "_RateHP": ("hp", "buff"),
@@ -1647,6 +1680,15 @@ class ActCondConf(ActionCondition):
         # _RemoveAciton: maybe this disables ur fs?
         # unused: _TargetAction/_ConditionAbs/_Enhanced<ele>
         mods = []
+        maybe_debuff = set()
+        maybe_buff = set()
+
+        def _check_debuff(key, value):
+            if value > 0:
+                maybe_buff.add(key)
+            else:
+                maybe_debuff.add(key)
+
         try:
             aff = AFFLICTION_TYPES[res["_Type"]].lower()
         except KeyError:
@@ -1682,7 +1724,7 @@ class ActCondConf(ActionCondition):
         # will leave these values at negative
         slip = {}
         if res["_SlipDamageFixed"]:
-            slip["true"] = res["_SlipDamageFixed"]
+            slip["fixed"] = res["_SlipDamageFixed"]
         if res["_SlipDamageRatio"]:
             slip["percent"] = res["_SlipDamageRatio"]
         # _SlipDamageMax: not used
@@ -1702,8 +1744,9 @@ class ActCondConf(ActionCondition):
                     slip["can_die"] = 1
                     slip["add"] = res["_RateIncreaseByTime"]
                     slip["addiv"] = res["_RateIncreaseDuration"]
-                    slip["heal"] = res["_RequiredRecoverHp"]
+                    slip["threshold"] = res["_RequiredRecoverHp"]
                     slip["kind"] = "corrosion"
+                maybe_debuff.add("_ValidSlipHp")
             elif res["_ValidRegeneHP"]:
                 slip["kind"] = "hp"
             elif res["_ValidRegeneSP"]:
@@ -1735,10 +1778,12 @@ class ActCondConf(ActionCondition):
             conf["ele"] = ele_bitmap(res["_TargetElemental"])
         if res["_ConditionDebuff"] == 16:
             conf["ifbleed"] = 1
-        # generic buffs start
+
+        # generic buffs
         for key, modargs in ActCondConf.RATE_TO_MOD.items():
             if res[key]:
                 mods.append((fr(res[key]), *modargs))
+                _check_debuff(key, res[key])
 
         if res["_RateRecoverySp"]:
             if n := res["_RateRecoverySpExceptTargetSkill"]:
@@ -1747,23 +1792,31 @@ class ActCondConf(ActionCondition):
                         mods.append((fr(res["_RateRecoverySp"]), f"sph_s{i+1}"))
             else:
                 mods.append((fr(res["_RateRecoverySp"]), "sph"))
+            _check_debuff("_RateRecoverySp", res["_RateRecoverySp"])
 
         for key, aff in ActCondConf.RATE_TO_AFFKEY.items():
             if res[key]:
                 mods.append((fr(res[key]), f"resist_{aff}", "passive"))
-            if killer := res[f"{key}Killer"]:
+                _check_debuff(key, res[key])
+            killer_key = f"{key}Killer"
+            if killer := res[killer_key]:
                 mods.append((fr(killer), f"killer_{aff}", "passive"))
-            if edge := res[f"{key}Add"]:
+                _check_debuff(killer_key, res[killer_key])
+            edge_key = f"{key}Add"
+            if edge := res[edge_key]:
                 mods.append((fr(edge), f"edge_{aff}", "passive"))
+                _check_debuff(edge_key, res[edge_key])
 
         if res["_HealInvalid"]:
             mods.append((-1, "getrcv", "buff"))
 
         if mods:
+            conf["icon"] = "-".join(mods[0][1:])
             conf["mods"] = mods
 
         if res["_TensionUpInvalid"]:
             conf["no_energy"] = res["_TensionUpInvalid"]
+            maybe_debuff.add("_TensionUpInvalid")
 
         shield = {}
         if res["_RateDamageShield"]:
@@ -1794,29 +1847,35 @@ class ActCondConf(ActionCondition):
             conf["avoid"] = res["_AutoAvoid"]
 
         alt = {}
-        if res["_Text"]:
-            ekey = snakey(res["_Text"], with_ext=False).replace("_", "").lower()
-        else:
-            ekey = f"b{res['_Id']}"
+        ekey = None
         if res["_EnhancedBurstAttack"]:
-            alt["fs"] = ekey
+            alt["fs"] = f"b{res['_Id']}"
             if self.meta is not None:
                 burst_id = res["_EnhancedBurstAttack"]
                 if not burst_id in self.meta.enhanced_fs:
+                    if ekey is None:
+                        ekey = self.meta.get_enhanced_key()
                     self.meta.enhanced_fs[burst_id] = (ekey, self.index["PlayerAction"].get(burst_id))
+                    alt["fs"] = ekey
                 else:
                     alt["fs"] = self.meta.enhanced_fs[burst_id][0]
 
         for sn, skey in (("s1", "_EnhancedSkill1"), ("s2", "_EnhancedSkill2"), ("s3", "_EnhancedSkillWeapon")):
             if not res[skey]:
                 continue
-            alt[sn] = ekey
+            alt[sn] = f"b{res['_Id']}"
             if self.meta is not None:
                 esid = res[skey]
                 if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
+                    if ekey is None:
+                        ekey = self.meta.get_enhanced_key()
                     self.meta.chara_skills[esid] = (f"{sn}_{ekey}", 1, self.index["PlayerAction"].get(res[skey]), esid)
+                    alt[sn] = ekey
                 else:
-                    parts = self.meta.chara_skills[esid].split("_")
+                    try:
+                        parts = self.meta.chara_skills[esid].split("_")
+                    except KeyError:
+                        parts = self.meta.all_chara_skills[esid].split("_")
                     alt[sn] = "default" if len(parts) == 1 else parts[1]
         if alt:
             conf["alt"] = alt
@@ -1845,40 +1904,40 @@ class ActCondConf(ActionCondition):
         if res["_ExcludeFromBuffExtension"]:
             conf["nobufftime"] = 1
 
-    def process_result(self, res, include_id=True):
+        if maybe_debuff and not maybe_buff:
+            conf["debuff"] = 1
+
+    def process_result(self, res, retconf=False):
         actcond_id = res["_Id"]
         conf = {}
-        if include_id:
-            conf["id"] = actcond_id
         self.all_actcond_conf[actcond_id] = conf
         self._process_values(conf, res)
         self._process_metadata(conf, res)
         for k, v in conf.items():
             if isinstance(v, float):
                 conf[k] = fr(v)
-        return conf
+        if retconf:
+            return conf
+        else:
+            return super().process_result(res)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
+        check_target_path(out_dir)
+        output = os.path.join(out_dir, f"actcond{ext}")
         if self.all_actcond_conf:
-            out_dir = os.path.join(out_dir, "actcond")
-            check_target_path(out_dir)
-            output = os.path.join(out_dir, f"{self.kind}{ext}")
-            for conf in self.all_actcond_conf.values():
-                del conf["id"]
+            print("found", len(self.all_actcond_conf), "actconds")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(self.all_actcond_conf, f=fp, lim=1)
                 fp.write("\n")
         else:
-            check_target_path(out_dir)
             all_res = self.get_all()
             outdata = {}
             not_parsed = []
             for res in tqdm(all_res, desc="wp"):
-                if conf := self.process_result(res, include_id=False):
+                if conf := self.process_result(res):
                     outdata[str(res["_Id"])] = conf
                 else:
                     not_parsed.append(f'[{res["_Id"]}] {res["_Text"]}'.strip())
-            output = os.path.join(out_dir, "actcond.json")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(outdata, f=fp, lim=1)
                 fp.write("\n")

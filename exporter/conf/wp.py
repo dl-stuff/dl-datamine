@@ -9,11 +9,10 @@ from exporter.Wyrmprints import AbilityCrest
 from exporter.conf.common import fmt_conf
 
 
-class WpConf(AbilityCrest):
-    def __init__(self, index):
-        super().__init__(index)
-        self.boon_names = {res["_Id"]: res["_Name"] for res in self.index["UnionAbility"].get_all()}
+# CREATE TABLE UnionAbility (_Id INTEGER PRIMARY KEY,_Name TEXT,_IconEffect TEXT,_SortId INTEGER,_CrestGroup1Count1 INTEGER,_AbilityId1 INTEGER,_PartyPower1 INTEGER,_CrestGroup1Count2 INTEGER,_AbilityId2 INTEGER,_PartyPower2 INTEGER,_CrestGroup1Count3 INTEGER,_AbilityId3 INTEGER,_PartyPower3 INTEGER,_CrestGroup1Count4 INTEGER,_AbilityId4 INTEGER,_PartyPower4 INTEGER,_CrestGroup1Count5 INTEGER,_AbilityId5 INTEGER,_PartyPower5 INTEGER)
 
+
+class WpConf(AbilityCrest):
     def process_result(self, res):
         self.index["AbilityConf"].set_meta(None, use_ablim_groups=True)
         ablist = []
@@ -44,9 +43,12 @@ class WpConf(AbilityCrest):
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
+        # union
+        union_abilities = self.index["UnionAbility"].get_all()
+        union_names = {res["_Id"]: res["_Name"] for res in union_abilities}
+
         all_res = self.get_all()
         check_target_path(out_dir)
-        self.index["ActionCondition"].set_kind("wyrmprints")
         outdata = {}
         skipped = []
         collisions = defaultdict(list)
@@ -67,7 +69,7 @@ class WpConf(AbilityCrest):
         for qual_name, duplicates in collisions.items():
             if len({dupe["union"] for dupe in duplicates}) == len(duplicates):
                 for dupe in duplicates:
-                    dupe["name"] = f"{dupe['name']} ({self.boon_names[dupe['union']]})"
+                    dupe["name"] = f"{dupe['name']} ({union_names[dupe['union']]})"
                     outdata[snakey(dupe["name"].replace("'s Boon", ""))] = dupe
                 del outdata[qual_name]
             else:
@@ -78,7 +80,14 @@ class WpConf(AbilityCrest):
             fmt_conf(outdata, f=fp)
             fp.write("\n")
         # print('Skipped:', skipped)
-        self.index["ActionCondition"].export_all_to_folder(out_dir)
+
+        union_conf = {}
+        for res in tqdm(union_abilities, desc="wp"):
+            union_tiers = {}
+            for i in range(1, 6):
+                if (abid := res.get(f"_AbilityId{i}")) and (ability := self.index["AbilityConf"].get(abid, source="union")):
+                    union_tiers[res[f"_CrestGroup1Count{i}"]] = ability
+            union_conf[res["_Id"]] = union_tiers
 
     def get(self, name):
         res = super().get(name, full_query=False)
