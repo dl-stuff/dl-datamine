@@ -702,7 +702,7 @@ class SkillProcessHelper:
 
     def reset_meta(self):
         self.chara_skills = {}
-        self.enhanced_counter = itertools.count(start=1)
+        self.enhanced_counter = itertools.count(start=0)
         self.all_chara_skills = {}
         self.enhanced_fs = {}
         self.ab_alt_attrs = defaultdict(lambda: [])
@@ -715,15 +715,25 @@ class SkillProcessHelper:
         self.cp1_gauge = 0
 
     def get_enhanced_key(self):
-        return f"enhanced{next(self.enhanced_counter)}"
+        nid = next(self.enhanced_counter)
+        if nid == 0:
+            return "enhanced"
+        return f"enhanced{nid}"
 
     def set_ability_and_actcond_meta(self):
         self.index["AbilityConf"].set_meta(self)
         self.index["ActCondConf"].set_meta(self)
+        try:
+            self.index["ActionCondition"].set_meta(self)
+        except AttributeError:
+            self.index["ActCondConf"].set_meta(self)
 
     def unset_ability_and_actcond_meta(self):
         self.index["AbilityConf"].set_meta(None)
-        self.index["ActCondConf"].set_meta(None)
+        try:
+            self.index["ActionCondition"].set_meta(None)
+        except AttributeError:
+            self.index["ActCondConf"].set_meta(None)
 
     def convert_skill(self, k, seq, skill, lv):
         action = 0
@@ -1383,9 +1393,9 @@ class AbilityConf(AbilityData):
                     ekey = None
                 else:
                     try:
-                        parts = self.meta.chara_skills[skill_id].split("_")
+                        parts = self.meta.chara_skills[skill_id][0].split("_")
                     except KeyError:
-                        parts = self.meta.all_chara_skills[skill_id].split("_")
+                        parts = self.meta.all_chara_skills[skill_id][0].split("_")
                     ekey = "default" if len(parts) == 1 else parts[1]
             if ekey is None:
                 return None
@@ -1871,13 +1881,13 @@ class ActCondConf(ActionCondition):
                 if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
                     if ekey is None:
                         ekey = self.meta.get_enhanced_key()
-                    self.meta.chara_skills[esid] = (f"{sn}_{ekey}", 1, self.index["PlayerAction"].get(res[skey]), esid)
+                    self.meta.chara_skills[esid] = (f"{sn}_{ekey}", 1, self.index["SkillData"].get(res[skey]), esid)
                     alt[sn] = ekey
                 else:
                     try:
-                        parts = self.meta.chara_skills[esid].split("_")
+                        parts = self.meta.chara_skills[esid][0].split("_")
                     except KeyError:
-                        parts = self.meta.all_chara_skills[esid].split("_")
+                        parts = self.meta.all_chara_skills[esid][0].split("_")
                     alt[sn] = "default" if len(parts) == 1 else parts[1]
         if alt:
             conf["alt"] = alt
@@ -1911,13 +1921,14 @@ class ActCondConf(ActionCondition):
 
     def process_result(self, res, retconf=False):
         actcond_id = res["_Id"]
-        conf = {}
-        self.all_actcond_conf[actcond_id] = conf
-        self._process_values(conf, res)
-        self._process_metadata(conf, res)
-        for k, v in conf.items():
-            if isinstance(v, float):
-                conf[k] = fr(v)
+        if actcond_id not in self.all_actcond_conf:
+            conf = {}
+            self.all_actcond_conf[actcond_id] = conf
+            self._process_values(conf, res)
+            self._process_metadata(conf, res)
+            for k, v in conf.items():
+                if isinstance(v, float):
+                    conf[k] = fr(v)
         if retconf:
             return conf
         else:
