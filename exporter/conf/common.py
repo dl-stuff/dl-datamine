@@ -1606,15 +1606,16 @@ class ActCondConf(ActionCondition):
         # visuals, prob: _UsePowerUpEffect/_NotUseStartEffect/_StartEffectCommon/_StartEffectAdd/_DurationNumConsumedHeadText
         # _KeepOnDragonShift: assume this is default
         # _RestoreOnReborn: no revive in sim
-        # if res["_Text"]:
-        #     conf["text"] = res["_Text"]
         flag = res["_InternalFlag"]
         if flag & 1:  # NoIcon = 1
             conf["icon"] = 0
         elif res["_BuffIconId"]:
             conf["icon"] = res["_BuffIconId"]
         if res["_Text"]:
-            conf["text"] = res["_Text"]
+            text = res["_Text"]
+            if "mods" in conf and "{0:P0}" in text:
+                text = text.replace("{0:P0}", f'{conf["mods"][0][0]:.0%}')
+            conf["text"] = text
         if flag >> 1 & 1:  # NoCount = 2
             conf["hide"] = 1
         if res["_OverwriteGroupId"]:

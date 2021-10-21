@@ -1,5 +1,6 @@
 import argparse
 from pprint import pprint
+from time import monotonic
 from loader.Database import DBViewIndex
 
 from exporter.conf.adv import AdvConf
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     parser.add_argument("-k", help="type of conf ({})".format(" ".join(Q_HANDLERS.keys())))
     parser.add_argument("-q", help="query value (id or name)")
     args = parser.parse_args()
+    start = monotonic()
+
     index = DBViewIndex()
     index.class_dict["ActionCondition"] = ActCondConf
 
@@ -47,3 +50,5 @@ if __name__ == "__main__":
         for handle in ALL_HANDLERS.values():
             handle(index)
         index["ActionCondition"].export_all_to_folder(out_dir=OUT_DIR)
+
+    print(f"total: {monotonic()-start:.4f}s")

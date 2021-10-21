@@ -430,13 +430,14 @@ class AdvConf(CharaData, SkillProcessHelper):
 
         all_res = self.get_all(where="_ElementalType != 99 AND _IsPlayable = 1")
         # ref_dir = os.path.join(out_dir, '..', 'adv')
-        skillshare_out = os.path.join(out_dir, f"skillshare{ext}")
+        # skillshare_out = os.path.join(out_dir, f"skillshare{ext}")
         exability_out = os.path.join(out_dir, f"exability{ext}")
         advout_dir = os.path.join(out_dir, "adv")
         check_target_path(advout_dir)
         exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
 
         for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
+            name = res.get("_SecondName", res.get("_Name", res.get("_Id")))
             try:
                 if res.get("_UniqueGrowMaterialId1") and res.get("_UniqueGrowMaterialId2"):
                     outconf = self.process_result(res, force_50mc=True)
@@ -454,10 +455,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                     fmt_conf(outconf, f=fp)
                     fp.write("\n")
             except Exception as e:
-                print(res["_Id"], res.get("_SecondName", res.get("_Name")), flush=True)
+                print(res["_Id"], name, flush=True)
                 raise e
-        if AdvConf.MISSING_ENDLAG:
-            print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
+        # if AdvConf.MISSING_ENDLAG:
+        #     print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
         self.sort_exability_data(exability_data)
         with open(exability_out, "w", newline="") as fp:
             fmt_conf(exability_data, f=fp, lim=3, sortlim=2)
