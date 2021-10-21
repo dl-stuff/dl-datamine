@@ -19,7 +19,7 @@ PART_COMPARISON_TO_VARS = {
     PartConditionComparisonType.LessThanOrEqual: "<=",
 }
 
-ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
+ONCE_PER_ACT = ("sp", "dp", "utp", "actcond", "afflic", "bleed", "extra", "dispel")
 DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
 
 INDENT = "    "
@@ -166,8 +166,6 @@ def clean_hitattr(attr, once_per_action):
         for act in ONCE_PER_ACT:
             try:
                 del attr[act]
-                if act == "buff" and "coei" in attr:
-                    del attr["coei"]
                 need_copy = True
             except KeyError:
                 continue
@@ -322,7 +320,6 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 actcond = condvalue["_actionCondition"]
                 if not actcond:
                     continue
-                buffname = snakey(actcond.get("_Text") or "buff" + str(actcond.get("_Id")) or "mystery_buff", with_ext=False).lower()
                 count = condvalue["_count"]
                 partcond = ("actcond", actcond.get("_Id"), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count)
             elif ctype == PartConditionType.AuraLevel:
@@ -468,7 +465,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                     break
                 delay = float(delay)
                 for attr in part_hitattrs:
-                    attrcond = ["buff", buffcond["_Id"], ">=", idx + 1]
+                    attrcond = ["actcond", buffcond["_Id"], ">=", idx + 1]
                     if idx == 0:
                         if delay:
                             attr[timekey] = fr(attr.get(timekey, 0) + delay)
@@ -718,7 +715,7 @@ class SkillProcessHelper:
         self.cp1_gauge = 0
 
     def get_enhanced_key(self):
-        return f"enhanced{next(self.meta.enhanced_counter)}"
+        return f"enhanced{next(self.enhanced_counter)}"
 
     def set_ability_and_actcond_meta(self):
         self.index["AbilityConf"].set_meta(self)
@@ -878,7 +875,7 @@ class SkillProcessHelper:
 
         for efs, eba in self.enhanced_fs.values():
             for fs, fsc in convert_fs(eba, eba.get("_BurstMarkerId")).items():
-                if efs is None:
+                if efs in (None, "default"):
                     fsn = fs
                 else:
                     fsn = f"{fs}_{efs}"
@@ -984,10 +981,10 @@ class AbilityConf(AbilityData):
         return ["hp", "<=", int(res["_ConditionValue"])]
 
     def ac_BUFF_SKILL1(self, res):
-        return ["buff", 1]
+        return ["buffedby", "s1"]
 
     def ac_BUFF_SKILL2(self, res):
-        return ["buff", 2]
+        return ["buffedby", "s2"]
 
     def ac_DRAGON_MODE(self, res):
         return ["shift", "dform"]
@@ -1104,7 +1101,7 @@ class AbilityConf(AbilityData):
         return cond
 
     def ac_BUFFED_SPECIFIC_ID(self, res):
-        return ["buff", int(res["_ConditionValue"])]
+        return ["actcond", int(res["_ConditionValue"])]
 
     def ac_DAMAGED(self, res):
         return ["damaged", -1]
@@ -1155,8 +1152,8 @@ class AbilityConf(AbilityData):
             return ["event", "cp_full"]
 
     def ac_REQUIRED_BUFF_AND_SP1_MORE(self, res):
-        # return [["buff", res["_RequiredBuff"]], "and", ["sp", "s1", ">=", res[""]]]
-        return ["buff", int(res["_RequiredBuff"])]
+        # all examples of these have _ConditionValue=-1.0
+        return ["actcond", int(res["_RequiredBuff"])]
 
     def ac_ALWAYS_REACTION_TIME(self, res):
         return ["timer", -1]
@@ -1165,10 +1162,10 @@ class AbilityConf(AbilityData):
         return ["antiaff", AFFLICTION_TYPES.get(int(res["_ConditionValue"])).lower()]
 
     def ac_BUFF_DISAPPEARED(self, res):
-        return ["buffend", int(res["_ConditionValue"])]
+        return ["actcondend", int(res["_ConditionValue"])]
 
     def ac_BUFFED_SPECIFIC_ID_COUNT(self, res):
-        return ["buff", int(res["_ConditionValue2"]), "=", int(res["_ConditionValue"])]
+        return ["actcond", int(res["_ConditionValue2"]), "=", int(res["_ConditionValue"])]
 
     def ac_CHARGE_LOOP_REACTION_TIME(self, res):
         return ["fs_hold", "charge"]
@@ -1183,10 +1180,10 @@ class AbilityConf(AbilityData):
         return ["cp", ">=", int(res["_ConditionValue"])]
 
     def ac_BUFF_COUNT_MORE_THAN(self, res):
-        return ["buff", int(res["_ConditionValue2"]), ">=", int(res["_ConditionValue"])]
+        return ["actcond", int(res["_ConditionValue2"]), ">=", int(res["_ConditionValue"])]
 
     def ac_BUFF_CONSUMED(self, res):
-        return ["buffend", int(res["_ConditionValue"]), 1]
+        return ["actcondend", int(res["_ConditionValue"]), 1]
 
     def ac_HP_BETWEEN(self, res):
         return ["hp", ">=", int(res["_ConditionValue"]), "<=", int(res["_ConditionValue2"])]
@@ -1216,11 +1213,11 @@ class AbilityConf(AbilityData):
     def ac_HITCOUNT_MOMENT_TIMESRATE(self, res):
         return ["mult", "hits", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
 
-    def ac_HITCOUNT_MOMENT_TIMESRATE(self, res):
-        return ["mult", "buff", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
+    def ac_DUP_BUFF_ALWAYS_TIMESRATE(self, res):
+        return ["mult", "actcond", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
 
     def ac_BUFFED_SPECIFIC_ID_COUNT_MORE_ALWAYS_CHECK(self, res):
-        return ["buff", int(res["_ConditionValue2"]), ">=", int(res["_ConditionValue"])]
+        return ["actcond", int(res["_ConditionValue2"]), ">=", int(res["_ConditionValue"])]
 
     def ac_GET_BUFF_FROM_SKILL(self, res):
         return ["event", "buffed"]
@@ -1372,20 +1369,25 @@ class AbilityConf(AbilityData):
         if self.meta is not None:
             if skill_id not in self.meta.chara_skills and skill_id not in self.meta.all_chara_skills:
                 if res["_ConditionType"] is None:
-                    ekey = "default"
+                    ekey = None
+                    sn = f"s{seq}"
                 else:
                     if self.enhanced_key is None:
                         self.enhanced_key = self.meta.get_enhanced_key()
                     ekey = self.enhanced_key
+                    sn = f"s{seq}_{ekey}"
                 skill_data = self.index["SkillData"].get(skill_id)
-                self.meta.chara_skills[skill_id] = (f"s{seq}_{ekey}", seq, skill_data, None)
+                self.meta.chara_skills[skill_id] = (sn, seq, skill_data, None)
             else:
-                try:
-                    parts = self.meta.chara_skills[skill_id].split("_")
-                except KeyError:
-                    parts = self.meta.all_chara_skills[skill_id].split("_")
-                ekey = "default" if len(parts) == 1 else parts[1]
-            if ekey == "default":
+                if res["_ConditionType"] is None:
+                    ekey = None
+                else:
+                    try:
+                        parts = self.meta.chara_skills[skill_id].split("_")
+                    except KeyError:
+                        parts = self.meta.all_chara_skills[skill_id].split("_")
+                    ekey = "default" if len(parts) == 1 else parts[1]
+            if ekey is None:
                 return None
             return ["altskill", ekey]
 
@@ -1395,8 +1397,8 @@ class AbilityConf(AbilityData):
         if self.meta is not None:
             if burst_id not in self.meta.enhanced_fs:
                 burst = self.index["PlayerAction"].get(burst_id)
-                if res["_ConditionType"] is None:
-                    ekey = "default"
+                if res["_ConditionType"] == AbilityCondition.NONE:
+                    ekey = None
                 else:
                     if self.enhanced_key is None:
                         self.enhanced_key = self.meta.get_enhanced_key()
@@ -1404,9 +1406,9 @@ class AbilityConf(AbilityData):
                 self.meta.enhanced_fs[burst_id] = (ekey, burst)
             else:
                 ekey = self.meta.enhanced_fs[burst_id][0]
-            if ekey == "default":
+            if ekey is None:
                 return None
-            return ["altskill", ekey]
+            return ["altfs", ekey]
 
     def at_AbnoramlExtension(self, res, i):
         return self._at_aff("afftime", res, i)
