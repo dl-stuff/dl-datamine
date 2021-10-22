@@ -1105,6 +1105,9 @@ class AbilityConf(AbilityData):
             cond.append(["base", "in", AbilityConf.TARGET_ACT[target]])
         return cond
 
+    def ac_NO_DAMAGE_REACTION_TIME(self, res):
+        return ["dauntless"]
+
     def ac_BUFFED_SPECIFIC_ID(self, res):
         return ["actcond", int(res["_ConditionValue"])]
 
