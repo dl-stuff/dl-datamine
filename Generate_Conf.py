@@ -10,6 +10,8 @@ from exporter.conf.wp import WpConf
 from exporter.conf.fort import write_fort_passives
 from exporter.conf.common import AuraConf, AbilityConf, ActCondConf, fmt_conf
 
+import exporter.conf.common
+
 
 OUT_DIR = "./out/gen"
 Q_HANDLERS = {
@@ -39,18 +41,20 @@ if __name__ == "__main__":
     start = monotonic()
 
     index = DBViewIndex()
-    index.class_dict["ActionCondition"] = ActCondConf
+    exporter.conf.common.ACTCOND_CONF = index["ActCondConf"]
+    # index.instance_dict["ActionCondition"] = index["ActCondConf"]
+    index.class_dict["PlayerActionHitAttribute"].LINK_ACTCOND = False
 
     if args.k:
         if args.q:
             Q_HANDLERS[args.k](index, args.q)
-            print()
-            fmt_conf(index["ActionCondition"].all_actcond_conf, lim=1)
+            # print()
+            # fmt_conf(index["ActionCondition"].all_actcond_conf, lim=1)
         else:
             ALL_HANDLERS[args.k](index)
     else:
         for handle in ALL_HANDLERS.values():
             handle(index)
-        index["ActionCondition"].export_all_to_folder(out_dir=OUT_DIR)
+        # index["ActionCondition"].export_all_to_folder(out_dir=OUT_DIR)
 
-    print(f"\ntotal: {monotonic()-start:.4f}s")
+    print(f"total: {monotonic()-start:.4f}s")

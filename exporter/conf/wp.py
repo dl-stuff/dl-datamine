@@ -78,7 +78,6 @@ class WpConf(AbilityCrest):
         with open(output, "w", newline="", encoding="utf-8") as fp:
             # json.dump(res, fp, indent=2, ensure_ascii=False)
             fmt_conf(outdata, f=fp)
-            fp.write("\n")
         # print('Skipped:', skipped)
 
         union_conf = {}

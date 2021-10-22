@@ -106,7 +106,6 @@ class BaseConf(WeaponType):
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 # json.dump(res, fp, indent=2, ensure_ascii=False)
                 fmt_conf(res, f=fp)
-                fp.write("\n")
 
 
 class ExAbilityConf(AbilityConf):
@@ -313,8 +312,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     attr["msl"] = dact_conf.get("startup") + attr.get("iv", 0.0) + attr.get("msl", 0.0)
                     servant_attrs[servant_id].append(attr)
         remap_stuff(conf, self.action_ids, servant_attrs=servant_attrs)
-
-        self.unset_ability_and_actcond_meta()
+        self.unset_ability_and_actcond_meta(conf)
 
         return conf
 
@@ -433,7 +431,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                     output = os.path.join(advout_dir, out_name)
                     with open(output, "w", newline="", encoding="utf-8") as fp:
                         fmt_conf(outconf, f=fp)
-                        fp.write("\n")
                 outconf = self.process_result(res)
                 out_name = self.outfile_name(outconf, ext)
                 if ex_res := self.exability_data(res):
@@ -441,7 +438,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                 output = os.path.join(advout_dir, out_name)
                 with open(output, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(outconf, f=fp)
-                    fp.write("\n")
             except Exception as e:
                 print()
                 print(res["_Id"], name, flush=True)
@@ -451,4 +447,3 @@ class AdvConf(CharaData, SkillProcessHelper):
         self.sort_exability_data(exability_data)
         with open(exability_out, "w", newline="") as fp:
             fmt_conf(exability_data, f=fp, lim=3, sortlim=2)
-            fp.write("\n")

@@ -340,6 +340,7 @@ class AuraData(DBView):
 
 
 class PlayerActionHitAttribute(DBView):
+    LINK_ACTCOND = True
     def __init__(self, index):
         super().__init__(index, "PlayerActionHitAttribute")
 
@@ -350,7 +351,8 @@ class PlayerActionHitAttribute(DBView):
                 r["_TargetGroup"] = ActionTargetGroup(r["_TargetGroup"])
             except KeyError:
                 pass
-            self.link(r, "_ActionCondition1", "ActionCondition")
+            if self.LINK_ACTCOND:
+                self.link(r, "_ActionCondition1", "ActionCondition")
             self.link(
                 r,
                 "_DamageUpDataByBuffCount",

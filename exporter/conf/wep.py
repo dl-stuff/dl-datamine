@@ -57,8 +57,8 @@ class WepConf(WeaponBody, SkillProcessHelper):
         self.process_skill(res, conf, {})
 
         remap_stuff(conf, self.action_ids)
+        self.unset_ability_and_actcond_meta(conf)
 
-        self.unset_ability_and_actcond_meta()
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
@@ -76,7 +76,6 @@ class WepConf(WeaponBody, SkillProcessHelper):
             output = os.path.join(out_dir, f"{wt}.json")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(data, f=fp, lim=4)
-                fp.write("\n")
         #     else:
         #         skipped.append(res["_Name"])
         # print('Skipped:', ','.join(skipped))

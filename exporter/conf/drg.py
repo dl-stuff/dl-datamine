@@ -144,12 +144,12 @@ class DrgConf(DragonData, SkillProcessHelper):
 
         if not uniqueshift:
             remap_stuff(conf, self.action_ids)
-            self.unset_ability_and_actcond_meta()
+            self.unset_ability_and_actcond_meta(conf)
         self.index["ActionParts"].animation_reference = None
 
         return conf
 
-    def export_all_to_folder(self, out_dir="./out", ext=".json"):
+    def export_all_to_folder_by_ele(self, out_dir="./out", ext=".json"):
         where_str = "_Rarity = 5 AND _IsPlayable = 1 AND (_SellDewPoint = 8500 OR _Id in (" + ",".join(map(str, DrgConf.EXTRA_DRAGONS)) + ")) AND _Id = _EmblemId"
         # where_str = '_IsPlayable = 1'
         all_res = self.get_all(where=where_str)
@@ -163,11 +163,21 @@ class DrgConf(DragonData, SkillProcessHelper):
             if conf:
                 outdata[conf["d"]["ele"]][snakey(conf["d"]["name"])] = conf
         for ele, data in outdata.items():
-            output = os.path.join(out_dir, f"{ele}.json")
+            output = os.path.join(out_dir, f"{ele}{ext}")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(data, f=fp, lim=3)
-                fp.write("\n")
         # pprint(DrgConf.COMMON_ACTIONS)
+
+    def export_all_to_folder(self, out_dir="./out", ext=".json"):
+        where_str = "_IsPlayable = 1 AND _Id = _EmblemId"
+        all_res = self.get_all(where=where_str)
+        out_dir = os.path.join(out_dir, "drg")
+        check_target_path(out_dir)
+        for res in tqdm(all_res, desc=os.path.basename(out_dir)):
+            if conf := self.process_result(res):
+                outfile = os.path.join(out_dir, snakey(conf["d"]["name"]) + ext)
+                with open(outfile, "w", newline="", encoding="utf-8") as fp:
+                    fmt_conf(conf, f=fp)
 
     def get(self, name, by=None, hitattrshift=False, mlvl=None, uniqueshift=False):
         res = super().get(name, by=by, full_query=False)

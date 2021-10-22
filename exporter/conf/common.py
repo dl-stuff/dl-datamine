@@ -1,14 +1,13 @@
 import re
 import itertools
-import functools
 import json
 import sys
 import os
 from tqdm import tqdm
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 
 from loader.Actions import CommandType
-from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, snakey, check_target_path
+from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
 from exporter.Mappings import ActionTargetGroup, PartConditionType, PartConditionComparisonType, ActionCancelType, AbilityTargetAction, AbilityStat, AbilityCondition, AbilityType, AFFLICTION_TYPES, ELEMENTS, TRIBE_TYPES, WEAPON_TYPES
 
 PART_COMPARISON_TO_VARS = {
@@ -58,12 +57,12 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
         else:
             items = enumerate(data.items())
         for idx, kv in items:
-            k, v = kv
+            key, value = kv
             f.write(INDENT * (depth + 1))
             f.write('"')
-            f.write(str(k))
+            f.write(str(key))
             f.write('": ')
-            res = fmt_conf(v, str(k), depth + 1, f, lim, sortlim)
+            res = fmt_conf(value, str(key), depth + 1, f, lim, sortlim)
             if res is not None:
                 f.write(res)
             if idx < end:
@@ -72,6 +71,8 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
                 f.write("\n")
         f.write(INDENT * depth)
         f.write("}")
+        if k is None:
+            f.write("\n")
 
 
 def fr(num):
@@ -244,21 +245,22 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         attr["fade"] = fr(attenuation)
 
     # attr_tag = None
-    if (actcond := hitattr.get("_ActionCondition1")) and actcond["_Id"] not in once_per_action:
-        once_per_action.add(actcond["_Id"])
+    if (actcond := hitattr.get("_ActionCondition1")) and actcond not in once_per_action:
+        once_per_action.add(actcond)
         # attr_tag = actcond['_Id']
         # if (remove := actcond.get('_RemoveConditionId')):
         #     attr['del'] = remove
-        if actcond.get("_DamageLink"):
-            return convert_hitattr(
-                actcond["_DamageLink"],
-                part,
-                action,
-                once_per_action,
-                meta=meta,
-                skill=skill,
-            )
-        attr["actcond"] = actcond["_Id"]
+        # if actcond.get("_DamageLink"):
+        #     return convert_hitattr(
+        #         actcond["_DamageLink"],
+        #         part,
+        #         action,
+        #         once_per_action,
+        #         meta=meta,
+        #         skill=skill,
+        #     )
+        ACTCOND_CONF.get(actcond)
+        attr["actcond"] = actcond
 
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
@@ -736,17 +738,13 @@ class SkillProcessHelper:
 
     def set_ability_and_actcond_meta(self):
         self.index["AbilityConf"].set_meta(self)
-        try:
-            self.index["ActionCondition"].set_meta(self)
-        except AttributeError:
-            self.index["ActCondConf"].set_meta(self)
+        self.index["ActCondConf"].set_meta(self)
 
-    def unset_ability_and_actcond_meta(self):
+    def unset_ability_and_actcond_meta(self, res):
         self.index["AbilityConf"].set_meta(None)
-        try:
-            self.index["ActionCondition"].set_meta(None)
-        except AttributeError:
-            self.index["ActCondConf"].set_meta(None)
+        if curr_conds := self.index["ActCondConf"].curr_actcond_conf:
+            res["~actconds"] = curr_conds
+        self.index["ActCondConf"].set_meta(None)
 
     def convert_skill(self, sdat, lv):
         if sdat.skill is None:
@@ -808,16 +806,16 @@ class SkillProcessHelper:
                 tsid, tsk = ts
                 if tsid not in self.all_chara_skills:
                     self.chara_skills[tsid] = SDat(tsid, sdat.base, f"phase{idx+1}", tsk, sdat.sid)
-        try:
-            for tbuff in sdat.skill["_TransBuff"]["_Parts"]:
-                if not tbuff.get("_allHitLabels"):
-                    continue
-                for hl_list in tbuff["_allHitLabels"].values():
-                    for hitlabel in hl_list:
-                        if (actcond := hitlabel.get("_ActionCondition1")) and actcond.get("_CurseOfEmptinessInvalid"):
-                            sconf["phase_coei"] = True
-        except KeyError:
-            pass
+        # try:
+        #     for tbuff in sdat.skill["_TransBuff"]["_Parts"]:
+        #         if not tbuff.get("_allHitLabels"):
+        #             continue
+        #         for hl_list in tbuff["_allHitLabels"].values():
+        #             for hitlabel in hl_list:
+        #                 if (actcond := hitlabel.get("_ActionCondition1")) and actcond.get("_CurseOfEmptinessInvalid"):
+        #                     sconf["phase_coei"] = True
+        # except KeyError:
+        #     pass
 
         if isinstance((chainskills := sdat.skill.get("_ChainGroupId")), list):
             for idx, cs in enumerate(chainskills):
@@ -872,7 +870,7 @@ class SkillProcessHelper:
         while self.chara_skills:
             sdat = next(iter(self.chara_skills.values()))
             if sdat.base == "s99":
-                lv = res["_EditSkillLevelNum"]
+                lv = mlvl.get(f's{res["_EditSkillLevelNum"]}')
             else:
                 lv = mlvl.get(sdat.base, 2)
             cskill, action = self.convert_skill(sdat, lv)
@@ -919,7 +917,6 @@ class AuraConf(AuraData):
         output = os.path.join(out_dir, "amp.json")
         with open(output, "w", newline="", encoding="utf-8") as fp:
             fmt_conf(outdata, f=fp)
-            fp.write("\n")
 
 
 class AbilityConf(AbilityData):
@@ -1318,8 +1315,8 @@ class AbilityConf(AbilityData):
                 buffs.append(bid)
         if buffs:
             for bid in buffs:
-                # how silly
-                self.index["ActionCondition"].get(bid)
+                # ik i do have self.index here but i'll keep the oof bits consistent
+                ACTCOND_CONF.get(bid)
             return ["actcond", ActionTargetGroup.MYSELF.name, *buffs]
         else:
             hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART, {}, set())
@@ -1597,9 +1594,15 @@ class ActCondConf(ActionCondition):
         super().__init__(index)
         self.meta = None
         self.all_actcond_conf = {}
+        self._curr_actcond_conf = {}
 
     def set_meta(self, meta):
         self.meta = meta
+        self._curr_actcond_conf = {}
+
+    @property
+    def curr_actcond_conf(self):
+        return dict(sorted(self._curr_actcond_conf.items()))
 
     def _process_metadata(self, conf, res):
         # no clue: _UnifiedManagement/_DebuffCategory/_RemoveDebuffCategory
@@ -1856,6 +1859,9 @@ class ActCondConf(ActionCondition):
             target = AbilityTargetAction(action_grant["_TargetAction"])
             conf["actgrant"] = [action_grant["_GrantCondition"], f"-t:{AbilityConf.TARGET_ACT[target]}"]
 
+        if res["_DamageLink"]:
+            conf["damagelink"] = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res["_DamageLink"]), DUMMY_PART, {}, set())
+
         if res["_AutoAvoid"]:
             conf["avoid"] = res["_AutoAvoid"]
 
@@ -1921,7 +1927,7 @@ class ActCondConf(ActionCondition):
         if maybe_debuff and not maybe_buff:
             conf["debuff"] = 1
 
-    def process_result(self, res, retconf=False):
+    def process_result(self, res):
         actcond_id = res["_Id"]
         if actcond_id not in self.all_actcond_conf:
             conf = {}
@@ -1931,10 +1937,12 @@ class ActCondConf(ActionCondition):
             for k, v in conf.items():
                 if isinstance(v, float):
                     conf[k] = fr(v)
-        if retconf:
-            return conf
-        else:
-            return super().process_result(res)
+        self._curr_actcond_conf[actcond_id] = self.all_actcond_conf[actcond_id]
+        return self.all_actcond_conf[actcond_id]
+        # if retconf:
+        #     return conf
+        # else:
+        #     return super().process_result(res)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         check_target_path(out_dir)
@@ -1943,7 +1951,6 @@ class ActCondConf(ActionCondition):
             print("found", len(self.all_actcond_conf), "actconds")
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(self.all_actcond_conf, f=fp, lim=1)
-                fp.write("\n")
         else:
             all_res = self.get_all()
             outdata = {}
@@ -1955,4 +1962,7 @@ class ActCondConf(ActionCondition):
                     not_parsed.append(f'[{res["_Id"]}] {res["_Text"]}'.strip())
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 fmt_conf(outdata, f=fp, lim=1)
-                fp.write("\n")
+
+
+# my sadness very big
+ACTCOND_CONF = None
