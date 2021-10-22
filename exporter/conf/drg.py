@@ -6,7 +6,7 @@ from exporter.Shared import snakey
 from exporter.Dragons import DragonData
 from exporter.Mappings import ELEMENTS
 
-from exporter.conf.common import SkillProcessHelper, convert_all_hitattr, convert_fs, convert_x, hit_sr, hitattr_adj, remap_stuff, check_target_path, fmt_conf
+from exporter.conf.common import SDat, SkillProcessHelper, convert_all_hitattr, convert_fs, convert_x, hit_sr, hitattr_adj, remap_stuff, check_target_path, fmt_conf
 
 
 class DrgConf(DragonData, SkillProcessHelper):
@@ -26,10 +26,10 @@ class DrgConf(DragonData, SkillProcessHelper):
         "dshift": 0.69444,
     }
 
-    def convert_skill(self, k, seq, skill, lv):
-        conf, k, action = super().convert_skill(k, seq, skill, lv)
-        conf["sp_db"] = skill.get("_SpLv2Dragon", 45)
-        conf["uses"] = skill.get("_MaxUseNum", 1)
+    def convert_skill(self, sdat, lv):
+        conf, action = super().convert_skill(sdat, lv)
+        conf["sp_db"] = sdat.skill.get("_SpLv2Dragon", 45)
+        conf["uses"] = sdat.skill.get("_MaxUseNum", 1)
         if self.hitattrshift:
             del conf["attr"]
             hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
@@ -41,7 +41,7 @@ class DrgConf(DragonData, SkillProcessHelper):
                 conf["attr"] = attr
             except KeyError:
                 pass
-        return conf, k, action
+        return conf, action
 
     def process_result(self, res, hitattrshift=False, mlvl=None, uniqueshift=False):
         self.reset_meta()
@@ -73,7 +73,18 @@ class DrgConf(DragonData, SkillProcessHelper):
             }
             conf["d"]["abilities"] = ablist
 
+        for base, key in (
+            ("ds1", "_Skill1"),
+            ("ds2", "_Skill2"),
+        ):
+            if not (dsid := res.get(key)):
+                continue
+            self.chara_skills[dsid] = SDat(dsid, base, None)
+        if (dsfinal := res.get("_SkillFinalAttack")) and dsfinal not in self.chara_skills:
+            self.chara_skills[dsfinal] = SDat(dsfinal, "ds99", None)
+
         super().process_result(res)
+        self.set_animation_reference(res)
         # if skipped:
         #     conf['d']['skipped'] = skipped
 
@@ -126,27 +137,15 @@ class DrgConf(DragonData, SkillProcessHelper):
             if hitattrshift:
                 hitattr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
 
-        for act, seq, key in (
-            ("ds1", 1, "_Skill1"),
-            ("ds2", 2, "_Skill2"),
-        ):
-            if not (dskill := res.get(key)):
-                continue
-            self.chara_skills[dskill["_Id"]] = (act, seq, dskill, None)
-        dsfinal = res.get("_SkillFinalAttack")
-        dsfinal_act = None
-        if dsfinal:
-            dsfinal_act = self.chara_skills.get(dsfinal["_Id"], (None,))[0]
-            if dsfinal and not dsfinal_act:
-                self.chara_skills[dsfinal["_Id"]] = ("ds99", 99, dsfinal, None)
+        self.process_skill(res, conf, mlvl or {"ds1": 2, "ds2": 2})
 
-        self.process_skill(res, conf, mlvl or {1: 2, 2: 2})
-        if dsfinal_act:
-            conf[dsfinal_act]["final"] = True
+        if sdatfinal := self.all_chara_skills.get(dsfinal):
+            conf[sdatfinal.name]["final"] = True
 
         if not uniqueshift:
             remap_stuff(conf, self.action_ids)
             self.unset_ability_and_actcond_meta()
+        self.index["ActionParts"].animation_reference = None
 
         return conf
 

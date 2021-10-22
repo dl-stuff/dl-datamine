@@ -6,7 +6,7 @@ from exporter.Weapons import WeaponBody
 from exporter.Shared import snakey
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
-from exporter.conf.common import SkillProcessHelper, remap_stuff, fmt_conf
+from exporter.conf.common import SDat, SkillProcessHelper, remap_stuff, fmt_conf
 
 
 class WepConf(WeaponBody, SkillProcessHelper):
@@ -22,14 +22,14 @@ class WepConf(WeaponBody, SkillProcessHelper):
                     ablist.extend(ability)
                 break
 
-        super().process_result(res)
+        self.link(res, "_WeaponSkinId", "WeaponSkin")
         skin = res["_WeaponSkinId"]
         tier = res.get("_MaxLimitOverCount", 0) + 1
         try:
-            ele_type = res["_ElementalType"].lower()
-        except AttributeError:
+            ele_type = ELEMENTS.get(res["_ElementalType"], res["_ElementalType"]).lower()
+        except (AttributeError, TypeError):
             ele_type = "any"
-
+        self.link(res, "_WeaponSeriesId", "WeaponBodyGroupSeries")
         conf = {
             "w": {
                 "name": res["_Name"],
@@ -37,7 +37,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
                 "att": res.get(f"_MaxAtk{tier}", 0),
                 "hp": res.get(f"_MaxHp{tier}", 0),
                 "ele": ele_type,
-                "wt": res["_WeaponType"].lower(),
+                "wt": WEAPON_TYPES[res["_WeaponType"]].lower(),
                 "series": res["_WeaponSeriesId"]["_GroupSeriesName"].replace(" Weapons", ""),
                 # 'crest': {
                 #     5: res.get('_CrestSlotType1MaxCount', 0),
@@ -49,14 +49,11 @@ class WepConf(WeaponBody, SkillProcessHelper):
             }
         }
 
-        dupe_skill = {}
-        for act, seq, key in (("s3", 3, f"_ChangeSkillId3"),):
-            if not (skill := res.get(key)):
+        for base, group, key in (("s3", None, "_ChangeSkillId3"),):
+            if not (sid := res.get(key)):
                 continue
-            if skill["_Id"] in self.chara_skills:
-                dupe_skill[act] = self.chara_skills[skill["_Id"]][0]
-            else:
-                self.chara_skills[skill["_Id"]] = (act, seq, skill, None)
+            self.chara_skills[sid] = SDat(sid, base, group)
+
         self.process_skill(res, conf, {})
 
         remap_stuff(conf, self.action_ids)

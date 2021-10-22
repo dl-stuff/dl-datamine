@@ -44,6 +44,8 @@ if __name__ == "__main__":
     if args.k:
         if args.q:
             Q_HANDLERS[args.k](index, args.q)
+            print()
+            fmt_conf(index["ActionCondition"].all_actcond_conf, lim=1)
         else:
             ALL_HANDLERS[args.k](index)
     else:
@@ -51,4 +53,4 @@ if __name__ == "__main__":
             handle(index)
         index["ActionCondition"].export_all_to_folder(out_dir=OUT_DIR)
 
-    print(f"total: {monotonic()-start:.4f}s")
+    print(f"\ntotal: {monotonic()-start:.4f}s")

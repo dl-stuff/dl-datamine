@@ -84,14 +84,9 @@ class WeaponBody(DBView):
                     ab_ids.add(res[key])
                     res[key] = self.index["AbilityData"].get(res[key], full_query=True)
         for skin in WeaponBody.WEAPON_SKINS:
-            if res.get(skin):
-                res[skin] = self.index["WeaponSkin"].get(res[skin])
+            self.link(res, skin, "WeaponSkin")
         self.index["ActionParts"].animation_reference = None
         return res
-
-    def get(self, pk, fields=None, full_query=True):
-        res = super().get(pk, fields=fields)
-        return self.process_result(res, full_query)
 
     @staticmethod
     def outfile_name(res, ext=".json"):

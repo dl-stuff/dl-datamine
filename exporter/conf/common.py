@@ -1,5 +1,6 @@
 import re
 import itertools
+import functools
 import json
 import sys
 import os
@@ -697,6 +698,19 @@ def remap_stuff(conf, action_ids, servant_attrs=None, parent_key=None, fullconf=
             remap_stuff(subvalue, action_ids, servant_attrs=servant_attrs, parent_key=key, fullconf=fullconf)
 
 
+class SDat:
+    def __init__(self, sid, base, group, skill=None, from_sid=None) -> None:
+        self.sid = sid
+        self.base = base
+        self.group = group
+        if self.group is None:
+            self.name = self.base
+        else:
+            self.name = f"{self.base}_{self.group}"
+        self.skill = skill
+        self.from_sid = from_sid
+
+
 class SkillProcessHelper:
     MISSING_ENDLAG = []
 
@@ -722,7 +736,6 @@ class SkillProcessHelper:
 
     def set_ability_and_actcond_meta(self):
         self.index["AbilityConf"].set_meta(self)
-        self.index["ActCondConf"].set_meta(self)
         try:
             self.index["ActionCondition"].set_meta(self)
         except AttributeError:
@@ -735,22 +748,24 @@ class SkillProcessHelper:
         except AttributeError:
             self.index["ActCondConf"].set_meta(None)
 
-    def convert_skill(self, k, seq, skill, lv):
+    def convert_skill(self, sdat, lv):
+        if sdat.skill is None:
+            sdat.skill = self.index["SkillData"].get(sdat.sid)
         action = 0
-        if lv >= skill.get("_AdvancedSkillLv1", float("inf")):
+        if lv >= sdat.skill.get("_AdvancedSkillLv1", float("inf")):
             skey_pattern = "_AdvancedActionId{}"
-            action = skill.get(skey_pattern.format(1))
+            action = sdat.skill.get(skey_pattern.format(1))
         if isinstance(action, int):
             skey_pattern = "_ActionId{}"
-            action = skill.get("_ActionId1")
+            action = sdat.skill.get("_ActionId1")
 
         startup, recovery, followed_by = hit_sr(action, startup=0)
 
         if not recovery:
-            SkillProcessHelper.MISSING_ENDLAG.append(skill.get("_Name"))
+            SkillProcessHelper.MISSING_ENDLAG.append(sdat.skill.get("_Name"))
 
         sconf = {
-            "sp": skill.get(f"_SpLv{lv}", skill.get("_Sp", 0)),
+            "sp": sdat.skill.get(f"_SpLv{lv}", sdat.skill.get("_Sp", 0)),
             "startup": startup,
             "recovery": recovery,
         }
@@ -763,11 +778,11 @@ class SkillProcessHelper:
             skip_nohitattr=False,
             pattern=hitlabel_pattern,
             meta=self,
-            skill=skill,
+            skill=sdat.skill,
         )
         hitattrs = sconf.get("attr")
-        if (not hitattrs or all(["dmg" not in attr for attr in hitattrs if isinstance(attr, dict)])) and skill.get(f"_IsAffectedByTensionLv{lv}"):
-            sconf["energizable"] = bool(skill[f"_IsAffectedByTensionLv{lv}"])
+        if (not hitattrs or all(["dmg" not in attr for attr in hitattrs if isinstance(attr, dict)])) and sdat.skill.get(f"_IsAffectedByTensionLv{lv}"):
+            sconf["energizable"] = bool(sdat.skill[f"_IsAffectedByTensionLv{lv}"])
 
         interrupt, cancel = convert_following_actions(0, followed_by)
         if interrupt:
@@ -776,7 +791,7 @@ class SkillProcessHelper:
             sconf["cancel"] = cancel
 
         for idx in range(2, 5):
-            if rng_actions := skill.get(skey_pattern.format(idx)):
+            if rng_actions := sdat.skill.get(skey_pattern.format(idx)):
                 hitattr_adj(
                     rng_actions,
                     sconf["startup"],
@@ -784,23 +799,17 @@ class SkillProcessHelper:
                     skip_nohitattr=False,
                     pattern=hitlabel_pattern,
                     meta=self,
-                    skill=skill,
+                    skill=sdat.skill,
                     attr_key=f"DEBUG_attr_R{idx}",
                 )
 
-        if isinstance((transkills := skill.get("_TransSkill")), dict):
+        if isinstance((transkills := sdat.skill.get("_TransSkill")), dict):
             for idx, ts in enumerate(transkills.items()):
                 tsid, tsk = ts
                 if tsid not in self.all_chara_skills:
-                    self.chara_skills[tsid] = (
-                        f"{k}_phase{idx+1}",
-                        seq,
-                        tsk,
-                        skill.get("_Id"),
-                    )
-            k = f"{k}_phase1"
+                    self.chara_skills[tsid] = SDat(tsid, sdat.base, f"phase{idx+1}", tsk, sdat.sid)
         try:
-            for tbuff in skill["_TransBuff"]["_Parts"]:
+            for tbuff in sdat.skill["_TransBuff"]["_Parts"]:
                 if not tbuff.get("_allHitLabels"):
                     continue
                 for hl_list in tbuff["_allHitLabels"].values():
@@ -810,46 +819,35 @@ class SkillProcessHelper:
         except KeyError:
             pass
 
-        if isinstance((chainskills := skill.get("_ChainGroupId")), list):
+        if isinstance((chainskills := sdat.skill.get("_ChainGroupId")), list):
             for idx, cs in enumerate(chainskills):
                 cskill = cs["_Skill"]
                 activate = cs.get("_ActivateCondition", 0)
                 if cskill["_Id"] not in self.all_chara_skills:
-                    self.chara_skills[cskill["_Id"]] = (
-                        f"s{seq}_chain{activate}",
-                        seq,
-                        cskill,
-                        skill.get("_Id"),
-                    )
+                    self.chara_skills[cskill["_Id"]] = SDat(cskill["_Id"], sdat.base, f"chain{activate}", cskill, sdat.sid)
 
-        if isinstance((ocskill := skill.get("_OverChargeSkillId")), dict):
+        if isinstance((ocskill := sdat.skill.get("_OverChargeSkillId")), dict):
             n = 1
-            prev_sid = skill.get("_Id")
+            prev_sid = sdat.skill.get("_Id")
             prev_entry = None
             while prev_sid in self.chara_skills:
                 prev_entry = self.chara_skills[prev_sid]
-                if not "_overcharge" in prev_entry[0]:
+                if prev_entry.group is None or not prev_entry.group.startswith("overcharge"):
                     break
                 n += 1
-                prev_sid = prev_entry[3]
-            base = k.split("_", 1)[0]
-            self.chara_skills[ocskill["_Id"]] = (
-                f"{base}_overcharge{n}",
-                seq,
-                ocskill,
-                skill.get("_Id"),
-            )
+                prev_sid = prev_entry.from_sid
+            self.chara_skills[ocskill["_Id"]] = SDat(ocskill["_Id"], sdat.base, f"overcharge{n}", ocskill, sdat.sid)
 
         # if ab := skill.get(f"_Ability{lv}"):
         #     self.parse_skill_ab(k, seq, skill, action, sconf, ab)
 
-        if ab := skill.get(f"_Ability{lv}"):
+        if ab := sdat.skill.get(f"_Ability{lv}"):
             # jank
             if isinstance(ab, dict):
                 ab = ab["_Id"]
             sconf["abilities"] = self.index["AbilityConf"].get(ab, source="abilities")
 
-        return sconf, k, action
+        return sconf, action
 
     def convert_alt_actions(self, conf):
         for act, actdata in self.alt_actions:
@@ -872,16 +870,16 @@ class SkillProcessHelper:
     def process_skill(self, res, conf, mlvl):
         # exceptions exist
         while self.chara_skills:
-            k, seq, skill, prev_id = next(iter(self.chara_skills.values()))
-            if seq == 99:
-                lv = mlvl[res["_EditSkillLevelNum"]]
+            sdat = next(iter(self.chara_skills.values()))
+            if sdat.base == "s99":
+                lv = res["_EditSkillLevelNum"]
             else:
-                lv = mlvl.get(seq, 2)
-            cskill, k, action = self.convert_skill(k, seq, skill, lv)
-            conf[k] = cskill
-            self.action_ids[action.get("_Id")] = k
-            self.all_chara_skills[skill.get("_Id")] = (k, seq, skill, prev_id)
-            del self.chara_skills[skill.get("_Id")]
+                lv = mlvl.get(sdat.base, 2)
+            cskill, action = self.convert_skill(sdat, lv)
+            conf[sdat.name] = cskill
+            self.action_ids[action.get("_Id")] = sdat.name
+            self.all_chara_skills[sdat.sid] = sdat
+            del self.chara_skills[sdat.sid]
 
         for efs, eba in self.enhanced_fs.values():
             for fs, fsc in convert_fs(eba, eba.get("_BurstMarkerId")).items():
@@ -1163,10 +1161,10 @@ class AbilityConf(AbilityData):
 
     def ac_REQUIRED_BUFF_AND_SP1_MORE(self, res):
         # all examples of these have _ConditionValue=-1.0
-        return ["actcond", int(res["_RequiredBuff"])]
+        return ["sp", "s1", ">", int(res["_ConditionValue"])]
 
     def ac_ALWAYS_REACTION_TIME(self, res):
-        return ["timer", -1]
+        return ["repeating"]
 
     def ac_ON_ABNORMAL_STATUS_RESISTED(self, res):
         return ["antiaff", AFFLICTION_TYPES.get(int(res["_ConditionValue"])).lower()]
@@ -1325,8 +1323,8 @@ class AbilityConf(AbilityData):
             return ["actcond", ActionTargetGroup.MYSELF.name, *buffs]
         else:
             hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART, {}, set())
-            if set(hitattr.keys()) == {"actcond", "target"}:
-                return ["actcond", hitattr["target"], hitattr["actcond"]]
+            # if set(hitattr.keys()) == {"actcond", "target"}:
+            #     return ["actcond", hitattr["target"], hitattr["actcond"]]
             return ["hitattr", hitattr]
 
     def at_DebuffGrantUp(self, res, i):
@@ -1386,17 +1384,16 @@ class AbilityConf(AbilityData):
                         self.enhanced_key = self.meta.get_enhanced_key()
                     ekey = self.enhanced_key
                     sn = f"s{seq}_{ekey}"
-                skill_data = self.index["SkillData"].get(skill_id)
-                self.meta.chara_skills[skill_id] = (sn, seq, skill_data, None)
+                self.meta.chara_skills[skill_id] = SDat(skill_id, sn, ekey)
             else:
                 if res["_ConditionType"] is None:
                     ekey = None
                 else:
                     try:
-                        parts = self.meta.chara_skills[skill_id][0].split("_")
+                        sdat = self.meta.chara_skills[skill_id]
                     except KeyError:
-                        parts = self.meta.all_chara_skills[skill_id][0].split("_")
-                    ekey = "default" if len(parts) == 1 else parts[1]
+                        sdat = self.meta.all_chara_skills[skill_id]
+                    ekey = sdat.group or "default"
             if ekey is None:
                 return None
             return ["altskill", ekey]
@@ -1498,8 +1495,8 @@ class AbilityConf(AbilityData):
             for key in list(hitattr):
                 if key.startswith("DEBUG_"):
                     del hitattr[key]
-            if set(hitattr.keys()) == {"actcond", "target"}:
-                return ["actcond", hitattr["target"], hitattr["actcond"]]
+            # if set(hitattr.keys()) == {"actcond", "target"}:
+            #     return ["actcond", hitattr["target"], hitattr["actcond"]]
             return ["hitattr", hitattr]
         return None
 
@@ -1544,6 +1541,9 @@ class AbilityConf(AbilityData):
         except AttributeError:
             condtype = None
         res["_ConditionType"] = condtype
+        # actcond
+        if reqac := res.get("_RequiredBuff"):
+            conf["actcond"] = reqac
         # cd
         if cd := res.get("_CoolTime"):
             conf["cd"] = cd
@@ -1882,14 +1882,15 @@ class ActCondConf(ActionCondition):
                 if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
                     if ekey is None:
                         ekey = self.meta.get_enhanced_key()
-                    self.meta.chara_skills[esid] = (f"{sn}_{ekey}", 1, self.index["SkillData"].get(res[skey]), esid)
+                    self.meta.chara_skills[esid] = SDat(esid, sn, ekey)
                     alt[sn] = ekey
                 else:
                     try:
-                        parts = self.meta.chara_skills[esid][0].split("_")
+                        sdat = self.meta.chara_skills[esid]
                     except KeyError:
-                        parts = self.meta.all_chara_skills[esid][0].split("_")
-                    alt[sn] = "default" if len(parts) == 1 else parts[1]
+                        sdat = self.meta.all_chara_skills[esid]
+                    ekey = sdat.group or "default"
+
         if alt:
             conf["alt"] = alt
 

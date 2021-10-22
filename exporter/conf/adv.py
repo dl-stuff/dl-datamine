@@ -10,7 +10,7 @@ from exporter.Adventurers import CharaData
 from exporter.Shared import snakey
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
-from exporter.conf.common import SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_misc, convert_all_hitattr, fr, fmt_conf, remap_stuff
+from exporter.conf.common import SDat, SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_misc, convert_all_hitattr, fr, fmt_conf, remap_stuff
 
 
 class BaseConf(WeaponType):
@@ -181,14 +181,13 @@ class AdvConf(CharaData, SkillProcessHelper):
                 self.action_ids[burst["_Id"]] = "fs"
 
         if conf["c"]["spiral"]:
-            mlvl = {1: 4, 2: 3}
+            mlvl = {"s1": 4, "s2": 3}
         else:
-            mlvl = {1: 3, 2: 2}
+            mlvl = {"s1": 3, "s2": 2}
 
         for s in (1, 2):
-            if sdata := res.get(f"_Skill{s}"):
-                skill = self.index["SkillData"].get(sdata, full_query=True)
-                self.chara_skills[sdata] = (f"s{s}", s, skill, None)
+            if sid := res.get(f"_Skill{s}"):
+                self.chara_skills[sid] = SDat(sid, f"s{s}", None)
 
         ablist = []
         for i in (1, 2, 3):
@@ -209,7 +208,11 @@ class AdvConf(CharaData, SkillProcessHelper):
 
         if udrg := res.get("_UniqueDragonId"):
             udform_key = "dservant" if self.utp_chara and self.utp_chara[0] == 2 else "dragonform"
-            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", uniqueshift=True, hitattrshift=self.hitattrshift, mlvl=mlvl if res.get("_IsConvertDragonSkillLevel") else None)
+            if res.get("_IsConvertDragonSkillLevel"):
+                dmlvl = {"ds1": mlvl["s1"], "ds2": mlvl["s2"]}
+            else:
+                dmlvl = None
+            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", uniqueshift=True, hitattrshift=self.hitattrshift, mlvl=dmlvl)
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
             self.set_animation_reference(res)
@@ -240,12 +243,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                                 mode_name = f"_mode{m}"
                 for s in (1, 2):
                     if skill := mode.get(f"_Skill{s}Id"):
-                        self.chara_skills[skill.get("_Id")] = (
-                            f"s{s}{mode_name}",
-                            s,
-                            skill,
-                            None,
-                        )
+                        self.chara_skills[skill["_Id"]] = SDat(skill["_Id"], f"s{s}", mode_name.strip("_") or None, skill)
                 if (burst := mode.get("_BurstAttackId")) and base_mode_burst != burst["_Id"]:
                     marker = burst.get("_BurstMarkerId")
                     if not marker:
@@ -282,17 +280,9 @@ class AdvConf(CharaData, SkillProcessHelper):
         except KeyError:
             pass
 
-        # self.abilities = self.last_abilities(res, as_mapping=True)
-        # pprint(self.abilities)
-        # for k, seq, skill in self.chara_skills.values():
-
         if edit := res.get("_EditSkillId"):
             if edit not in self.chara_skills:
-                skill = self.index["SkillData"].get(edit, full_query=True)
-                self.chara_skills[edit] = (f"s99", 99, skill, None)
-                res["_EditSkillId"] = skill
-            else:
-                res["_EditSkillId"] = self.chara_skills[edit][2]
+                self.chara_skills[edit] = SDat(edit, "s99", None)
 
         self.process_skill(res, conf, mlvl)
 
@@ -356,10 +346,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                 ss_conf["mod_att"] = modifiers["_StrengthOffset"]
             if modifiers["_BuffDebuffOffset"] != 1:
                 ss_conf["mod_buff"] = modifiers["_BuffDebuffOffset"]
-        if res.get("_EditSkillCost", 0) > 0 and (skill := res.get("_EditSkillId")):
-            # skill = self.index["SkillData"].get(res["_EditSkillId"])
-            # ss_conf["s"] = self.
-            ss_conf["src"] = self.all_chara_skills[skill["_Id"]][0]
+        if res.get("_EditSkillCost", 0) > 0 and (edit := res.get("_EditSkillId")):
+            sdat = self.all_chara_skills[edit]
+            ss_conf["src"] = sdat.base
             ss_conf["cost"] = res["_EditSkillCost"]
             if res["_MaxLimitBreakCount"] >= 5:
                 sp_lv = 4
@@ -367,8 +356,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 sp_lv = 3
             if res["_EditSkillLevelNum"] == 2:
                 sp_lv -= 1
-            # ss_conf["type"] = skill["_SkillType"]
-            ss_conf["sp"] = skill[f"_SpLv{sp_lv}Edit"]
+            ss_conf["sp"] = sdat.skill[f"_SpLv{sp_lv}Edit"]
         return ss_conf
 
     def exability_data(self, res):
@@ -455,6 +443,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     fmt_conf(outconf, f=fp)
                     fp.write("\n")
             except Exception as e:
+                print()
                 print(res["_Id"], name, flush=True)
                 raise e
         # if AdvConf.MISSING_ENDLAG:

@@ -71,7 +71,7 @@ class ActionCondition(DBView):
             self.seen_skills = set()
         return res
 
-    def get(self, pk, by=None, fields=None, where=None, order=None, mode=..., expand_one=True, full_query=True, **kwargs):
+    def get(self, pk, by=None, fields=None, where=None, order=None, mode=None, expand_one=True, full_query=True, **kwargs):
         return super().get(pk, by=by, fields=fields, where=where, order=order, mode=mode, expand_one=expand_one, full_query=full_query, **kwargs)
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
