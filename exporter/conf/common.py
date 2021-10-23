@@ -1345,6 +1345,7 @@ class AbilityConf(AbilityData):
     def at_ActionGrant(self, res, i):
         action_grant = self.index["ActionGrant"].get(self._varid_a(res, i), full_query=False)
         res[f"_TargetAction{i}"] = action_grant["_TargetAction"]
+        ACTCOND_CONF.get(action_grant["_GrantCondition"])
         return ["actgrant", action_grant["_GrantCondition"]]
 
     def at_CriticalDamageUp(self, res, i):
@@ -1860,6 +1861,7 @@ class ActCondConf(ActionCondition):
         if res["_GrantSkill"]:
             action_grant = self.index["ActionGrant"].get(res["_GrantSkill"], full_query=False)
             target = AbilityTargetAction(action_grant["_TargetAction"])
+            ACTCOND_CONF.get(action_grant["_GrantCondition"])
             conf["actgrant"] = [action_grant["_GrantCondition"], f"-t:{AbilityConf.TARGET_ACT[target]}"]
 
         if res["_DamageLink"]:
