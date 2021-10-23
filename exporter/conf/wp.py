@@ -6,7 +6,7 @@ from loader.Database import check_target_path
 from exporter.Shared import snakey
 from exporter.Wyrmprints import AbilityCrest
 
-from exporter.conf.common import fmt_conf
+from exporter.conf.common import ACTCOND_CONF, fmt_conf, fr
 
 
 # CREATE TABLE UnionAbility (_Id INTEGER PRIMARY KEY,_Name TEXT,_IconEffect TEXT,_SortId INTEGER,_CrestGroup1Count1 INTEGER,_AbilityId1 INTEGER,_PartyPower1 INTEGER,_CrestGroup1Count2 INTEGER,_AbilityId2 INTEGER,_PartyPower2 INTEGER,_CrestGroup1Count3 INTEGER,_AbilityId3 INTEGER,_PartyPower3 INTEGER,_CrestGroup1Count4 INTEGER,_AbilityId4 INTEGER,_PartyPower4 INTEGER,_CrestGroup1Count5 INTEGER,_AbilityId5 INTEGER,_PartyPower5 INTEGER)
@@ -80,13 +80,33 @@ class WpConf(AbilityCrest):
             fmt_conf(outdata, f=fp)
         # print('Skipped:', skipped)
 
+        # union conf
         union_conf = {}
-        for res in tqdm(union_abilities, desc="wp"):
-            union_tiers = {}
+        for res in union_abilities:
+            union_tiers = []
             for i in range(1, 6):
                 if (abid := res.get(f"_AbilityId{i}")) and (ability := self.index["AbilityConf"].get(abid, source="union")):
-                    union_tiers[res[f"_CrestGroup1Count{i}"]] = ability
+                    union_tiers.append((res[f"_CrestGroup1Count{i}"], ability))
             union_conf[res["_Id"]] = union_tiers
+        # with open(os.path.join(out_dir, "union.json"), "w", newline="", encoding="utf-8") as fp:
+        #     # json.dump(res, fp, indent=2, ensure_ascii=False)
+        #     fmt_conf(union_conf, f=fp, sortlim=0)
+
+        # ability limited group
+        lim_groups = {}
+        for res in self.index["AbilityLimitedGroup"].get_all():
+            if (mix := res.get("_IsEffectMix", 0)) or (max := res.get("_MaxLimitedValue", 0)):
+                # bolb
+                if max > 3:
+                    max /= 100
+                else:
+                    max = int(max)
+                lim_groups[f"-lg:{res['_Id']}"] = {"mix": mix, "max": max}
+
+        wp_meta = {"union": union_conf, "lim_groups": lim_groups, "actconds": self.index["ActCondConf"].curr_actcond_conf}
+        with open(os.path.join(out_dir, "wp_meta.json"), "w", newline="", encoding="utf-8") as fp:
+            # json.dump(res, fp, indent=2, ensure_ascii=False)
+            fmt_conf(wp_meta, f=fp, lim=2, sortlim=1)
 
     def get(self, name):
         res = super().get(name, full_query=False)

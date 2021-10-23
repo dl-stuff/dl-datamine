@@ -62,7 +62,7 @@ class AbilityCrest(DBView):
                     res[k] = self.index["AbilityData"].get(res[k], full_query=True)
         if uab := res.get("_UnionAbilityGroupId"):
             res["_UnionAbilityGroupId"] = self.index["UnionAbility"].get(uab)
-        if (trade_data := self.index["AbilityCrestTrade"].get(res["_Id"], by="_AbilityCrestId")) :
+        if trade_data := self.index["AbilityCrestTrade"].get(res["_Id"], by="_AbilityCrestId"):
             res["_TradeData"] = trade_data
         return res
 

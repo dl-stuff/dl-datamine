@@ -743,7 +743,7 @@ class SkillProcessHelper:
     def unset_ability_and_actcond_meta(self, res):
         self.index["AbilityConf"].set_meta(None)
         if curr_conds := self.index["ActCondConf"].curr_actcond_conf:
-            res["~actconds"] = curr_conds
+            res["actconds"] = curr_conds
         self.index["ActCondConf"].set_meta(None)
 
     def convert_skill(self, sdat, lv):
@@ -935,7 +935,7 @@ class AbilityConf(AbilityData):
         AbilityTargetAction.HUMAN_SKILL_3: "s3",
         AbilityTargetAction.HUMAN_SKILL_4: "s4",
     }
-    ABL_GROUPS = {}
+    # ABL_GROUPS = {}
 
     def __init__(self, index):
         super().__init__(index)
@@ -943,8 +943,8 @@ class AbilityConf(AbilityData):
         self.source = None
         self.enhanced_key = None
         self.use_ablim_groups = False
-        if not self.ABL_GROUPS:
-            self.ABL_GROUPS = {r["_Id"]: r for r in self.index["AbilityLimitedGroup"].get_all()}
+        # if not self.ABL_GROUPS:
+        #     self.ABL_GROUPS = {r["_Id"]: r for r in self.index["AbilityLimitedGroup"].get_all()}
 
     def set_meta(self, meta, use_ablim_groups=False):
         self.meta = meta
@@ -1573,8 +1573,8 @@ class AbilityConf(AbilityData):
                         target = AbilityTargetAction(res.get(f"_TargetAction{i}", 0))
                         if target != AbilityTargetAction.NONE:
                             ab.append(f"-t:{AbilityConf.TARGET_ACT[target]}")
-                        if self.use_ablim_groups and (lim_group := self.ABL_GROUPS.get(res[f"_AbilityLimitedGroupId{i}"])):
-                            idx = lim_group.get("_Id")
+                        if self.use_ablim_groups and res[f"_AbilityLimitedGroupId{i}"]:
+                            idx = res[f"_AbilityLimitedGroupId{i}"]
                             # mix = lim_group.get("_IsEffectMix", 0)
                             # mlim = int(lim_group.get("_MaxLimitedValue", 0))
                             if id:
@@ -1621,7 +1621,7 @@ class ActCondConf(ActionCondition):
         if res["_Text"]:
             text = res["_Text"]
             if "mods" in conf and "{0:P0}" in text:
-                text = text.replace("{0:P0}", f'{conf["mods"][0][0]:.0%}')
+                text = text.replace("{0:P0}", f'{abs(conf["mods"][0][0]):.0%}')
             conf["text"] = text
         if flag >> 1 & 1:  # NoCount = 2
             conf["hide"] = 1
