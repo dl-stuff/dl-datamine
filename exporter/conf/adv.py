@@ -116,10 +116,11 @@ class ExAbilityConf(AbilityConf):
         self.use_ablim_groups = False
 
     def process_result(self, res, source=None):
-        conf = {"category": res["_Category"]}
         if conflist := super().process_result(res, source=source):
-            conf.update(conflist[0])
-        return conf
+            for idx, cf in enumerate(conflist):
+                conflist[idx] = {"category": res["_Category"], **cf}
+            return conflist
+        return [{"category": res["_Category"]}]
 
 
 class AdvConf(CharaData, SkillProcessHelper):
@@ -357,57 +358,23 @@ class AdvConf(CharaData, SkillProcessHelper):
             ss_conf["sp"] = sdat.skill[f"_SpLv{sp_lv}Edit"]
         return ss_conf
 
-    def exability_data(self, res):
-        ex_ab = self.index["ExAbilityConf"].get(res["_ExAbilityData5"], source="coab")
-        chain_ab = self.index["AbilityConf"].get(res.get("_ExAbility2Data5"), source="chain")
-        entry = {
-            "ex": ex_ab,
-            "chain": chain_ab,
+    def process_exability_data(self, exability_data):
+        self.set_ability_and_actcond_meta()
+        exability_conf = {
+            "actconds": {},
+            "coab": {},
+            "chain": {},
+            "lookup": {},
         }
-        return entry
-
-    def sort_exability_data(self, exability_data):
-        ex_by_ele = defaultdict(set)
-        ex_by_category = {}
-        catagorized_names = defaultdict(set)
-        all_ele_chains = {}
-        for ele, exabs in exability_data.items():
-            for name, entry in exabs.items():
-                cat = entry["ex"]["category"]
-                ex_by_ele[ele].add(cat)
-                if cat not in ex_by_category:
-                    ex_by_category[cat] = {"ex": entry["ex"], "chain": None}
-                else:
-                    existing_ex = ex_by_category[cat]["ex"]
-                    new_ex = entry["ex"]
-                    for e_ab, n_ab in zip(existing_ex["ab"], new_ex["ab"]):
-                        if any((n_v > e_v for e_v, n_v in zip(e_ab, n_ab))):
-                            ex_by_category[cat] = {"ex": entry["ex"], "chain": None}
-                            break
-                catagorized_names[cat].add(name)
-                if entry["chain"] and not "ele" in entry["chain"]:
-                    all_ele_chains[name] = entry
-        extra_data = {}
-        extra_data["generic"] = {}
-        extra_data["any"] = {}
-        for cat, entry in ex_by_category.items():
-            if cat not in catagorized_names:
-                continue
-            catname = f"ex{str(cat)}"
-            if all((cat in eleset for eleset in ex_by_ele.values())):
-                extra_data["generic"][catname] = entry
-                for name in catagorized_names[cat]:
-                    for exabs in exability_data.values():
-                        try:
-                            if not exabs[name]["chain"]:
-                                del exabs[name]
-                        except KeyError:
-                            pass
-            else:
-                if "ab" in entry["ex"] and not (entry["ex"]["ab"][0] == "mod" and entry["ex"]["ab"][2] == "eledmg"):
-                    extra_data["any"][catname] = entry
-        extra_data["any"].update(all_ele_chains)
-        exability_data.update(extra_data)
+        for coab, chain_data in sorted(exability_data.items()):
+            exability_conf["coab"][coab] = self.index["ExAbilityConf"].get(coab, source="coab")
+            for chain, charas in sorted(chain_data.items()):
+                exability_conf["chain"][chain] = self.index["AbilityConf"].get(chain, source="chain")
+                for chara in charas:
+                    exability_conf["lookup"][chara] = [coab, chain]
+        exability_conf["lookup"] = dict(sorted(exability_conf["lookup"].items(), key=lambda kv: (kv[1][0], -kv[1][1])))
+        self.unset_ability_and_actcond_meta(exability_conf)
+        return exability_conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
         # do this here in order to have the action ids from generic weapon
@@ -420,7 +387,8 @@ class AdvConf(CharaData, SkillProcessHelper):
         exability_out = os.path.join(out_dir, f"exability{ext}")
         advout_dir = os.path.join(out_dir, "adv")
         check_target_path(advout_dir)
-        exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
+        # exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
+        exability_data = defaultdict(lambda: defaultdict(list))
 
         for res in tqdm(all_res, desc=os.path.basename(advout_dir)):
             name = res.get("_SecondName", res.get("_Name", res.get("_Id")))
@@ -433,8 +401,9 @@ class AdvConf(CharaData, SkillProcessHelper):
                         fmt_conf(outconf, f=fp)
                 outconf = self.process_result(res)
                 out_name = self.outfile_name(outconf, ext)
-                if ex_res := self.exability_data(res):
-                    exability_data[snakey(outconf["c"]["ele"])][snakey(outconf["c"]["name"])] = ex_res
+                # if ex_res := self.exability_data(res):
+                #     exability_data[snakey(outconf["c"]["ele"])][snakey(outconf["c"]["name"])] = ex_res
+                exability_data[res["_ExAbilityData5"]][res["_ExAbility2Data5"]].append(snakey(outconf["c"]["name"]))
                 output = os.path.join(advout_dir, out_name)
                 with open(output, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(outconf, f=fp)
@@ -444,6 +413,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 raise e
         # if AdvConf.MISSING_ENDLAG:
         #     print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
-        self.sort_exability_data(exability_data)
+        # self.sort_exability_data(exability_data)
+        exability_data = self.process_exability_data(exability_data)
         with open(exability_out, "w", newline="") as fp:
-            fmt_conf(exability_data, f=fp, lim=3, sortlim=2)
+            fmt_conf(exability_data, f=fp, lim=2, sortlim=0)
