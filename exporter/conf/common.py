@@ -1502,7 +1502,7 @@ class AbilityConf(AbilityData):
         return None
 
     def at_ConsumeSpToRecoverHp(self, res, i):
-        return ["fromhp", "sp", self._upval(res, i)]  # only instance of this has a SR, unclear what happens on normal adv
+        return ["tohp", "sp", self._upval(res, i)]  # only instance of this has a SR, unclear what happens on normal adv
 
     def at_CrestGroupScoreUp(self, res, i):
         return ["psalm", res["_BaseCrestGroupId"], res["_TriggerBaseCrestGroupCount"], self._upval(res, i)]
@@ -1520,7 +1520,7 @@ class AbilityConf(AbilityData):
         return self.at_RunOptionAction(res, i)
 
     def at_ConsumeUtpToRecoverHp(self, res, i):
-        return ["fromhp", "utp", self._upval(res, i)]
+        return ["tohp", "utp", self._upval(res, i)]
 
     def at_DpGaugeCap(self, res, i):
         return self._at_upval("dprepmax", res, i)
