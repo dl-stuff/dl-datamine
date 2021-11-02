@@ -275,6 +275,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                         base_mode_x = xalt["_Id"]
                         if xalt["_MaxComboNum"] < 5:
                             conf["default"] = {"x_max": xalt["_MaxComboNum"]}
+                    if dashondodge := mode.get("_DashOnAvoid"):
+                        if dashconf := convert_misc(dashondodge):
+                            conf["dash"] = dashconf
+                            self.action_ids[dashondodge["_Id"]] = "dash"
         try:
             conf["c"]["gun"] = list(conf["c"]["gun"])
         except KeyError:

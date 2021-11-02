@@ -387,12 +387,40 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 part_hitattr_map["_hitAttrLabel"],
                 *part_hitattr_map["_hitAttrLabelSubList"],
             ):
-                last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
-                if need_copy:
-                    part_hitattrs.append(last_copy)
-                    part_hitattrs.append(blt - 1)
+                if delayfire := part.get("_delayFireSec"):
+                    delayfire = [float(delay) for delay in json.loads(delayfire)]
+                    if part.get("_removeStockBulletOnFinish"):
+                        sec_key = "iv"
+                        try:
+                            del hattr["msl"]
+                        except KeyError:
+                            pass
+                    else:
+                        sec_key = "msl"
+                        hattr[sec_key] = 0.0
+                    bullet_attr, _ = clean_hitattr(hattr.copy(), once_per_action)
+                    hattr[sec_key] = fr(hattr.get(sec_key, 0.0) + delayfire[0])
+                    if not hattr[sec_key]:
+                        del hattr[sec_key]
+                    for i in range(1, blt):
+                        cur_bullet_attr = bullet_attr.copy()
+                        cur_bullet_attr[sec_key] = fr(cur_bullet_attr.get(sec_key, 0.0) + delayfire[i])
+                        if not cur_bullet_attr[sec_key]:
+                            del cur_bullet_attr[sec_key]
+                        part_hitattrs.append(cur_bullet_attr)
                 else:
-                    part_hitattrs.append(blt)
+                    last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
+                    if need_copy:
+                        part_hitattrs.append(last_copy)
+                        part_hitattrs.append(blt - 1)
+                        bullet_attr = last_copy
+                    else:
+                        part_hitattrs.append(blt)
+                        bullet_attr = hattr
+                    if delay := part.get("_delayTime", 0):
+                        bullet_attr["msl"] = fr(delay)
+                        if part.get("_isDelayAffectedBySpeedFactor"):
+                            bullet_attr["msl_spd"] = 1
         gen, delay = None, None
         # part.get("_canBeSameTarget")
         if gen := part.get("_generateNum"):
