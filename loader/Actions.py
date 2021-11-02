@@ -168,8 +168,8 @@ class CommandType(ShortEnum):
     EA_LINKED_BUFF = 157
     OPERATE_CUTT = 158
     CHANGE_PARTSMESH = 159
-    RESERVE_79 = 160
-    RESERVE_80 = 161
+    EA_POWERCRYSTAL = 160
+    SETUP_CTS = 161
     RESERVE_81 = 162
     RESERVE_82 = 163
     RESERVE_83 = 164
@@ -303,6 +303,8 @@ def build_bullet(meta, ref, seq, data):
         db_data["_abHitInterval"] = ab_interval
     if ab_collision_flag := data["_arrangeBullet"]["_abUseAccurateCollisionHitInterval"]:
         db_data["_abUseAccurateCollisionHitInterval"] = ab_collision_flag
+    if db_data['_delayFireSec'] and not any(db_data['_delayFireSec']):
+        db_data['_delayFireSec'] = None
     return db_data, hitlabel_data
 
 
@@ -458,7 +460,11 @@ ACTION_PART = DBTableMetadata(
         # BULLETS - contains marker data, unsure if it does anything
         # '_useMarker': DBTableMetadata.INT,
         # '_marker': DBTableMetadata.BOLB (?)
+        "_waitTime": DBTableMetadata.REAL,
+        "_delayFireSec": DBTableMetadata.BLOB,
+        "_isReserveFireBulletForWaiting": DBTableMetadata.INT,
         "_isDelayAffectedBySpeedFactor": DBTableMetadata.INT,
+        "_removeStockBulletOnFinish": DBTableMetadata.INT,
         # ANIMATION
         "_animationName": DBTableMetadata.TEXT,
         "_isVisible": DBTableMetadata.INT,
@@ -534,7 +540,7 @@ PROCESSORS[CommandType.CHARACTER_COMMAND] = build_control_data
 
 
 def log_schema_keys(schema_map, data, command_type):
-    schema_map[f'{data["commandType"]:03}-{command_type}'] = {key: type(value).__name__ for key, value in data.items()}
+    schema_map[str(command_type)] = {key: type(value).__name__ for key, value in data.items()}
     for subdata in data.values():
         try:
             if command_type := subdata.get("commandType"):

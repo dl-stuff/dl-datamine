@@ -68,6 +68,7 @@ class CharaModeData(DBView):
         self.link(res, "_Skill2Id", "SkillData")
         self.link(res, "_UniqueComboId", "CharaUniqueCombo")
         self.link(res, "_BurstAttackId", "PlayerAction")
+        self.link(res, "_DashOnAvoid", "PlayerAction")
         return res
 
 

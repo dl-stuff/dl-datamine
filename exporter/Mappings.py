@@ -229,6 +229,13 @@ class AbilityCondition(ShortEnum):
     CHARA_MODE = 115
     ON_REMOVE_ABNORMAL_STATUS = 116
     SUBSTITUDE_DAMAGE = 117
+    AUTO_AVOID = 118
+    ABNORMAL_STATUS_ALLY = 119
+    ABNORMAL_STATUS_TIME_ELAPSED = 120
+    ABNORMAL_STATUS_RECEIVED = 121
+    IN_PURSUIT_RANGE = 122
+    ABNORMAL_STATUS_RELEACED = 123
+    BURST_ATTACKING = 124
 
 
 class AbilityType(ShortEnum):
@@ -319,9 +326,9 @@ class AbilityType(ShortEnum):
     DpGaugeCap = 84
     AbnormalTypeNumKiller = 85
     RegisterKeepComboAction = 86
-    Reserve_087 = 87
-    Reserve_088 = 88
-    Reserve_089 = 89
+    NotUpdateDragonTime = 87
+    SetCharacterState = 88
+    ChangeModeRemoteToo = 89
     Reserve_090 = 90
     Reserve_091 = 91
     Reserve_092 = 92
@@ -507,7 +514,7 @@ class CharacterControl(ShortEnum):
     SwitchWeaponSkin = 46
     SetFace = 47
     ApplyBuffDebuff = 48
-    RESERVE_30 = 49
+    SetFollowerTargetToPlayerTarget = 49
     RESERVE_31 = 50
     RESERVE_32 = 51
     RESERVE_33 = 52

@@ -289,21 +289,20 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 for hitattr in hitattr_lst:
                     if isinstance(hitattr, str):
                         continue
-                    if (not pattern or pattern.match(hitattr["_Id"])) and (
-                        attr := convert_hitattr(
-                            hitattr,
-                            part,
-                            action,
-                            once_per_action,
-                            meta=meta,
-                            skill=skill,
-                            partcond=partcond,
-                        )
-                    ):
+                    if (not pattern or pattern.match(hitattr["_Id"])) and (attr := convert_hitattr(hitattr, part, action, once_per_action, meta=meta, skill=skill, partcond=partcond)):
                         if source == "_hitAttrLabelSubList":
                             part_hitattr_map[source].append(attr)
                         else:
                             part_hitattr_map[source] = attr
+                        if additional := hitattr.get("_AdditionalRandomHitLabel"):
+                            if len(additional) == 1:
+                                additional = additional[0]
+                                additional["_TargetGroup"] = hitattr["_TargetGroup"]
+                                if add_attr := convert_hitattr(additional, part, action, once_per_action, meta=meta, skill=skill, partcond=partcond):
+                                    if source == "_hitAttrLabelSubList":
+                                        part_hitattr_map[source].append(add_attr)
+                                    else:
+                                        part_hitattr_map[source] = [attr, add_attr]
                         if not pattern:
                             break
         if not part_hitattr_map:
@@ -334,12 +333,40 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 part_hitattr_map["_hitAttrLabel"],
                 *part_hitattr_map["_hitAttrLabelSubList"],
             ):
-                last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
-                if need_copy:
-                    part_hitattrs.append(last_copy)
-                    part_hitattrs.append(blt - 1)
+                if delayfire := part.get("_delayFireSec"):
+                    delayfire = [float(delay) for delay in json.loads(delayfire)]
+                    if part.get("_removeStockBulletOnFinish"):
+                        sec_key = "iv"
+                        try:
+                            del hattr["msl"]
+                        except KeyError:
+                            pass
+                    else:
+                        sec_key = "msl"
+                        hattr[sec_key] = 0.0
+                    bullet_attr, _ = clean_hitattr(hattr.copy(), once_per_action)
+                    hattr[sec_key] = fr(hattr.get(sec_key, 0.0) + delayfire[0])
+                    if not hattr[sec_key]:
+                        del hattr[sec_key]
+                    for i in range(1, blt):
+                        cur_bullet_attr = bullet_attr.copy()
+                        cur_bullet_attr[sec_key] = fr(cur_bullet_attr.get(sec_key, 0.0) + delayfire[i])
+                        if not cur_bullet_attr[sec_key]:
+                            del cur_bullet_attr[sec_key]
+                        part_hitattrs.append(cur_bullet_attr)
                 else:
-                    part_hitattrs.append(blt)
+                    last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
+                    if need_copy:
+                        part_hitattrs.append(last_copy)
+                        part_hitattrs.append(blt - 1)
+                        bullet_attr = last_copy
+                    else:
+                        part_hitattrs.append(blt)
+                        bullet_attr = hattr
+                    if delay := part.get("_delayTime", 0):
+                        bullet_attr["msl"] = fr(delay)
+                        if part.get("_isDelayAffectedBySpeedFactor"):
+                            bullet_attr["msl_spd"] = 1
         gen, delay = None, None
         # part.get("_canBeSameTarget")
         if gen := part.get("_generateNum"):
@@ -912,6 +939,17 @@ def convert_dodge(action, convert_follow=True):
     return dodgeconf
 
 
+def convert_dash(action, convert_follow=True):
+    s, r, followed_by = hit_sr(action)
+    dashconf = {"startup": s, "recovery": r}
+    if connect_c := action.get("_ConnectCombo"):
+        dashconf["to_x"] = connect_c
+    dashconf = hit_attr_adj(action, s, dashconf, skip_nohitattr=False, pattern=re.compile(r".*H0\d$"))
+    if convert_follow:
+        dashconf["interrupt"], dashconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
+    return dashconf
+
+
 def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
     startup, recovery, followed_by = hit_sr(burst)
     fsconf = {}
@@ -1257,7 +1295,7 @@ class SkillProcessHelper:
                     if sub_ab := ab.get(f"_VariousId{a}{k}"):
                         self.parse_skill_ab(k, seq, skill, action, sconf, sub_ab)
             if ab_type == AbilityType.EnhancedSkill:  # alt skill
-                s = int(ab["_TargetAction1"].name[-1])
+                s = int(ab[f"_TargetAction{a}"].name[-1])
                 eid = next(self.eskill_counter)
                 if existing_skill := self.chara_skills.get(ab[f"_VariousId{a}a"]["_Id"]):
                     group = existing_skill[0].split("_")[-1]
@@ -1335,7 +1373,7 @@ class SkillProcessHelper:
                                 group = f"{base_name}{eid}"
                             self.enhanced_fs[group] = group, eba, eba.get("_BurstMarkerId")
             elif ab_type == AbilityType.EnhancedSkill:
-                s = int(ab["_TargetAction1"].name[-1])
+                s = int(ab[f"_TargetAction{i}"].name[-1])
                 alt_skill = ab[f"_VariousId{i}a"]
                 eid = next(self.eskill_counter)
                 if existing_skill := self.chara_skills.get(alt_skill["_Id"]):
@@ -1607,6 +1645,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                         base_mode_x = xalt["_Id"]
                         if xalt["_MaxComboNum"] < 5:
                             conf["default"] = {"x_max": xalt["_MaxComboNum"]}
+                if dashondodge := mode.get("_DashOnAvoid"):
+                    if dashconf := convert_dash(dashondodge):
+                        conf["dash"] = dashconf
+                        self.action_ids[dashondodge["_Id"]] = "dash"
         try:
             conf["c"]["gun"] = list(set(conf["c"]["gun"]))
         except KeyError:
