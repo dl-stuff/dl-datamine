@@ -1562,8 +1562,12 @@ class AbilityConf(AbilityData):
         if source is not None:
             self.source = source
         conf = {}
-        if self.source == "ex" and res["_Name"]:
-            conf["name"] = res["_Name"]
+        if self.source == "ex":
+            self.index["ActCondConf"]._curr_actcond_conf = {}
+            if res["_Name"]:
+                conf["name"] = res["_Name"]
+            if res["_AbilityIconName"]:
+                conf["icon"] = res["_AbilityIconName"]
         # cond
         condtype = AbilityCondition(res["_ConditionType"])
         try:
@@ -1615,6 +1619,10 @@ class AbilityConf(AbilityData):
         if ablist and condtype:
             conf["ab"] = ablist
             conflist.insert(0, conf)
+
+        if self.source == "ex":
+            if curr_actcond := self.index["ActCondConf"].curr_actcond_conf:
+                conf["actconds"] = curr_actcond
 
         if source is not None:
             self.source = None

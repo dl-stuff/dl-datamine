@@ -327,8 +327,10 @@ class AdvConf(CharaData, SkillProcessHelper):
             res = res[0]
         conf = self.process_result(res)
         if exss:
-            if ex_res := self.exability_data(res):
-                conf["DEBUG_COAB"] = ex_res
+            conf["DEBUG_COAB"] = {
+                "ex": self.index["ExAbilityConf"].get(res["_ExAbilityData5"], source="ex"),
+                "chain": self.index["AbilityConf"].get(res["_ExAbility2Data5"], source="ex"),
+            }
         return conf
 
     @staticmethod
@@ -363,21 +365,18 @@ class AdvConf(CharaData, SkillProcessHelper):
         return ss_conf
 
     def process_exability_data(self, exability_data):
-        self.set_ability_and_actcond_meta()
         exability_conf = {
-            "actconds": {},
             "coab": {},
             "chain": {},
             "lookup": {},
         }
         for coab, chain_data in sorted(exability_data.items()):
-            exability_conf["coab"][coab] = self.index["ExAbilityConf"].get(coab, source="coab")
+            exability_conf["coab"][coab] = self.index["ExAbilityConf"].get(coab, source="ex")
             for chain, charas in sorted(chain_data.items()):
-                exability_conf["chain"][chain] = self.index["AbilityConf"].get(chain, source="chain")
+                exability_conf["chain"][chain] = self.index["AbilityConf"].get(chain, source="ex")
                 for chara in charas:
                     exability_conf["lookup"][chara] = [coab, chain]
         exability_conf["lookup"] = dict(sorted(exability_conf["lookup"].items(), key=lambda kv: (kv[1][0], -kv[1][1])))
-        self.unset_ability_and_actcond_meta(exability_conf)
         return exability_conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
@@ -415,9 +414,6 @@ class AdvConf(CharaData, SkillProcessHelper):
                 print()
                 print(res["_Id"], name, flush=True)
                 raise e
-        # if AdvConf.MISSING_ENDLAG:
-        #     print("Missing endlag for:", AdvConf.MISSING_ENDLAG)
-        # self.sort_exability_data(exability_data)
         exability_data = self.process_exability_data(exability_data)
         with open(exability_out, "w", newline="") as fp:
             fmt_conf(exability_data, f=fp, lim=2, sortlim=0)
