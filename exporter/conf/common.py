@@ -1403,16 +1403,15 @@ class AbilityConf(AbilityData):
         skill_id = self._varid_a(res, i)
         target = AbilityTargetAction(res[f"_TargetAction{i}"])
         seq = int(target.name[-1:])
+        sn = f"s{seq}"
         if self.meta is not None:
             if skill_id not in self.meta.chara_skills and skill_id not in self.meta.all_chara_skills:
                 if res["_ConditionType"] is None:
                     ekey = None
-                    sn = f"s{seq}"
                 else:
                     if self.enhanced_key is None:
                         self.enhanced_key = self.meta.get_enhanced_key()
                     ekey = self.enhanced_key
-                    sn = f"s{seq}_{ekey}"
                 self.meta.chara_skills[skill_id] = SDat(skill_id, sn, ekey)
             else:
                 if res["_ConditionType"] is None:
