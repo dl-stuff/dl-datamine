@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from loader.Actions import CommandType
 from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
-from exporter.Mappings import ActionTargetGroup, PartConditionType, PartConditionComparisonType, ActionCancelType, AbilityTargetAction, AbilityStat, AbilityCondition, AbilityType, AFFLICTION_TYPES, ELEMENTS, TRIBE_TYPES, WEAPON_TYPES
+from exporter.Mappings import ActionTargetGroup, PartConditionType, PartConditionComparisonType, ActionCancelType, AbilityTargetAction, AbilityStat, AbilityCondition, AbilityType, ActionSignalType, AFFLICTION_TYPES, ELEMENTS, TRIBE_TYPES, WEAPON_TYPES
 
 PART_COMPARISON_TO_VARS = {
     PartConditionComparisonType.Equality: "=",
@@ -116,7 +116,9 @@ def confsort(a):
 
 
 def hit_sr(action, startup=None, explicit_any=True):
-    s, r, followed_by = startup, None, set()
+    s, r = startup, None
+    act_cancels = {}
+    send_signals = {}
     last_r = None
     noaid_r = None
     noaid_follow = None
@@ -136,13 +138,30 @@ def hit_sr(action, startup=None, explicit_any=True):
             action_id = part.get("_actionId")
             if action_id is None and noaid_r is None:
                 noaid_r = part["_seconds"]
+                # act_cancels[("any", part.get("_actionType"))] = part["_seconds"]
                 noaid_follow = (part["_seconds"], "any", part.get("_actionType"))
             if action_id:
-                followed_by.add((part["_seconds"], action_id, part.get("_actionType")))
+                act_cancel_key = (action_id, part.get("_actionType"))
+                if act_cancel_key in act_cancels:
+                    act_cancels[act_cancel_key] = min(act_cancels[act_cancel_key], part["_seconds"])
+                else:
+                    act_cancels[act_cancel_key] = part["_seconds"]
             last_r = part["_seconds"]
+        if part["commandType"] == CommandType.SEND_SIGNAL and part.get("_signalType") == ActionSignalType.Input:
+            action_id = part.get("_actionId")
+            if action_id:
+                if action_id in send_signals:
+                    send_signals[action_id] = min(send_signals[action_id], part["_seconds"])
+                else:
+                    send_signals[action_id] = part["_seconds"]
         if part["commandType"] == CommandType.PLAY_MOTION:
             if (animdata := part.get("_animation")) and isinstance(animdata, dict):
                 motion = max(motion, part["_seconds"] + animdata["duration"])
+    followed_by = set()
+    for key, seconds in act_cancels.items():
+        action_id, action_type = key
+        seconds = max(seconds, send_signals.get(action_id, 0.0))
+        followed_by.add((seconds, action_id, action_type))
     s = s or 0.0
     if explicit_any and (noaid_r is None or noaid_r <= motion):
         possible_r = (motion, noaid_r, last_r)
