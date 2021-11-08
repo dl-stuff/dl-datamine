@@ -1,5 +1,6 @@
 import ctypes
 from enum import Enum
+from functools import singledispatchmethod
 import sys
 import os
 import pathlib
@@ -21,7 +22,22 @@ from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES, AbilityCondition, ActionTargetGroup, AbilityTargetAction, AbilityType, AbilityStat, AuraType, PartConditionType, ActionCancelType, PartConditionComparisonType
+from exporter.Mappings import (
+    WEAPON_TYPES,
+    ELEMENTS,
+    TRIBE_TYPES,
+    AFFLICTION_TYPES,
+    AbilityCondition,
+    ActionTargetGroup,
+    AbilityTargetAction,
+    AbilityType,
+    AbilityStat,
+    AuraType,
+    PartConditionType,
+    ActionCancelType,
+    PartConditionComparisonType,
+    ActionSignalType,
+)
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
 DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
@@ -765,7 +781,9 @@ def convert_actcond(attr, actcond, target, part={}, meta=None, skill=None, from_
 
 
 def hit_sr(action, startup=None, explicit_any=True):
-    s, r, followed_by = startup, None, set()
+    s, r = startup, None
+    act_cancels = {}
+    send_signals = {}
     last_r = None
     noaid_r = None
     noaid_follow = None
@@ -785,15 +803,32 @@ def hit_sr(action, startup=None, explicit_any=True):
             action_id = part.get("_actionId")
             if action_id is None and noaid_r is None:
                 noaid_r = part["_seconds"]
+                # act_cancels[("any", part.get("_actionType"))] = part["_seconds"]
                 noaid_follow = (part["_seconds"], "any", part.get("_actionType"))
             if action_id:
-                followed_by.add((part["_seconds"], action_id, part.get("_actionType")))
+                act_cancel_key = (action_id, part.get("_actionType"))
+                if act_cancel_key in act_cancels:
+                    act_cancels[act_cancel_key] = min(act_cancels[act_cancel_key], part["_seconds"])
+                else:
+                    act_cancels[act_cancel_key] = part["_seconds"]
             last_r = part["_seconds"]
+        if part["commandType"] == CommandType.SEND_SIGNAL and part.get("_signalType") == ActionSignalType.Input:
+            action_id = part.get("_actionId")
+            if action_id:
+                if action_id in send_signals:
+                    send_signals[action_id] = min(send_signals[action_id], part["_seconds"])
+                else:
+                    send_signals[action_id] = part["_seconds"]
         if part["commandType"] == CommandType.PLAY_MOTION:
             if (animdata := part.get("_animation")) and isinstance(animdata, dict):
                 motion = max(motion, part["_seconds"] + animdata["duration"])
             elif part.get("_motionState") in GENERIC_BUFF:
                 motion = max(motion, 1.0)
+    followed_by = set()
+    for key, seconds in act_cancels.items():
+        action_id, action_type = key
+        seconds = max(seconds, send_signals.get(action_id, 0.0))
+        followed_by.add((seconds, action_id, action_type))
     s = s or 0.0
     if explicit_any and (noaid_r is None or noaid_r <= motion):
         possible_r = (motion, noaid_r, last_r)
