@@ -8,7 +8,21 @@ from collections import defaultdict
 
 from loader.Actions import CommandType
 from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
-from exporter.Mappings import ActionTargetGroup, PartConditionType, PartConditionComparisonType, ActionCancelType, AbilityTargetAction, AbilityStat, AbilityCondition, AbilityType, ActionSignalType, AFFLICTION_TYPES, ELEMENTS, TRIBE_TYPES, WEAPON_TYPES
+from exporter.Mappings import (
+    ActionTargetGroup,
+    PartConditionType,
+    PartConditionComparisonType,
+    ActionCancelType,
+    AbilityTargetAction,
+    AbilityStat,
+    AbilityCondition,
+    AbilityType,
+    ActionSignalType,
+    AFFLICTION_TYPES,
+    ELEMENTS,
+    TRIBE_TYPES,
+    WEAPON_TYPES,
+)
 
 PART_COMPARISON_TO_VARS = {
     PartConditionComparisonType.Equality: "=",
@@ -569,14 +583,17 @@ def hitattr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, s
     return conf
 
 
-def convert_following_actions(startup, followed_by, default=None):
+def convert_following_actions(startup, followed_by, default=None, add_marker_cancel=False):
     interrupt_by = {}
     cancel_by = {}
+    has_fs = False
     if default:
+        has_fs = has_fs or "fs" in default
         for act in default:
             interrupt_by[act] = (0.0, None)
             cancel_by[act] = (0.0, None)
     for t, act, kind in followed_by:
+        has_fs = has_fs or (kind == ActionCancelType.BurstAttack)
         if fr(t) < startup:
             if not act in interrupt_by or interrupt_by[act][0] > t:
                 interrupt_by[act] = (fr(t), kind)
@@ -588,6 +605,9 @@ def convert_following_actions(startup, followed_by, default=None):
     for act, value in cancel_by.items():
         t, kind = value
         cancel_by[act] = (fr(max(0.0, t - startup)), kind)
+    if not has_fs and add_marker_cancel:
+        marker_cancel = max(0, fr(0.66666 - startup))
+        cancel_by["fs_marker"] = (marker_cancel, ActionCancelType.BurstAttack)
     return interrupt_by, cancel_by
 
 
@@ -600,7 +620,7 @@ def convert_x(xn, pattern=None, convert_follow=True, is_dragon=False):
         xconf["loop"] = 1
 
     if convert_follow:
-        xconf["interrupt"], xconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
+        xconf["interrupt"], xconf["cancel"] = convert_following_actions(s, followed_by, ("s",), add_marker_cancel=True)
 
     return xconf
 
