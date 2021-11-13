@@ -2546,7 +2546,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         if self.hitattrshift:
             del conf["attr"]
             hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
-            hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d(_HAS)?_LV0{lv}.*"), attr_key="attr_HAS")
+            hit_attr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_HAS_LV0{lv}.*"), attr_key="attr_HAS")
         else:
             try:
                 attr = conf["attr"]

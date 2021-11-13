@@ -42,6 +42,15 @@ def snakey(name, with_ext=True):
     return snakey
 
 
+class BuffExplosionData(DBView):
+    def __init__(self, index):
+        super().__init__(index, "BuffExplosionData")
+
+    def process_result(self, res):
+        self.link(res, "_HitAttrLabel", "PlayerActionHitAttribute")
+        return res
+
+
 class ActionCondition(DBView):
     def __init__(self, index):
         super().__init__(index, "ActionCondition", labeled_fields=["_Text", "_TextEx"])
@@ -66,6 +75,7 @@ class ActionCondition(DBView):
         self.link(res, "_DamageLink", "PlayerActionHitAttribute")
         self.link(res, "_LevelUpId", "ActionCondition")
         self.link(res, "_GrantSkill", "ActionGrant")
+        self.link(res, "_BuffExplosionId", "BuffExplosionData")
         if reset_seen_skills:
             self.seen_skills = set()
         return res
@@ -445,7 +455,7 @@ class ActionPartsHitLabel(DBView):
         self.name = f"View_{self.base_table}"
         self.database.conn.execute(f"DROP VIEW IF EXISTS {self.name}")
         self.database.conn.execute(
-            f"CREATE VIEW {self.name} AS SELECT ActionPartsHitLabel._ref AS _ref, ActionPartsHitLabel._source AS _source, PlayerActionHitAttribute.* FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id GLOB ActionPartsHitLabel._hitLabelGlob"
+            f"CREATE VIEW {self.name} AS SELECT ActionPartsHitLabel._ref AS _ref, ActionPartsHitLabel._source AS _source, PlayerActionHitAttribute.* FROM ActionPartsHitLabel LEFT JOIN PlayerActionHitAttribute WHERE PlayerActionHitAttribute._Id REGEXP ActionPartsHitLabel._hitLabelRE ORDER BY PlayerActionHitAttribute._Id"
         )
         self.database.conn.commit()
 

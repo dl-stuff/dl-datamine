@@ -198,9 +198,8 @@ HIT_LABEL_FIELDS = (
     "_hitAttrLabelSubList",
     "_abHitAttrLabel",
 )
-# KAT_CHR_07_H01_LV01_CHLV02
 
-# HIT_LABEL_LV_CHLV = re.compile(r".*(_LV\d{2})(_CHLV\d{2})?.*")
+HASLV_PATTERN = re.compile(r"(S\d{3}_\d{3}.*)_LV\d{2}")
 LV_PATTERN = re.compile(r"_LV\d{2}.*")
 
 
@@ -214,29 +213,19 @@ def build_hitlabel_data(ref, k, hit_labels):
         label = label.strip()
         if not label:
             continue
-        # has_lv = False
-        # has_chlv = False
-        # if lv_chlv := HIT_LABEL_LV_CHLV.match(label):
-        #     if lv_group := lv_chlv.group(1):
-        #         has_lv = True
-        #         label = label.replace(lv_group, "_LV{lv}")
-        #     if chlv_group := lv_chlv.group(2):
-        #         has_chlv = True
-        #         label = label.replace(chlv_group, "_CHLV{chlv}")
-        if label.startswith("CMN_AVOID"):
-            label_glob = label
+        if "CMN_AVOID" in label:
+            label_re = label
         elif LV_PATTERN.search(label):
-            label_glob = LV_PATTERN.sub("_LV[0-9][0-9]*", label)
+            label_re = LV_PATTERN.sub(r"(?:_HAS)?_LV[0-9]{2}.*", label)
         else:
-            label_glob = f"{label}*"
+            label_re = f"{label}.*"
         processed.append(
             {
                 "_Id": f"{ref}{k}{idx}",
                 "_ref": ref,
                 "_source": k,
                 "_hitLabel": label,
-                "_hitLabelGlob": label_glob,
-                # "_hasCHLV": has_chlv,
+                "_hitLabelRE": label_re
             }
         )
     return processed
@@ -303,8 +292,8 @@ def build_bullet(meta, ref, seq, data):
         db_data["_abHitInterval"] = ab_interval
     if ab_collision_flag := data["_arrangeBullet"]["_abUseAccurateCollisionHitInterval"]:
         db_data["_abUseAccurateCollisionHitInterval"] = ab_collision_flag
-    if db_data['_delayFireSec'] and not any(db_data['_delayFireSec']):
-        db_data['_delayFireSec'] = None
+    if db_data["_delayFireSec"] and not any(db_data["_delayFireSec"]):
+        db_data["_delayFireSec"] = None
     return db_data, hitlabel_data
 
 
@@ -508,7 +497,7 @@ ACTION_PART_HIT_LABEL = DBTableMetadata(
         "_ref": DBTableMetadata.INT,
         "_source": DBTableMetadata.TEXT,
         "_hitLabel": DBTableMetadata.TEXT,
-        "_hitLabelGlob": DBTableMetadata.TEXT,
+        "_hitLabelRE": DBTableMetadata.TEXT,
         # "_hasLV": DBTableMetadata.INT,
         # "_hasCHLV": DBTableMetadata.INT,
     },
@@ -603,7 +592,7 @@ def summarize_raw_action_json(raw, key=""):
         cmd = CommandType(actdata["commandType"])
         sec = actdata["_seconds"]
         if key:
-            print(f"{key}:")
+            print(f"{key}:", end=" ")
         if cmd in PROCESSORS:
             print(f"{seq:03} {sec:.4f}s: {cmd.value:03}-{cmd} [PROCESSED]")
         else:
@@ -622,7 +611,7 @@ if __name__ == "__main__":
         print(path)
         with open(path) as f:
             raw = json.load(f)
-            summarize_raw_action_json((item.get("_data") for item in raw))
+            summarize_raw_action_json(raw)
     else:
         schema_map = load_actions(db, "./_ex_sim/jp/actions")
         with open("./out/_action_schema.json", "w") as f:

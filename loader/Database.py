@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import re
 import errno
 from tqdm import tqdm
 from collections import defaultdict
@@ -18,6 +19,10 @@ def check_target_path(target):
         except OSError as exc:  # Guard against race condition
             if exc.errno != errno.EEXIST:
                 raise
+
+
+def sqlite3_regexp(pattern, item):
+    return bool(re.fullmatch(pattern, item))
 
 
 class ShortEnum(Enum):
@@ -120,6 +125,7 @@ class DBManager:
 
     def open(self, db_file):
         self.conn = sqlite3.connect(db_file)
+        self.conn.create_function("REGEXP", 2, sqlite3_regexp)
         self.conn.row_factory = sqlite3.Row
 
     def close(self):
