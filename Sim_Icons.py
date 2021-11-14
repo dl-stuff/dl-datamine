@@ -43,9 +43,10 @@ if __name__ == "__main__":
     icon_set = set()
     for data_path in glob(GEN + "/drg/*.json"):
         with open(data_path, "r") as fn:
-            for drg, data in json.load(fn).items():
-                pic_index[drg] = {"name": data["d"]["name"], "icon": f"dragon/{data['d']['icon']}.png"}
-                icon_set.add(data["d"]["icon"])
+            data = json.load(fn)
+            name = os.path.splitext(os.path.basename(data_path))[0]
+            pic_index[name] = {"name": data["d"]["name"], "icon": f"dragon/{data['d']['icon']}.png"}
+            icon_set.add(data["d"]["icon"])
     patterns["jp"]["^images/icon/dragon/l/" + "(?:" + "|".join(map(str, icon_set)) + ")"] = f"../dragon"
 
     icon_set = set()

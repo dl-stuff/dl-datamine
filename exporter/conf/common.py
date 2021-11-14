@@ -329,6 +329,49 @@ def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcon
         return None
 
 
+def _apply_blt(part, part_hitattr_map, part_hitattr, attr_list, blt, outer_msl, ncond):
+    for attr in attr_list:
+        if blt is not None:
+            attr["blt"] = blt
+        if outer_msl:
+            attr = copy.copy(attr)
+            attr["msl"] = fr(outer_msl + attr.get("msl", 0))
+        if part.get("_removeStockBulletOnFinish"):
+            attr["mslc"] = 1
+        if ncond:
+            attr_with_cond = {}
+            if econd := attr.get("cond"):
+                attr_with_cond["cond"] = ["and", econd, ncond]
+            else:
+                attr_with_cond["cond"] = ncond
+            attr_with_cond.update(attr)
+            attr = attr_with_cond
+        part_hitattr.append(attr)
+
+
+def _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=None, outer_cnt=1, ncond=None):
+    ha_attrs = part_hitattr_map.get("_hitAttrLabel", [])
+    if ha_sub := part_hitattr_map.get("_hitAttrLabelSubList"):
+        ha_attrs.extend(ha_sub)
+    if ha_attrs:
+        blt = None
+        if (chiv := part.get("_collisionHitInterval")) and (((bd := part.get("_bulletDuration")) and chiv < bd) or ((bd := part.get("_duration")) and chiv < bd)):
+            if part.get("_useAccurateCollisionHitInterval"):
+                blt = [math.ceil(bd / chiv * outer_cnt), fr(chiv)]
+            else:
+                blt = [int(round(bd / chiv * outer_cnt)), fr(chiv)]
+        elif outer_cnt > 1:
+            blt = [outer_cnt, 0.0]
+        _apply_blt(part, part_hitattr_map, part_hitattr, ha_attrs, blt, outer_msl, ncond)
+    if ab_attrs := part_hitattr_map.get("_abHitAttrLabel"):
+        blt = None
+        if (abiv := part.get("_abHitInterval")) and (abd := (part.get("_abDuration"))) and abiv < abd:
+            blt = [int(round(abd / abiv * outer_cnt)), fr(abiv)]
+        elif outer_cnt > 1:
+            blt = [outer_cnt, 0.0]
+        _apply_blt(part, part_hitattr_map, part_hitattr, ab_attrs, blt, outer_msl, ncond)
+
+
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action["_Parts"]
     hitattrs = []
@@ -397,98 +440,57 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 attr["msl"] = part.get("_hitDelaySec")
                 attr["blt"] = ["zonecount", 0.0]
                 part_hitattr.append(attr)
-        else:
-            def _apply_blt(attr_list, blt, outer_msl, ncond):
-                for attr in attr_list:
-                    if blt is not None:
-                        attr["blt"] = blt
-                    if outer_msl:
-                        attr = copy.copy(attr)
-                        attr["msl"] = fr(outer_msl + attr.get("msl", 0))
-                    if part.get("_removeStockBulletOnFinish"):
-                        attr["mslc"] = 1
-                    if ncond:
-                        attr_with_cond = {}
-                        if econd := attr.get("cond"):
-                            attr_with_cond["cond"] = ["and", econd, ncond]
-                        else:
-                            attr_with_cond["cond"] = ncond
-                        attr_with_cond.update(attr)
-                        attr = attr_with_cond
-                    part_hitattr.append(attr)
-
-            def _single_bullet(outer_msl=None, outer_cnt=1, ncond=None):
-                ha_attrs = part_hitattr_map.get("_hitAttrLabel", [])
-                ha_attrs.extend(part_hitattr_map.get("_hitAttrLabelSubList", tuple()))
-                if ha_attrs:
-                    blt = None
-                    if (chiv := part.get("_collisionHitInterval")) and (((bd := part.get("_bulletDuration")) and chiv < bd) or ((bd := part.get("_duration")) and chiv < bd)):
-                        if part.get("_useAccurateCollisionHitInterval"):
-                            blt = [math.ceil(bd / chiv * outer_cnt), fr(chiv)]
-                        else:
-                            blt = [int(round(bd / chiv * outer_cnt)), fr(chiv)]
-                    elif outer_cnt > 1:
-                        blt = [outer_cnt, 0.0]
-                    _apply_blt(ha_attrs, blt, outer_msl, ncond)
-                if ab_attrs := part_hitattr_map.get("_abHitAttrLabel"):
-                    blt = None
-                    if (abiv := part.get("_abHitInterval")) and (abd := (part.get("_abDuration"))) and abiv < abd:
-                        blt = [int(round(abd / abiv * outer_cnt)), fr(abiv)]
-                    elif outer_cnt > 1:
-                        blt = [outer_cnt, 0.0]
-                    _apply_blt(ab_attrs, blt, outer_msl, ncond)
-
-            if cmdtype in BULLET_COMMAND:
-                _single_bullet()
-            elif cmdtype == CommandType.STOCK_BULLET_FIRE:
-                gn = part.get("_bulletNum", 1)
-                if specific_delay := part.get("_delayFireSec"):
-                    delays = json.loads(specific_delay)
-                    if ms_gn := action.get("_MaxStockBullet"):
-                        for idx in range(ms_gn):
-                            ncond = ["var", "buffcount", ">=", idx + 1]
-                            _single_bullet(outer_msl=delays[idx], ncond=ncond)
-                    else:
-                        for delay in delays[0:gn]:
-                            _single_bullet(outer_msl=delay)
+        elif cmdtype in BULLET_COMMAND:
+            _single_bullet(part, part_hitattr_map, part_hitattr)
+        elif cmdtype == CommandType.STOCK_BULLET_FIRE:
+            gn = part.get("_bulletNum", 1)
+            if specific_delay := part.get("_delayFireSec"):
+                delays = json.loads(specific_delay)
+                if ms_gn := action.get("_MaxStockBullet"):
+                    for idx in range(ms_gn):
+                        ncond = ["var", "buffcount", ">=", idx + 1]
+                        _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=delays[idx], ncond=ncond)
                 else:
-                    if ms_gn := part.get("_MaxStockBullet"):
-                        for idx in range(ms_gn):
-                            ncond = ["var", "buffcount", ">=", idx + 1]
-                            _single_bullet(outer_msl=0.0, ncond=ncond)
-                    else:
-                        _single_bullet(outer_cnt=gn)
-            elif cmdtype == CommandType.MULTI_BULLET:
-                marker_charge = part.get("_bulletMarkerChargeSec", 0)
-                ncond = None
-                if part.get("_useFireStockBulletParam"):
-                    gn = part.get("_bulletNum")
-                    specific_delay = part.get("_delayFireSec")
-                elif part.get("_generateNumDependOnBuffCount"):
-                    buffcond = part.get("_buffCountConditionId")
-                    gn = buffcond.get("_MaxDuplicatedCount", 10)
-                    ncond = ["actcond", buffcond["_Id"], ">="]
-                    specific_delay = part.get("_markerDelay")
+                    for delay in delays[0:gn]:
+                        _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=delay)
+            else:
+                if ms_gn := part.get("_MaxStockBullet"):
+                    for idx in range(ms_gn):
+                        ncond = ["var", "buffcount", ">=", idx + 1]
+                        _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=0.0, ncond=ncond)
                 else:
-                    gn = part.get("_generateNum")
-                    specific_delay = part.get("_markerDelay")
-                if specific_delay:
-                    delays = [marker_charge + d for d in json.loads(specific_delay)[0:gn]]
-                    if ncond is not None:
-                        for idx, delay in enumerate(delays):
-                            _single_bullet(outer_msl=delay, ncond=[*ncond, idx+1])
-                    else:
-                        for delay in delays:
-                            _single_bullet(outer_msl=delay)
+                    _single_bullet(part, part_hitattr_map, part_hitattr, outer_cnt=gn)
+        elif cmdtype == CommandType.MULTI_BULLET:
+            marker_charge = part.get("_bulletMarkerChargeSec", 0)
+            ncond = None
+            if part.get("_useFireStockBulletParam"):
+                gn = part.get("_bulletNum")
+                specific_delay = part.get("_delayFireSec")
+            elif part.get("_generateNumDependOnBuffCount"):
+                buffcond = part.get("_buffCountConditionId")
+                gn = buffcond.get("_MaxDuplicatedCount", 10)
+                ncond = ["actcond", buffcond["_Id"], ">="]
+                specific_delay = part.get("_markerDelay")
+            else:
+                gn = part.get("_generateNum")
+                specific_delay = part.get("_markerDelay")
+            if specific_delay:
+                delays = [marker_charge + d for d in json.loads(specific_delay)[0:gn]]
+                if ncond is not None:
+                    for idx, delay in enumerate(delays):
+                        _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=delay, ncond=[*ncond, idx + 1])
                 else:
-                    if ncond is not None:
-                        for idx in range(gn):
-                            _single_bullet(outer_msl=marker_charge, ncond=[*ncond, idx+1])
-                    else:
-                        _single_bullet(outer_msl=marker_charge, outer_cnt=gn)
-            elif cmdtype == CommandType.FORMATION_BULLET:
-                if gn := part.get("_bulletNum"):
-                    _single_bullet(outer_cnt=gn / 2)
+                    for delay in delays:
+                        _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=delay)
+            else:
+                if ncond is not None:
+                    for idx in range(gn):
+                        _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=marker_charge, ncond=[*ncond, idx + 1])
+                else:
+                    _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=marker_charge, outer_cnt=gn)
+        elif cmdtype == CommandType.FORMATION_BULLET:
+            if gn := part.get("_bulletNum"):
+                _single_bullet(part, part_hitattr_map, part_hitattr, outer_cnt=gn / 2)
 
         if part.get("_loopFlag"):
             lp = [part.get("_loopNum", -2) + 1, fr(part.get("_seconds") - part.get("_loopSec", 0.0))]
