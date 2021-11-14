@@ -22,7 +22,7 @@ def check_target_path(target):
 
 
 def sqlite3_regexp(pattern, item):
-    return bool(re.fullmatch(pattern, item))
+    return pattern == item or bool(re.fullmatch(pattern, item))
 
 
 class ShortEnum(Enum):

@@ -5,6 +5,8 @@ import sys
 import os
 from tqdm import tqdm
 from collections import defaultdict
+import math
+import copy
 
 from loader.Actions import CommandType
 from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
@@ -24,6 +26,15 @@ from exporter.Mappings import (
     WEAPON_TYPES,
 )
 
+BULLET_COMMAND = (
+    CommandType.GEN_BULLET,
+    CommandType.PARABOLA_BULLET,
+    CommandType.PIVOT_BULLET,
+    CommandType.ARRANGE_BULLET,
+    CommandType.BUTTERFLY_BULLET,
+    CommandType.STOCK_BULLET_SHIKIGAMI,
+)
+
 PART_COMPARISON_TO_VARS = {
     PartConditionComparisonType.Equality: "=",
     PartConditionComparisonType.Inequality: "!=",
@@ -33,13 +44,13 @@ PART_COMPARISON_TO_VARS = {
     PartConditionComparisonType.LessThanOrEqual: "<=",
 }
 
-ONCE_PER_ACT = ("sp", "dp", "utp", "actcond", "afflic", "bleed", "extra", "dispel")
+ONCE_PER_ACT = ("sp", "dp", "utp", "actcond")
 DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
 
 INDENT = "    "
 PRETTY_PRINT_THIS = ("dragonform", "dservant", "repeat")
 MULTILINE_LIST = ("abilities", "ref", "chain")
-DUMMY_PART = {"_seconds": 0}
+DUMMY_PART = {"_seconds": 0.0}
 
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
@@ -195,21 +206,7 @@ def hit_sr(action, startup=None, explicit_any=True):
     return s, r, followed_by
 
 
-def clean_hitattr(attr, once_per_action):
-    need_copy = False
-    if once_per_action:
-        for act in ONCE_PER_ACT:
-            try:
-                del attr[act]
-                need_copy = True
-            except KeyError:
-                continue
-    return attr, need_copy
-
-
-def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=None, from_ab=False, partcond=None):
-    if hitattr.get("_IgnoreFirstHitCheck"):
-        once_per_action = set()
+def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcond=None):
     attr = {}
     target = hitattr.get("_TargetGroup")
     if (target in (ActionTargetGroup.HOSTILE, ActionTargetGroup.HIT_OR_GUARDED_RECORD)) and hitattr.get("_DamageAdjustment"):
@@ -231,21 +228,16 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
             attr["drg"] = dragon
         if (od := hitattr.get("_ToBreakDmgRate")) and od != 1:
             attr["odmg"] = fr(od)
-    if "sp" not in once_per_action:
-        if sp := hitattr.get("_AdditionRecoverySp"):
-            attr["sp"] = fr(sp)
-            once_per_action.add("sp")
-        elif sp_p := hitattr.get("_RecoverySpRatio"):
-            attr["sp"] = [fr(sp_p), "%"]
-            if (sp_i := hitattr.get("_RecoverySpSkillIndex")) or (sp_i := hitattr.get("_RecoverySpSkillIndex2")):
-                attr["sp"].append(f"s{sp_i}")
-            once_per_action.add("sp")
-    if "dp" not in once_per_action and (dp := hitattr.get("_AdditionRecoveryDpLv1")):
+    if sp := hitattr.get("_AdditionRecoverySp"):
+        attr["sp"] = fr(sp)
+    elif sp_p := hitattr.get("_RecoverySpRatio"):
+        attr["sp"] = [fr(sp_p), "%"]
+        if (sp_i := hitattr.get("_RecoverySpSkillIndex")) or (sp_i := hitattr.get("_RecoverySpSkillIndex2")):
+            attr["sp"].append(f"s{sp_i}")
+    if dp := hitattr.get("_AdditionRecoveryDpLv1"):
         attr["dp"] = dp
-        once_per_action.add("dp")
-    if "utp" not in once_per_action and ((utp := hitattr.get("_AddUtp")) or (utp := hitattr.get("_AdditionRecoveryUtp"))):
+    if (utp := hitattr.get("_AddUtp")) or (utp := hitattr.get("_AdditionRecoveryUtp")):
         attr["utp"] = utp
-        once_per_action.add("utp")
     if hp := hitattr.get("_SetCurrentHpRate"):
         attr["hp"] = [fr(hp * 100), "="]
     else:
@@ -267,19 +259,19 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         except KeyError:
             pass
 
-    if part.get("commandType") == CommandType.STOCK_BULLET_FIRE:
-        if (stock := part.get("_fireMaxCount", 0)) > 1:
-            attr["extra"] = stock
-        elif (stock := action.get("_MaxStockBullet", 0)) > 1:
-            attr["extra"] = stock
     if bc := attr.get("_DamageUpRateByBuffCount"):
         attr["bufc"] = bc
+
+    # if part.get("commandType") == CommandType.STOCK_BULLET_FIRE:
+    #     if (stock := part.get("_fireMaxCount", 0)) > 1:
+    #         attr["extra"] = stock
+    #     elif (stock := action.get("_MaxStockBullet", 0)) > 1:
+    #         attr["extra"] = stock
     if 0 < (attenuation := part.get("_attenuationRate", 0)) < 1:
         attr["fade"] = fr(attenuation)
 
     # attr_tag = None
-    if (actcond := hitattr.get("_ActionCondition1")) and actcond not in once_per_action:
-        once_per_action.add(actcond)
+    if actcond := hitattr.get("_ActionCondition1"):
         # attr_tag = actcond['_Id']
         # if (remove := actcond.get('_RemoveConditionId')):
         #     attr['del'] = remove
@@ -294,6 +286,14 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
         #     )
         ACTCOND_CONF.get(actcond)
         attr["actcond"] = actcond
+
+    if add_rng_hitlabels := hitattr.get("_AdditionalRandomHitLabel"):
+        add_count = hitattr.get("_AdditionalRandomHitNum")
+        add_attrs = [convert_hitattr(hl, DUMMY_PART, meta=meta, skill=skill) for hl in add_rng_hitlabels]
+        if add_count == 1 and len(add_attrs) == 1:
+            attr["addhit"] = add_attrs[0]
+        else:
+            attr["DEBUG_ADD_RNG_HITS"] = [add_count, add_attrs]
 
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
@@ -320,6 +320,8 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
                 attr["msl_spd"] = 1
         # if attr_tag:
         #     attr['tag'] = attr_tag
+        if hitattr.get("_IgnoreFirstHitCheck"):
+            attr["ifhc"] = 1
         if from_ab:
             attr["ab"] = 1
         return attr
@@ -329,11 +331,7 @@ def convert_hitattr(hitattr, part, action, once_per_action, meta=None, skill=Non
 
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action["_Parts"]
-    clear_once_per_action = action.get("_OnHitExecType") == 1
     hitattrs = []
-    once_per_action = set()
-    partcond_once_per_action = defaultdict(set)
-    partcond_once_per_action[None] = once_per_action
     # accurate_col = 0
     # accurate_ab_col = 0
 
@@ -346,8 +344,6 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 servant_attr["iv"] = iv
             hitattrs.append(servant_attr)
             continue
-        if clear_once_per_action:
-            once_per_action.clear()
         # parse part conds
         partcond = None
         if ctype := part.get("_conditionType"):
@@ -360,16 +356,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 partcond = ("actcond", actcond.get("_Id"), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count)
             elif ctype == PartConditionType.AuraLevel:
                 partcond = ("amp", (condvalue["_aura"].value, condvalue["_target"]), PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"])
-
-            if partcond is not None:
-                once_per_action = partcond_once_per_action[partcond]
-                once_per_action.update(partcond_once_per_action[None])
-            else:
-                once_per_action = partcond_once_per_action[None]
-        else:
-            once_per_action = partcond_once_per_action[None]
         # get the hitattrs
-        part_hitattr_map = {"_hitAttrLabelSubList": []}
+        part_hitattr_map = defaultdict(list)
         if raw_hitattrs := part.get("_allHitLabels"):
             for source, hitattr_lst in raw_hitattrs.items():
                 for hitattr in reversed(hitattr_lst):
@@ -379,176 +367,139 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                         attr := convert_hitattr(
                             hitattr,
                             part,
-                            action,
-                            once_per_action,
                             meta=meta,
                             skill=skill,
                             partcond=partcond,
                         )
                     ):
-                        if source == "_hitAttrLabelSubList":
-                            part_hitattr_map[source].append(attr)
-                        else:
-                            part_hitattr_map[source] = attr
+                        part_hitattr_map[source].append(attr)
                         if not pattern:
                             break
         if not part_hitattr_map:
             continue
-        part_hitattrs = []
-        for key in ActionPartsHitLabel.LABEL_SORT:
-            try:
-                value = part_hitattr_map[key]
-            except KeyError:
-                continue
-            # # heuristic for gala mascula
-            # if key == "_hitAttrLabel" and part.get("_useAccurateCollisionHitInterval"):
-            #     if part.get("_seconds") < accurate_col:
-            #         continue
-            #     accurate_ab_col = part.get("_seconds") + part.get("_collisionHitInterval")
-            # if key == "_abHitAttrLabel" and part.get("_abUseAccurateCollisionHitInterval"):
-            #     if part.get("_seconds") < accurate_ab_col:
-            #         continue
-            #     accurate_ab_col = part.get("_seconds") + part.get("_collisionHitInterval")
-            if isinstance(value, list):
-                part_hitattrs.extend(value)
-            else:
-                part_hitattrs.append(value)
+        part_hitattr_map = dict(part_hitattr_map)
+        cmdtype = part["commandType"]
+        # loop & bullets
+        part_hitattr = []
 
-        is_msl = True
-        if part["commandType"] != CommandType.MULTI_BULLET and (blt := part.get("_bulletNum", 0)) > 1 and "_hitAttrLabel" in part_hitattr_map and not "extra" in part_hitattr_map["_hitAttrLabel"]:
-            for hattr in (
-                part_hitattr_map["_hitAttrLabel"],
-                *part_hitattr_map["_hitAttrLabelSubList"],
-            ):
-                if delayfire := part.get("_delayFireSec"):
-                    delayfire = [float(delay) for delay in json.loads(delayfire)]
+        if cmdtype == CommandType.HIT_ATTRIBUTE:
+            part_hitattr.extend(part_hitattr_map.get("_hitLabel", tuple()))
+        elif cmdtype == CommandType.SETTING_HIT:
+            for attr in part_hitattr_map.get("_hitAttrLabel", tuple()):
+                attr["zone"] = part.get("_lifetime", -1)
+                part_hitattr.append(attr)
+        elif cmdtype == CommandType.REMOVE_BUFF_TRIGGER_BOMB:
+            for attr in part_hitattr_map.get("_hitAttrLabel", tuple()):
+                attr["triggerbomb"] = part.get("_targetActionConditionId")
+                part_hitattr.append(attr)
+        elif cmdtype == CommandType.BUFFFIELD_ATTACHMENT and part.get("_isAttachToSelfBuffField"):
+            for attr in part_hitattr_map.get("_hitAttrLabel", tuple()):
+                attr["msl"] = part.get("_hitDelaySec")
+                attr["blt"] = ["zonecount", 0.0]
+                part_hitattr.append(attr)
+        else:
+            def _apply_blt(attr_list, blt, outer_msl, ncond):
+                for attr in attr_list:
+                    if blt is not None:
+                        attr["blt"] = blt
+                    if outer_msl:
+                        attr = copy.copy(attr)
+                        attr["msl"] = fr(outer_msl + attr.get("msl", 0))
                     if part.get("_removeStockBulletOnFinish"):
-                        sec_key = "iv"
-                        try:
-                            del hattr["msl"]
-                        except KeyError:
-                            pass
-                    else:
-                        sec_key = "msl"
-                        hattr[sec_key] = 0.0
-                    bullet_attr, _ = clean_hitattr(hattr.copy(), once_per_action)
-                    hattr[sec_key] = fr(hattr.get(sec_key, 0.0) + delayfire[0])
-                    if not hattr[sec_key]:
-                        del hattr[sec_key]
-                    for i in range(1, blt):
-                        cur_bullet_attr = bullet_attr.copy()
-                        cur_bullet_attr[sec_key] = fr(cur_bullet_attr.get(sec_key, 0.0) + delayfire[i])
-                        if not cur_bullet_attr[sec_key]:
-                            del cur_bullet_attr[sec_key]
-                        part_hitattrs.append(cur_bullet_attr)
-                else:
-                    last_copy, need_copy = clean_hitattr(hattr.copy(), once_per_action)
-                    if need_copy:
-                        part_hitattrs.append(last_copy)
-                        part_hitattrs.append(blt - 1)
-                        bullet_attr = last_copy
-                    else:
-                        part_hitattrs.append(blt)
-                        bullet_attr = hattr
-                    if delay := part.get("_delayTime", 0):
-                        bullet_attr["msl"] = fr(delay)
-                        if part.get("_isDelayAffectedBySpeedFactor"):
-                            bullet_attr["msl_spd"] = 1
-        gen, delay = None, None
-        # part.get("_canBeSameTarget")
-        if gen := part.get("_generateNum"):
-            if blt := part.get("_bulletNum", 0):
-                gen = blt
-            delay = part.get("_generateDelay", 0)
-            ref_attrs = part_hitattrs
-        elif (abd := part.get("_abDuration", 0)) >= (abi := part.get("_abHitInterval", 0)) and "_abHitAttrLabel" in part_hitattr_map:
-            gen = int(abd / abi)
-            # some frame rate bullshit idk
-            if gen * abi < abd - 10 / 60:
-                gen += 1
-            delay = abi
-            try:
-                part_hitattr_map["_abHitAttrLabel"]["msl"] += abi
-            except KeyError:
-                part_hitattr_map["_abHitAttrLabel"]["msl"] = abi
-            part_hitattr_map["_abHitAttrLabel"]["msl"] = fr(part_hitattr_map["_abHitAttrLabel"]["msl"])
-            ref_attrs = [part_hitattr_map["_abHitAttrLabel"]]
-        elif (bci := part.get("_collisionHitInterval", 0)) and ((bld := part.get("_bulletDuration", 0)) > bci or (bld := part.get("_duration", 0)) > bci) and ("_hitLabel" in part_hitattr_map or "_hitAttrLabel" in part_hitattr_map):
-            gen = int(bld / bci)
-            # some frame rate bullshit idk
-            if gen * bci < bld - 10 / 60:
-                gen += 1
-            delay = bci
-            ref_attrs = []
-            if part_hitattr_map.get("_hitLabel"):
-                ref_attrs.append(part_hitattr_map.get("_hitLabel"))
-            if part_hitattr_map.get("_hitAttrLabel"):
-                ref_attrs.append(part_hitattr_map.get("_hitAttrLabel"))
-                ref_attrs.extend(part_hitattr_map.get("_hitAttrLabelSubList"))
-        # if adv is not None:
-        #     print(adv.name)
-        elif part.get("_loopFlag") and "_hitAttrLabel" in part_hitattr_map:
-            loopnum = part.get("_loopNum", 0)
-            delay = part.get("_seconds") + (part.get("_loopFrame", 0) / 60)
-            if loopsec := part.get("_loopSec"):
-                gen = max(loopnum, int(loopsec // delay))
-            else:
-                gen = loopnum
-            gen += 1
-            gen = 1
-            ref_attrs = [
-                part_hitattr_map["_hitAttrLabel"],
-                *part_hitattr_map["_hitAttrLabelSubList"],
-            ]
-            is_msl = False
-        gen_attrs = []
-        timekey = "msl" if is_msl else "iv"
-        if gen is not None and delay is not None:
-            for gseq in range(1, gen):
-                for attr in ref_attrs:
-                    try:
-                        gattr, _ = clean_hitattr(attr.copy(), once_per_action)
-                    except AttributeError:
-                        continue
-                    if not gattr:
-                        continue
-                    if delay:
-                        gattr[timekey] = fr(attr.get(timekey, 0) + delay * gseq)
-                    gen_attrs.append(gattr)
-        if part.get("_generateNumDependOnBuffCount"):
-            # possible that this can be used with _generateNum
-            buffcond = part["_buffCountConditionId"]
-            gen = buffcond["_MaxDuplicatedCount"]
-            try:
-                bullet_timing = map(float, json.loads(part["_markerDelay"]))
-            except KeyError:
-                bullet_timing = (0,) * gen
+                        attr["mslc"] = 1
+                    if ncond:
+                        attr_with_cond = {}
+                        if econd := attr.get("cond"):
+                            attr_with_cond["cond"] = ["and", econd, ncond]
+                        else:
+                            attr_with_cond["cond"] = ncond
+                        attr_with_cond.update(attr)
+                        attr = attr_with_cond
+                    part_hitattr.append(attr)
 
-            for idx, delay in enumerate(bullet_timing):
-                if idx >= gen:
-                    break
-                delay = float(delay)
-                for attr in part_hitattrs:
-                    attrcond = ["actcond", buffcond["_Id"], ">=", idx + 1]
-                    if idx == 0:
-                        if delay:
-                            attr[timekey] = fr(attr.get(timekey, 0) + delay)
-                        if "cond" in attr:
-                            attr["cond"] = ["and", attr["cond"], attrcond]
-                        attr["cond"] = attrcond
+            def _single_bullet(outer_msl=None, outer_cnt=1, ncond=None):
+                ha_attrs = part_hitattr_map.get("_hitAttrLabel", [])
+                ha_attrs.extend(part_hitattr_map.get("_hitAttrLabelSubList", tuple()))
+                if ha_attrs:
+                    blt = None
+                    if (chiv := part.get("_collisionHitInterval")) and (((bd := part.get("_bulletDuration")) and chiv < bd) or ((bd := part.get("_duration")) and chiv < bd)):
+                        if part.get("_useAccurateCollisionHitInterval"):
+                            blt = [math.ceil(bd / chiv * outer_cnt), fr(chiv)]
+                        else:
+                            blt = [int(round(bd / chiv * outer_cnt)), fr(chiv)]
+                    elif outer_cnt > 1:
+                        blt = [outer_cnt, 0.0]
+                    _apply_blt(ha_attrs, blt, outer_msl, ncond)
+                if ab_attrs := part_hitattr_map.get("_abHitAttrLabel"):
+                    blt = None
+                    if (abiv := part.get("_abHitInterval")) and (abd := (part.get("_abDuration"))) and abiv < abd:
+                        blt = [int(round(abd / abiv * outer_cnt)), fr(abiv)]
+                    elif outer_cnt > 1:
+                        blt = [outer_cnt, 0.0]
+                    _apply_blt(ab_attrs, blt, outer_msl, ncond)
+
+            if cmdtype in BULLET_COMMAND:
+                _single_bullet()
+            elif cmdtype == CommandType.STOCK_BULLET_FIRE:
+                gn = part.get("_bulletNum", 1)
+                if specific_delay := part.get("_delayFireSec"):
+                    delays = json.loads(specific_delay)
+                    if ms_gn := action.get("_MaxStockBullet"):
+                        for idx in range(ms_gn):
+                            ncond = ["var", "buffcount", ">=", idx + 1]
+                            _single_bullet(outer_msl=delays[idx], ncond=ncond)
                     else:
-                        gattr, _ = clean_hitattr(attr.copy(), once_per_action)
-                        if not gattr:
-                            continue
-                        if delay:
-                            gattr[timekey] = fr(attr.get(timekey, 0) + delay)
-                        if "cond" in gattr:
-                            gattr["cond"] = ["and", gattr["cond"], attrcond]
-                        gattr["cond"] = attrcond
-                        gen_attrs.append(gattr)
-        part_hitattrs.extend(gen_attrs)
-        hitattrs.extend(part_hitattrs)
-    once_per_action = set()
+                        for delay in delays[0:gn]:
+                            _single_bullet(outer_msl=delay)
+                else:
+                    if ms_gn := part.get("_MaxStockBullet"):
+                        for idx in range(ms_gn):
+                            ncond = ["var", "buffcount", ">=", idx + 1]
+                            _single_bullet(outer_msl=0.0, ncond=ncond)
+                    else:
+                        _single_bullet(outer_cnt=gn)
+            elif cmdtype == CommandType.MULTI_BULLET:
+                marker_charge = part.get("_bulletMarkerChargeSec", 0)
+                ncond = None
+                if part.get("_useFireStockBulletParam"):
+                    gn = part.get("_bulletNum")
+                    specific_delay = part.get("_delayFireSec")
+                elif part.get("_generateNumDependOnBuffCount"):
+                    buffcond = part.get("_buffCountConditionId")
+                    gn = buffcond.get("_MaxDuplicatedCount", 10)
+                    ncond = ["actcond", buffcond["_Id"], ">="]
+                    specific_delay = part.get("_markerDelay")
+                else:
+                    gn = part.get("_generateNum")
+                    specific_delay = part.get("_markerDelay")
+                if specific_delay:
+                    delays = [marker_charge + d for d in json.loads(specific_delay)[0:gn]]
+                    if ncond is not None:
+                        for idx, delay in enumerate(delays):
+                            _single_bullet(outer_msl=delay, ncond=[*ncond, idx+1])
+                    else:
+                        for delay in delays:
+                            _single_bullet(outer_msl=delay)
+                else:
+                    if ncond is not None:
+                        for idx in range(gn):
+                            _single_bullet(outer_msl=marker_charge, ncond=[*ncond, idx+1])
+                    else:
+                        _single_bullet(outer_msl=marker_charge, outer_cnt=gn)
+            elif cmdtype == CommandType.FORMATION_BULLET:
+                if gn := part.get("_bulletNum"):
+                    _single_bullet(outer_cnt=gn / 2)
+
+        if part.get("_loopFlag"):
+            lp = [part.get("_loopNum", -2) + 1, fr(part.get("_seconds") - part.get("_loopSec", 0.0))]
+            for attr in part_hitattr:
+                attr["loop"] = lp
+
+        hitattrs.extend(part_hitattr)
+
+    if action.get("_OnHitExecType") == 1:
+        for attr in hitattrs:
+            attr["ifhc"] = 1
     return hitattrs
 
 
@@ -583,17 +534,14 @@ def hitattr_adj(action, s, conf, pattern=None, skip_nohitattr=True, meta=None, s
     return conf
 
 
-def convert_following_actions(startup, followed_by, default=None, add_marker_cancel=False):
+def convert_following_actions(startup, followed_by, default=None):
     interrupt_by = {}
     cancel_by = {}
-    has_fs = False
     if default:
-        has_fs = has_fs or "fs" in default
         for act in default:
             interrupt_by[act] = (0.0, None)
             cancel_by[act] = (0.0, None)
     for t, act, kind in followed_by:
-        has_fs = has_fs or (kind == ActionCancelType.BurstAttack)
         if fr(t) < startup:
             if not act in interrupt_by or interrupt_by[act][0] > t:
                 interrupt_by[act] = (fr(t), kind)
@@ -605,9 +553,6 @@ def convert_following_actions(startup, followed_by, default=None, add_marker_can
     for act, value in cancel_by.items():
         t, kind = value
         cancel_by[act] = (fr(max(0.0, t - startup)), kind)
-    if not has_fs and add_marker_cancel:
-        marker_cancel = max(0, fr(0.66666 - startup))
-        cancel_by["fs_marker"] = (marker_cancel, ActionCancelType.BurstAttack)
     return interrupt_by, cancel_by
 
 
@@ -620,7 +565,7 @@ def convert_x(xn, pattern=None, convert_follow=True, is_dragon=False):
         xconf["loop"] = 1
 
     if convert_follow:
-        xconf["interrupt"], xconf["cancel"] = convert_following_actions(s, followed_by, ("s",), add_marker_cancel=True)
+        xconf["interrupt"], xconf["cancel"] = convert_following_actions(s, followed_by, ("s",))
 
     return xconf
 
@@ -1389,7 +1334,7 @@ class AbilityConf(AbilityData):
                 ACTCOND_CONF.get(bid)
             return ["actcond", ActionTargetGroup.MYSELF.name, *buffs]
         else:
-            hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART, {}, set())
+            hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART)
             # if set(hitattr.keys()) == {"actcond", "target"}:
             #     return ["actcond", hitattr["target"], hitattr["actcond"]]
             return ["hitattr", hitattr]
@@ -1519,9 +1464,15 @@ class AbilityConf(AbilityData):
         elif res["_ConditionType"] == AbilityCondition.CP1_CONDITION:
             mode_name = "modecp"
         else:
-            mode_name = f"mode{m}"
+            if m == 1:
+                mode_name = ""
+            else:
+                mode_name = f"mode{m}"
         if self.meta is not None:
-            self.meta.chara_modes[m] = f"_{mode_name}"
+            if mode_name:
+                self.meta.chara_modes[m] = f"_{mode_name}"
+            else:
+                self.meta.chara_modes[m] = mode_name
         return ["mode", mode_name]
 
     def at_ModifyBuffDebuffDurationTime(self, res, i):
@@ -1592,7 +1543,7 @@ class AbilityConf(AbilityData):
         return self._at_upval("dprepmax", res, i)
 
     def at_AbnormalTypeNumKiller(self, res, i):
-        return ["affnumkiller", ["/".split(res[f"_VariousId{i}str"])]]
+        return ["affnumkiller", [int(r) for r in res[f"_VariousId{i}str"].split("/")]]
 
     # processing
     def process_result(self, res, source=None):
@@ -1710,8 +1661,8 @@ class ActCondConf(ActionCondition):
                 conf["maxstack"] = res["_MaxDuplicatedCount"]
         elif res["_StackData"] == 5:  # StackBuffData
             conf["maxstack"] = 4
-        if 0 < res["_Rate"] < 100:
-            conf["rate"] = res["_Rate"] / 100
+        if res["_Rate"] and res["_Rate"] != 100:
+            conf["rate"] = res["_Rate"]
         if res["_LostOnDragon"]:
             conf["lost_on_drg"] = res["_LostOnDragon"]
         if res["_CurseOfEmptinessInvalid"]:
@@ -1866,7 +1817,7 @@ class ActCondConf(ActionCondition):
         if res["_DebuffGrantRate"]:
             conf["debuffrate"] = res["_DebuffGrantRate"]
         if res["_EventProbability"] and aff == "blind":
-            conf[aff] = res["_EventProbability"] / 100
+            conf[aff] = res["_EventProbability"]
         if res["_DamageCoefficient"] and aff == "bog":
             # there is also _EventCoefficient presumably for movement speed
             conf[aff] = res["_DamageCoefficient"]
@@ -1941,7 +1892,7 @@ class ActCondConf(ActionCondition):
             conf["actgrant"] = [action_grant["_GrantCondition"], f"-t:{AbilityConf.TARGET_ACT[target]}"]
 
         if res["_DamageLink"]:
-            conf["damagelink"] = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res["_DamageLink"]), DUMMY_PART, {}, set())
+            conf["damagelink"] = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res["_DamageLink"]), DUMMY_PART)
 
         if res["_AutoAvoid"]:
             conf["avoid"] = res["_AutoAvoid"]

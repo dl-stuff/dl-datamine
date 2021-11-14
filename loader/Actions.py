@@ -225,7 +225,7 @@ def build_hitlabel_data(ref, k, hit_labels):
                 "_ref": ref,
                 "_source": k,
                 "_hitLabel": label,
-                "_hitLabelRE": label_re
+                "_hitLabelRE": label_re,
             }
         )
     return processed
@@ -294,26 +294,22 @@ def build_bullet(meta, ref, seq, data):
         db_data["_abUseAccurateCollisionHitInterval"] = ab_collision_flag
     if db_data["_delayFireSec"] and not any(db_data["_delayFireSec"]):
         db_data["_delayFireSec"] = None
+    if data.get("_useMarker"):
+        db_data["_bulletMarkerChargeSec"] = data["_marker"]["_chargeSec"]
     return db_data, hitlabel_data
 
 
 def build_formation_bullet(meta, ref, seq, data):
-    bullet_num = 0
-    bullet_data = None
-    for c in data["_child"]:
+    bullet_attrs = set()
+    for idx in range(data["_childNum"]):
+        act = data["_child"][idx]
         try:
-            if c["bulletData"]["_hitAttrLabel"]:
-                bullet_num += 1
-                bullet_data = c["bulletData"]
+            bullet_attrs.add(act["bulletData"]["_hitAttrLabel"])
         except:
             pass
-    if bullet_data:
-        db_data, hitlabel_data = build_db_data(meta, ref, seq, bullet_data)
-        db_data["commandType"] = 100
-        db_data["_bulletNum"] = bullet_num
-        return db_data, hitlabel_data
-    else:
-        return None, None
+    data["_bulletNum"] = data["_childNum"]
+    data["_hitAttrLabelSubList"] = bullet_attrs
+    return build_db_data(meta, ref, seq, data)
 
 
 def build_marker(meta, ref, seq, data):
@@ -410,10 +406,11 @@ ACTION_PART = DBTableMetadata(
         "_bulletNum": DBTableMetadata.INT,
         "_fireMaxCount": DBTableMetadata.INT,
         "_generateNum": DBTableMetadata.INT,
-        "_generateDelay": DBTableMetadata.REAL,
+        # "_generateDelay": DBTableMetadata.REAL, # this is unused
         "_generateNumDependOnBuffCount": DBTableMetadata.INT,
         "_buffCountConditionId": DBTableMetadata.INT,
         "_setBulletDelayOneByOne": DBTableMetadata.INT,
+        "_useFireStockBulletParam": DBTableMetadata.INT,
         # "_bulletDelayTime": DBTableMetadata.BLOB,
         "_markerDelay": DBTableMetadata.BLOB,
         "_lifetime": DBTableMetadata.REAL,
@@ -446,9 +443,8 @@ ACTION_PART = DBTableMetadata(
         # CONTROL
         "_charaCommand": DBTableMetadata.INT,
         "_charaCommandArgs": DBTableMetadata.BLOB,
-        # BULLETS - contains marker data, unsure if it does anything
-        # '_useMarker': DBTableMetadata.INT,
-        # '_marker': DBTableMetadata.BOLB (?)
+        # BULLETS
+        "_bulletMarkerChargeSec": DBTableMetadata.REAL,
         "_waitTime": DBTableMetadata.REAL,
         "_delayFireSec": DBTableMetadata.BLOB,
         "_isReserveFireBulletForWaiting": DBTableMetadata.INT,
@@ -486,6 +482,8 @@ ACTION_PART = DBTableMetadata(
         "_autoFireAutoSearchEnemyRadius": DBTableMetadata.REAL,
         # SERVANT
         "_servantActionCommandId": DBTableMetadata.INT,
+        # REMOVE_BUFF_TRIGGER_BOMB
+        "_targetActionConditionId": DBTableMetadata.INT,
     },
 )
 
@@ -508,8 +506,8 @@ PROCESSORS[CommandType.PLAY_MOTION] = build_db_data
 PROCESSORS[CommandType.GEN_MARKER] = build_marker
 PROCESSORS[CommandType.GEN_BULLET] = build_bullet
 PROCESSORS[CommandType.HIT_ATTRIBUTE] = build_db_data
-PROCESSORS[CommandType.HIT_STOP] = build_db_data
-PROCESSORS[CommandType.MOVE_TIME_CURVE] = build_db_data
+# PROCESSORS[CommandType.HIT_STOP] = build_db_data
+# PROCESSORS[CommandType.MOVE_TIME_CURVE] = build_db_data
 PROCESSORS[CommandType.ARRANGE_BULLET] = build_arrange_data
 PROCESSORS[CommandType.SEND_SIGNAL] = build_db_data
 PROCESSORS[CommandType.ACTIVE_CANCEL] = build_db_data
@@ -556,12 +554,11 @@ def load_actions(db, path):
             for actdata in raw:
                 action.append(actdata)
                 if (additional := actdata.get("_additionalCollision")) and actdata.get("_addNum"):
-                    for i, act in enumerate(additional):
-                        if i >= actdata["_addNum"]:
-                            break
+                    for idx in range(actdata["_addNum"]):
+                        act = additional[idx]
                         act["_seconds"] += actdata["_seconds"]
                         action.append(act)
-                    # action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
+                # action.extend(((seq+100*(1+i), act) for i, act in enumerate(additional)))
             for seq, data in enumerate(action):
                 try:
                     command_type = CommandType(data["commandType"])
