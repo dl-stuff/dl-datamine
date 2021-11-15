@@ -273,6 +273,8 @@ def build_db_data(meta, ref, seq, data):
     if cond_data["_conditionType"]:
         db_data["_conditionType"] = cond_data["_conditionType"]
         db_data["_conditionValue"] = cond_data["_conditionValue"]
+    if db_data.get("_hitRecordTargetBuffType") == -1:
+        db_data["_hitRecordTargetBuffType"] = None
     return db_data, hitlabel_data
 
 
@@ -437,6 +439,7 @@ ACTION_PART = DBTableMetadata(
         "_keepActionEnd": DBTableMetadata.INT,
         "_keepActionId1": DBTableMetadata.INT,
         "_keepActionId2": DBTableMetadata.INT,
+        "_hitRecordTargetBuffType": DBTableMetadata.INT,
         # ACTIVE_CANCEL
         "_actionType": DBTableMetadata.INT,
         "_motionEnd": DBTableMetadata.INT,

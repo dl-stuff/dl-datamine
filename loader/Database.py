@@ -1,10 +1,11 @@
+import functools
 import sqlite3
 import json
 import os
 import re
 import errno
+import functools
 from tqdm import tqdm
-from collections import defaultdict
 from enum import Enum
 
 DB_FILE = "dl.sqlite"
@@ -21,8 +22,11 @@ def check_target_path(target):
                 raise
 
 
+re_memo = functools.cache(re.compile)
+
+
 def sqlite3_regexp(pattern, item):
-    return pattern == item or bool(re.fullmatch(pattern, item))
+    return pattern == item or bool(re_memo(pattern).fullmatch(item))
 
 
 class ShortEnum(Enum):

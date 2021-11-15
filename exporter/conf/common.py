@@ -375,10 +375,9 @@ def _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=None, outer_c
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action["_Parts"]
     hitattrs = []
-    # accurate_col = 0
-    # accurate_ab_col = 0
 
     for part in actparts:
+        cmdtype = part["commandType"]
         # servant for persona
         if servant_cmd := part.get("_servantActionCommandId"):
             servant_attr = {"DEBUG_SERVANT": servant_cmd}
@@ -421,7 +420,6 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if not part_hitattr_map:
             continue
         part_hitattr_map = dict(part_hitattr_map)
-        cmdtype = part["commandType"]
         # loop & bullets
         part_hitattr = []
 
@@ -1671,6 +1669,10 @@ class ActCondConf(ActionCondition):
             conf["coei"] = res["_CurseOfEmptinessInvalid"]
         if res["_ResistBuffReset"] or res["_ResistDebuffReset"]:
             conf["unremovable"] = 1
+        # if res["_ExtraBuffType"]:
+        #     conf["ebt"] = res["_ExtraBuffType"]
+        if res['_RemoveTrigger']:
+            conf['triggerbomb'] = 1
 
     RATE_TO_MOD = {
         "_RateHP": ("hp", "buff"),
