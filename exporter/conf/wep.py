@@ -13,6 +13,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
     def process_result(self, res):
         self.reset_meta()
         self.set_ability_and_actcond_meta()
+        self.set_animation_reference(res)
 
         ablist = []
         for i in (1, 2, 3):
@@ -58,6 +59,7 @@ class WepConf(WeaponBody, SkillProcessHelper):
 
         remap_stuff(conf, self.action_ids)
         self.unset_ability_and_actcond_meta(conf)
+        self.index["ActionParts"].animation_reference = None
 
         return conf
 

@@ -730,7 +730,7 @@ class SkillProcessHelper:
 
     def reset_meta(self):
         self.chara_skills = {}
-        self.enhanced_counter = itertools.count(start=0)
+        self.enhanced_counter = defaultdict(lambda: itertools.count(start=0))
         self.all_chara_skills = {}
         self.enhanced_fs = {}
         self.ab_alt_attrs = defaultdict(lambda: [])
@@ -742,8 +742,8 @@ class SkillProcessHelper:
         self.chara_modes = {}
         self.cp1_gauge = 0
 
-    def get_enhanced_key(self):
-        nid = next(self.enhanced_counter)
+    def get_enhanced_key(self, base):
+        nid = next(self.enhanced_counter[base])
         if nid == 0:
             return "enhanced"
         return f"enhanced{nid}"
@@ -1331,11 +1331,12 @@ class AbilityConf(AbilityData):
         if buffs:
             for bid in buffs:
                 # ik i do have self.index here but i'll keep the oof bits consistent
+                # multiple buff id = shifting abilities
                 ACTCOND_CONF.get(bid)
             return ["actcond", ActionTargetGroup.MYSELF.name, *buffs]
         else:
             hitattr = convert_hitattr(self.index["PlayerActionHitAttribute"].get(res[f"_VariousId{i}str"]), DUMMY_PART)
-            # if set(hitattr.keys()) == {"actcond", "target"}:
+            # if set(hitattr.keys()) == {"actcond", "target"} and hitattr["target"] == "MYSELF":
             #     return ["actcond", hitattr["target"], hitattr["actcond"]]
             return ["hitattr", hitattr]
 
@@ -1394,7 +1395,7 @@ class AbilityConf(AbilityData):
                     ekey = None
                 else:
                     if self.enhanced_key is None:
-                        self.enhanced_key = self.meta.get_enhanced_key()
+                        self.enhanced_key = self.meta.get_enhanced_key(sn)
                     ekey = self.enhanced_key
                 self.meta.chara_skills[skill_id] = SDat(skill_id, sn, ekey)
             else:
@@ -1420,7 +1421,7 @@ class AbilityConf(AbilityData):
                     ekey = None
                 else:
                     if self.enhanced_key is None:
-                        self.enhanced_key = self.meta.get_enhanced_key()
+                        self.enhanced_key = self.meta.get_enhanced_key("fs")
                     ekey = self.enhanced_key
                 self.meta.enhanced_fs[burst_id] = (ekey, burst)
             else:
@@ -1522,7 +1523,7 @@ class AbilityConf(AbilityData):
         return ["tohp", "sp", self._upval(res, i)]  # only instance of this has a SR, unclear what happens on normal adv
 
     def at_CrestGroupScoreUp(self, res, i):
-        return ["psalm", res["_BaseCrestGroupId"], res["_TriggerBaseCrestGroupCount"], self._upval(res, i)]
+        return ["psalm", res["_BaseCrestGroupId"], res["_TriggerBaseCrestGroupCount"], int(self._upval(res, i, div=1))]
 
     def at_ModifyBuffDebuffDurationTimeByRecoveryHp(self, res, i):
         return ["acduration_healed", res[f"_VariousId{i}a"], self._upval(res, i), res[f"_VariousId{i}b"], res[f"_VariousId{i}c"]]
@@ -1547,6 +1548,8 @@ class AbilityConf(AbilityData):
 
     # processing
     def process_result(self, res, source=None):
+        if self.use_ablim_groups and (shiftgroup := res.get("_ShiftGroupId")):
+            return [{"id": str(res["_Id"]), "shiftgroup": str(shiftgroup)}]
         self.enhanced_key = None
         if source is not None:
             self.source = source
@@ -1596,18 +1599,19 @@ class AbilityConf(AbilityData):
                         target = AbilityTargetAction(res.get(f"_TargetAction{i}", 0))
                         if target != AbilityTargetAction.NONE:
                             ab.append(f"-t:{AbilityConf.TARGET_ACT[target]}")
-                        if self.use_ablim_groups and res[f"_AbilityLimitedGroupId{i}"]:
-                            idx = res[f"_AbilityLimitedGroupId{i}"]
-                            # mix = lim_group.get("_IsEffectMix", 0)
-                            # mlim = int(lim_group.get("_MaxLimitedValue", 0))
-                            if id:
-                                ab.append(f"-lg:{idx}")
+                        # if self.use_ablim_groups and res[f"_AbilityLimitedGroupId{i}"]:
+                        #     if (idx := res[f"_AbilityLimitedGroupId{i}"]):
+                        #         ab.append(f"-lg:{idx}")
                         ablist.append(ab)
                 except (AttributeError, ValueError):
                     pass
         if ablist and condtype:
             conf["ab"] = ablist
             conflist.insert(0, conf)
+
+        # AbilityLimitedGroup does not reflect irl mix outside of certain buff abilities on wyrmprints
+        if self.use_ablim_groups and res["_AbilityLimitedGroupId1"]:
+            conf["lg"] = str(res["_AbilityLimitedGroupId1"])
 
         if self.source == "ex":
             if curr_actcond := self.index["ActCondConf"].curr_actcond_conf:
@@ -1671,8 +1675,8 @@ class ActCondConf(ActionCondition):
             conf["unremovable"] = 1
         # if res["_ExtraBuffType"]:
         #     conf["ebt"] = res["_ExtraBuffType"]
-        if res['_RemoveTrigger']:
-            conf['triggerbomb'] = 1
+        if res["_RemoveTrigger"]:
+            conf["triggerbomb"] = 1
 
     RATE_TO_MOD = {
         "_RateHP": ("hp", "buff"),
@@ -1909,7 +1913,7 @@ class ActCondConf(ActionCondition):
                 burst_id = res["_EnhancedBurstAttack"]
                 if not burst_id in self.meta.enhanced_fs:
                     if ekey is None:
-                        ekey = self.meta.get_enhanced_key()
+                        ekey = self.meta.get_enhanced_key("fs")
                     self.meta.enhanced_fs[burst_id] = (ekey, self.index["PlayerAction"].get(burst_id))
                     alt["fs"] = ekey
                 else:
@@ -1923,7 +1927,7 @@ class ActCondConf(ActionCondition):
                 esid = res[skey]
                 if esid not in self.meta.chara_skills and esid not in self.meta.all_chara_skills:
                     if ekey is None:
-                        ekey = self.meta.get_enhanced_key()
+                        ekey = self.meta.get_enhanced_key(sn)
                     self.meta.chara_skills[esid] = SDat(esid, sn, ekey)
                     alt[sn] = ekey
                 else:
@@ -1931,7 +1935,7 @@ class ActCondConf(ActionCondition):
                         sdat = self.meta.chara_skills[esid]
                     except KeyError:
                         sdat = self.meta.all_chara_skills[esid]
-                    ekey = sdat.group or "default"
+                    alt[sn] = sdat.group or "default"
 
         if alt:
             conf["alt"] = alt

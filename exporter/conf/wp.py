@@ -83,28 +83,35 @@ class WpConf(AbilityCrest):
         # union conf
         union_conf = {}
         for res in union_abilities:
-            union_tiers = []
+            union_tiers = {}
             for i in range(1, 6):
                 if (abid := res.get(f"_AbilityId{i}")) and (ability := self.index["AbilityConf"].get(abid, source="union")):
-                    union_tiers.append((res[f"_CrestGroup1Count{i}"], ability))
+                    union_tiers[res[f"_CrestGroup1Count{i}"]] = ability
             union_conf[res["_Id"]] = union_tiers
         # with open(os.path.join(out_dir, "union.json"), "w", newline="", encoding="utf-8") as fp:
         #     # json.dump(res, fp, indent=2, ensure_ascii=False)
         #     fmt_conf(union_conf, f=fp, sortlim=0)
 
         # ability limited group
+        shift_groups = {}
+        for res in self.index["AbilityShiftGroup"].get_all():
+            to_level = {}
+            to_ability = {}
+            for i in range(1, res["_AmuletEffectMaxLevel"] + 1):
+                if not (abid := res.get(f"_Level{i}")):
+                    break
+                to_level[abid] = i
+                to_ability[i] = self.index["AbilityConf"].get(abid, source="shiftgroup")
+            if to_level:
+                shift_groups[res["_Id"]] = (to_level, to_ability)
         lim_groups = {}
         for res in self.index["AbilityLimitedGroup"].get_all():
-            if (mix := res.get("_IsEffectMix", 0)) or (max := res.get("_MaxLimitedValue", 0)):
-                # bolb
-                if max > 3:
-                    max /= 100
-                else:
-                    max = int(max)
-                lim_groups[f"-lg:{res['_Id']}"] = {"mix": mix, "max": max}
+            if not (mix := res.get("_IsEffectMix")):
+                continue
+            lim_groups[res["_Id"]] = {"mix": mix, "max": res.get("_MaxLimitedValue", 0.0) / 100}
 
-        wp_meta = {"union": union_conf, "lim_groups": lim_groups, "actconds": self.index["ActCondConf"].curr_actcond_conf}
-        with open(os.path.join(out_dir, "wp_meta.json"), "w", newline="", encoding="utf-8") as fp:
+        wp_meta = {"unions": union_conf, "lim_groups": lim_groups, "shift_groups": shift_groups, "actconds": self.index["ActCondConf"].curr_actcond_conf}
+        with open(os.path.join(out_dir, "wyrmprints_meta.json"), "w", newline="", encoding="utf-8") as fp:
             # json.dump(res, fp, indent=2, ensure_ascii=False)
             fmt_conf(wp_meta, f=fp, lim=2, sortlim=1)
 
