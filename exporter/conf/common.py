@@ -285,7 +285,7 @@ def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcon
         #         skill=skill,
         #     )
         ACTCOND_CONF.get(actcond)
-        attr["actcond"] = actcond
+        attr["actcond"] = str(actcond)
 
     if add_rng_hitlabels := hitattr.get("_AdditionalRandomHitLabel"):
         add_count = hitattr.get("_AdditionalRandomHitNum")
@@ -1327,7 +1327,7 @@ class AbilityConf(AbilityData):
         buffs = []
         for bid in self._varids(res, i):
             if bid:
-                buffs.append(bid)
+                buffs.append(str(bid))
         if buffs:
             for bid in buffs:
                 # ik i do have self.index here but i'll keep the oof bits consistent
@@ -1570,7 +1570,7 @@ class AbilityConf(AbilityData):
         res["_ConditionType"] = condtype
         # actcond
         if reqac := res.get("_RequiredBuff"):
-            conf["actcond"] = reqac
+            conf["actcond"] = str(reqac)
         # cd
         if cd := res.get("_CoolTime"):
             conf["cd"] = cd

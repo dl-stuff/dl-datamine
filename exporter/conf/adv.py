@@ -100,9 +100,9 @@ class BaseConf(WeaponType):
         all_res = self.get_all()
         check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
-            out_name = self.outfile_name(res, ext)
+            outname = self.outfile_name(res, ext)
             res = self.process_result(res)
-            output = os.path.join(out_dir, out_name)
+            output = os.path.join(out_dir, outname)
             with open(output, "w", newline="", encoding="utf-8") as fp:
                 # json.dump(res, fp, indent=2, ensure_ascii=False)
                 fmt_conf(res, f=fp)
@@ -117,10 +117,10 @@ class ExAbilityConf(AbilityConf):
 
     def process_result(self, res, source=None):
         if conflist := super().process_result(res, source=source):
-            for idx, cf in enumerate(conflist):
-                conflist[idx] = {"category": res["_Category"], **cf}
-            return conflist
-        return [{"category": res["_Category"]}]
+            exability = conflist[0]
+            exability["category"] = res["_Category"]
+            return exability
+        return {"category": res["_Category"]}
 
 
 class AdvConf(CharaData, SkillProcessHelper):
@@ -375,8 +375,7 @@ class AdvConf(CharaData, SkillProcessHelper):
             for chain, charas in sorted(chain_data.items()):
                 exability_conf["chain"][chain] = self.index["AbilityConf"].get(chain, source="ex")
                 for chara in charas:
-                    exability_conf["lookup"][chara] = [coab, chain]
-        exability_conf["lookup"] = dict(sorted(exability_conf["lookup"].items(), key=lambda kv: (kv[1][0], -kv[1][1])))
+                    exability_conf["lookup"][chara] = [str(coab), str(chain)]
         return exability_conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
@@ -389,7 +388,6 @@ class AdvConf(CharaData, SkillProcessHelper):
         # skillshare_out = os.path.join(out_dir, f"skillshare{ext}")
         exability_out = os.path.join(out_dir, f"exability{ext}")
         advout_dir = os.path.join(out_dir, "adv")
-        check_target_path(advout_dir)
         # exability_data = {ele.lower(): {} for ele in ELEMENTS.values()}
         exability_data = defaultdict(lambda: defaultdict(list))
 
@@ -398,16 +396,18 @@ class AdvConf(CharaData, SkillProcessHelper):
             try:
                 if res.get("_UniqueGrowMaterialId1") and res.get("_UniqueGrowMaterialId2"):
                     outconf = self.process_result(res, force_50mc=True)
-                    out_name = self.outfile_name(outconf, ext, variant="50MC")
-                    output = os.path.join(advout_dir, out_name)
+                    outname = self.outfile_name(outconf, ext, variant="50MC")
+                    output = os.path.join(advout_dir, outconf["c"]["ele"], outname)
+                    check_target_path(os.path.dirname(output))
                     with open(output, "w", newline="", encoding="utf-8") as fp:
                         fmt_conf(outconf, f=fp)
                 outconf = self.process_result(res)
-                out_name = self.outfile_name(outconf, ext)
+                outname = self.outfile_name(outconf, ext)
                 # if ex_res := self.exability_data(res):
                 #     exability_data[snakey(outconf["c"]["ele"])][snakey(outconf["c"]["name"])] = ex_res
                 exability_data[res["_ExAbilityData5"]][res["_ExAbility2Data5"]].append(snakey(outconf["c"]["name"]))
-                output = os.path.join(advout_dir, out_name)
+                output = os.path.join(advout_dir, outconf["c"]["ele"], outname)
+                check_target_path(os.path.dirname(output))
                 with open(output, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(outconf, f=fp)
             except Exception as e:

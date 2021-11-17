@@ -149,6 +149,12 @@ class DrgConf(DragonData, SkillProcessHelper):
 
         return conf
 
+    @staticmethod
+    def outfile_name(conf, ext, variant=None):
+        if variant is not None:
+            return snakey(conf["d"]["name"]) + "." + variant + ext
+        return snakey(conf["d"]["name"]) + ext
+
     def export_all_to_folder_by_ele(self, out_dir="./out", ext=".json"):
         where_str = "_Rarity = 5 AND _IsPlayable = 1 AND (_SellDewPoint = 8500 OR _Id in (" + ",".join(map(str, DrgConf.EXTRA_DRAGONS)) + ")) AND _Id = _EmblemId"
         # where_str = '_IsPlayable = 1'
@@ -172,10 +178,10 @@ class DrgConf(DragonData, SkillProcessHelper):
         where_str = "_IsPlayable = 1 AND _Id = _EmblemId"
         all_res = self.get_all(where=where_str)
         out_dir = os.path.join(out_dir, "drg")
-        check_target_path(out_dir)
         for res in tqdm(all_res, desc=os.path.basename(out_dir)):
             if conf := self.process_result(res):
-                outfile = os.path.join(out_dir, snakey(conf["d"]["name"]) + ext)
+                outfile = os.path.join(out_dir, conf["d"]["ele"], self.outfile_name(conf, ext))
+                check_target_path(os.path.dirname(outfile))
                 with open(outfile, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(conf, f=fp)
 
