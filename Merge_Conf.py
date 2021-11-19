@@ -114,7 +114,7 @@ def merge_conf(name, kind, diff=None):
     with open(gen_path) as fn:
         genconf = json.load(fn)
     merge_conf_recurse(simconf, genconf, kind, mapdict, depth - 2)
-    print("merge", sim_path)
+    # print("merge", sim_path)
     with open(sim_path, "w") as fn:
         fmt_conf(simconf, f=fn, lim=depth)
         fn.write("\n")

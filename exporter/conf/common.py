@@ -1779,15 +1779,10 @@ class ActCondConf(ActionCondition):
         # general slip damage stuff
         # will leave these values at negative
         slip = {}
-        if res["_SlipDamageFixed"]:
-            slip["fixed"] = res["_SlipDamageFixed"]
-        if res["_SlipDamageRatio"]:
-            slip["percent"] = res["_SlipDamageRatio"]
-        # _SlipDamageMax: not used
-        if res["_SlipDamagePower"]:
-            slip["dmg"] = res["_SlipDamagePower"]
-        if res["_RegenePower"]:
-            slip["heal"] = res["_RegenePower"]
+        for func, slipkey in (("fixed", "_SlipDamageFixed"), ("percent", "_SlipDamageRatio"), ("mod", "_SlipDamagePower"), ("heal", "_RegenePower")):
+            if res[slipkey]:
+                slip["value"] = [func, fr(res[slipkey])]
+                break
         if slip:
             if res["_ValidSlipHp"]:
                 if res["_SlipDamageGroup"] == 0:
@@ -1795,17 +1790,12 @@ class ActCondConf(ActionCondition):
                     slip["kind"] = "bleed"
                 else:
                     # corrosion
-                    slip["can_die"] = 1
                     slip["add"] = res["_RateIncreaseByTime"]
-                    slip["addiv"] = res["_RateIncreaseDuration"]
+                    slip["addiv"] = fr(res["_RateIncreaseDuration"])
                     slip["threshold"] = res["_RequiredRecoverHp"]
                     slip["kind"] = "corrosion"
                 maybe_debuff.add("_ValidSlipHp")
             else:
-                if any((v > 0 for v in slip.values())):
-                    maybe_debuff.add(1)
-                if any((v < 0 for v in slip.values())):
-                    maybe_buff.add(1)
                 if res["_ValidRegeneHP"]:
                     slip["kind"] = "hp"
                 elif res["_ValidRegeneSP"]:
@@ -1821,11 +1811,13 @@ class ActCondConf(ActionCondition):
                     slip["target"] = "s3"
                 elif res["_ValidRegeneDP"]:
                     slip["kind"] = "dp"
+            if "kind" in slip:
+                if slip["value"][1] > 0:
+                    maybe_debuff.add(1)
+                elif slip["value"][1] < 0:
+                    maybe_buff.add(1)
             if res["_SlipDamageIntervalSec"]:
-                slip["iv"] = res["_SlipDamageIntervalSec"]
-            for k, v in slip.items():
-                if isinstance(v, float):
-                    slip[k] = fr(v)
+                slip["iv"] = fr(res["_SlipDamageIntervalSec"])
             conf["slip"] = slip
 
         if res["_EventProbability"] and aff == "blind":
