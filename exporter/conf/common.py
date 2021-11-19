@@ -1546,6 +1546,9 @@ class AbilityConf(AbilityData):
     def at_AbnormalTypeNumKiller(self, res, i):
         return ["affnumkiller", [int(r) for r in res[f"_VariousId{i}str"].split("/")]]
 
+    def at_RebornHpRateUp(self, res, i):
+        return ["rebornhp", self._upval(res, i)]
+
     # processing
     def process_result(self, res, source=None):
         if self.use_ablim_groups and (shiftgroup := res.get("_ShiftGroupId")):
@@ -1660,13 +1663,14 @@ class ActCondConf(ActionCondition):
             conf["overwrite"] = res["_OverwriteGroupId"]
         elif res["_OverwriteIdenticalOwner"] or res["_Overwrite"]:
             conf["overwrite"] = -1
-        if res["_MaxDuplicatedCount"]:
-            if not "overwrite" in conf or res["_MaxDuplicatedCount"] > 1:
-                conf["maxstack"] = res["_MaxDuplicatedCount"]
-        elif res["_StackData"] == 5:  # StackBuffData
-            conf["maxstack"] = 4
+        elif res["_MaxDuplicatedCount"] == 1:
+            conf["overwrite"] = -1
+        if res["_MaxDuplicatedCount"] > 1:
+            conf["maxstack"] = res["_MaxDuplicatedCount"]
+        elif res["_StackData"]:  # StackBuffData
+            conf["maxstack"] = self.index["StackBuffData"].get(res["_StackData"]).get("_LimitNum")
         if res["_Rate"] and res["_Rate"] != 100:
-            conf["rate"] = res["_Rate"]
+            conf["rate"] = res["_Rate"] / 100
         if res["_LostOnDragon"]:
             conf["lost_on_drg"] = res["_LostOnDragon"]
         if res["_CurseOfEmptinessInvalid"]:
@@ -1675,8 +1679,6 @@ class ActCondConf(ActionCondition):
             conf["unremovable"] = 1
         # if res["_ExtraBuffType"]:
         #     conf["ebt"] = res["_ExtraBuffType"]
-        if res["_RemoveTrigger"]:
-            conf["triggerbomb"] = 1
 
     RATE_TO_MOD = {
         "_RateHP": ("hp", "buff"),
@@ -1741,27 +1743,26 @@ class ActCondConf(ActionCondition):
         def _check_debuff(key, value):
             if value > 0:
                 maybe_buff.add(key)
-            else:
+            elif value < 0:
                 maybe_debuff.add(key)
 
         try:
             aff = AFFLICTION_TYPES[res["_Type"]].lower()
+            conf["aff"] = aff
         except KeyError:
             aff = None
         if res["_RemoveConditionId"]:
             conf["remove"] = res["_RemoveConditionId"]
         if res["_EfficacyType"] == 100:
-            conf["dispel"] = 1
-        elif res["_EfficacyType"] == 97:
-            conf["remove"] = "buff"
+            conf["dispel"] = "buff"
+        # elif res["_EfficacyType"] == 97:
+        #     conf["dispel"] = "buff"
         elif res["_EfficacyType"] == 98:
-            conf["remove"] = "debuff"
+            conf["dispel"] = "debuff"
         elif res["_EfficacyType"] == 99:
-            conf["remove"] = "actcond"
+            conf["dispel"] = "actcond"
         elif res["_EfficacyType"] == 1:
-            conf["relief"] = aff
-        elif aff:
-            conf["aff"] = aff
+            conf["relief"] = 1
         if duration := res["_DurationSec"]:
             if res["_MinDurationSec"]:
                 duration = fr((duration + res["_MinDurationSec"]) / 2)
@@ -1787,8 +1788,6 @@ class ActCondConf(ActionCondition):
             slip["dmg"] = res["_SlipDamagePower"]
         if res["_RegenePower"]:
             slip["heal"] = res["_RegenePower"]
-        if res["_SlipDamageIntervalSec"]:
-            slip["iv"] = res["_SlipDamageIntervalSec"]
         if slip:
             if res["_ValidSlipHp"]:
                 if res["_SlipDamageGroup"] == 0:
@@ -1802,33 +1801,35 @@ class ActCondConf(ActionCondition):
                     slip["threshold"] = res["_RequiredRecoverHp"]
                     slip["kind"] = "corrosion"
                 maybe_debuff.add("_ValidSlipHp")
-            elif res["_ValidRegeneHP"]:
-                slip["kind"] = "hp"
-            elif res["_ValidRegeneSP"]:
-                slip["kind"] = "sp"
-            elif res["_AutoRegeneS1"]:
-                slip["kind"] = "sp"
-                slip["target"] = "s1"
-            elif res["_UniqueRegeneSp01"]:
-                slip["kind"] = "sp"
-                slip["target"] = "s2"
-            elif res["_AutoRegeneSW"]:
-                slip["kind"] = "sp"
-                slip["target"] = "s3"
-            elif res["_ValidRegeneDP"]:
-                slip["kind"] = "dp"
+            else:
+                if any((v > 0 for v in slip.values())):
+                    maybe_debuff.add(1)
+                if any((v < 0 for v in slip.values())):
+                    maybe_buff.add(1)
+                if res["_ValidRegeneHP"]:
+                    slip["kind"] = "hp"
+                elif res["_ValidRegeneSP"]:
+                    slip["kind"] = "sp"
+                elif res["_AutoRegeneS1"]:
+                    slip["kind"] = "sp"
+                    slip["target"] = "s1"
+                elif res["_UniqueRegeneSp01"]:
+                    slip["kind"] = "sp"
+                    slip["target"] = "s2"
+                elif res["_AutoRegeneSW"]:
+                    slip["kind"] = "sp"
+                    slip["target"] = "s3"
+                elif res["_ValidRegeneDP"]:
+                    slip["kind"] = "dp"
+            if res["_SlipDamageIntervalSec"]:
+                slip["iv"] = res["_SlipDamageIntervalSec"]
             for k, v in slip.items():
                 if isinstance(v, float):
                     slip[k] = fr(v)
             conf["slip"] = slip
 
-        if res["_DebuffGrantRate"]:
-            conf["debuffrate"] = res["_DebuffGrantRate"]
         if res["_EventProbability"] and aff == "blind":
             conf[aff] = res["_EventProbability"]
-        if res["_DamageCoefficient"] and aff == "bog":
-            # there is also _EventCoefficient presumably for movement speed
-            conf[aff] = res["_DamageCoefficient"]
         if res["_TargetElemental"]:
             conf["ele"] = ele_bitmap(res["_TargetElemental"])
         if res["_ConditionDebuff"] == 16:
@@ -1864,6 +1865,12 @@ class ActCondConf(ActionCondition):
 
         if res["_HealInvalid"]:
             mods.append((-1, "getrcv", "buff"))
+
+        if res["_DebuffGrantRate"]:
+            mods.append((res["_DebuffGrantRate"], "debuffrate", "buff"))
+        if res["_DamageCoefficient"] and aff == "bog":
+            # there is also _EventCoefficient presumably for movement speed
+            conf[aff] = res["_DamageCoefficient"]
 
         if mods:
             conf["icon"] = "-".join(mods[0][1:])
@@ -1963,6 +1970,10 @@ class ActCondConf(ActionCondition):
 
         if res["_ExcludeFromBuffExtension"]:
             conf["nobufftime"] = 1
+
+        if res["_RemoveTrigger"]:
+            conf["triggerbomb"] = 1
+            maybe_buff.add(1)
 
         if maybe_debuff and not maybe_buff:
             conf["debuff"] = 1

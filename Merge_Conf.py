@@ -144,9 +144,9 @@ def merge_kind_conf(kind, diff=None):
 
 def merge_all_conf():
     for root, _, files in os.walk(GEN):
-        kind = None
         if root == GEN:
             continue
+        kind = root.replace(GEN, "").strip("\\/")
         for fn in files:
             name, ext = os.path.splitext(fn)
             if ext != ".json":
