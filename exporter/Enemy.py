@@ -191,7 +191,7 @@ class EnemyParam(DBView):
         14: 13,
         15: 14,
     }
-    DO_FULL_ACTIONS = ("AGITO_ABS", "DIABOLOS")
+    DO_FULL_ACTIONS = ("AGITO_ABS", "DIABOLOS", "TIME_ATTACK")
     ACTION_SETS = ("_ActionSet", "_ActionSetBoost", "_ActionSetFire", "_ActionSetWater", "_ActionSetWind", "_ActionSetLight", "_ActionSetDark")
 
     def __init__(self, index):
