@@ -1035,7 +1035,7 @@ class AbilityConf(AbilityData):
         return ["hp", "<", int(res["_ConditionValue"]), 1]
 
     def ac_QUEST_START(self, res):
-        return ["start"]
+        return ["event", "start"]
 
     def ac_OVERDRIVE(self, res):
         return ["overdrive"]
