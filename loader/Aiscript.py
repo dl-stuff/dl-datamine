@@ -5,61 +5,11 @@ from tqdm import tqdm
 import subprocess
 
 from loader.Database import check_target_path, DBViewIndex
+from loader.AiscriptEnums import Command, Compare, Move, Target, Turn
 from exporter.Shared import snakey
 from exporter.Enemy import EnemyAction
-from exporter.AiscriptInit import Target, Move, Turn, Order
 
 OUTPUT = "out/_aiscript"
-
-
-class Command(Enum):
-    Def = 0
-    EndDef = 1
-    If = 2
-    Else = 3
-    ElseIF = 4
-    EndIf = 5
-    Set = 6
-    Add = 7
-    Sub = 8
-    SetTarget = 9
-    EndScript = 10
-    Action = 11
-    Function = 12
-    MoveAction = 13
-    TurnAction = 14
-    Random = 15
-    RecTimer = 16
-    RecHpRate = 17
-    AliveNum = 18
-    Jump = 19
-    Wake = 20
-    ClearDmgCnt = 21
-    UnusualPosture = 22
-    FromActionSet = 23
-    GM_SetTurnEvent = 24
-    GM_CompleteTurnEvent = 25
-    GM_SetTurnMax = 26
-    GM_SetSuddenEvent = 27
-    GM_SetBanditEvent = 28
-    Mul = 29
-    OrderCloser = 30
-    OrderAliveFarther = 31
-    FromActionSetBoost = 32
-    UnitNumInCircle = 33
-    Reserve08 = 34
-    Reserve09 = 35
-    Reserve10 = 36
-
-
-class Compare(Enum):
-    largeEqual = 0
-    smallEqual = 1
-    repudiation = 2
-    equal = 3
-    large = 4
-    small = 5
-    none = 6
 
 
 def s(v, prefix="self."):
@@ -112,7 +62,8 @@ def fmt_def(inst):
     name = snakey(name)
     if name[0].isdigit():
         name = "_" + name
-    return f"{INDENT*inst.depth}@log_call(logfmt=logfmt_funcdef, indent=True)\n{INDENT*inst.depth}def {name}(self):"
+    # return f"{INDENT*inst.depth}@log_call(logfmt=logfmt_funcdef, indent=True)\n{INDENT*inst.depth}def {name}(self):"
+    return f"{INDENT*inst.depth}\n{INDENT*inst.depth}def {name}(self):"
 
 
 def fmt_set(inst):
@@ -187,8 +138,8 @@ def fmt_jump(inst):
 
 
 def fmt_settarget(inst):
-    target = Target(inst.params[0].values[0])
-    return f"{INDENT*inst.depth}self.target({target})"
+    target = Target(inst.params[0].values[0]).name
+    return f"{INDENT*inst.depth}self.target({target!r})"
 
 
 def fmt_add(inst):
@@ -215,13 +166,13 @@ def fmt_alivenum(inst):
 
 
 def fmt_move(inst):
-    action = Move(inst.params[0].values[0])
-    return f"{INDENT*inst.depth}self.move({action})"
+    action = Move(inst.params[0].values[0]).name
+    return f"{INDENT*inst.depth}self.move({action!r})"
 
 
 def fmt_turn(inst):
-    action = Turn(inst.params[0].values[0])
-    return f"{INDENT*inst.depth}self.turn({action})"
+    action = Turn(inst.params[0].values[0]).name
+    return f"{INDENT*inst.depth}self.turn({action!r})"
 
 
 def fmt_action(inst):
@@ -240,11 +191,11 @@ def fmt_wake(inst):
 
 
 def fmt_orderalivefarther(inst):
-    return f"{INDENT*inst.depth}self.next_order = {Order.AliveFarther}"
+    return f'{INDENT*inst.depth}self.next_order = "AliveFarther"'
 
 
 def fmt_ordercloser(inst):
-    return f"{INDENT*inst.depth}self.next_order = {Order.Closer}"
+    return f'{INDENT*inst.depth}self.next_order = "Closer"'
 
 
 def fmt_unusualposture(inst):
@@ -316,7 +267,7 @@ FMT_PYTHON = {
     Command.Action: fmt_action,
     Command.ClearDmgCnt: fmt_cleardmgcnt,
     Command.Wake: fmt_wake,
-    Command.OrderAliveFarther: fmt_orderalivefarther,
+    Command.OrderAliveFather: fmt_orderalivefarther,
     Command.OrderCloser: fmt_ordercloser,
     Command.UnusualPosture: fmt_unusualposture,
     Command.GM_SetTurnMax: fmt_gmsetturn,
@@ -334,17 +285,16 @@ FMT_PYTHON = {
 class Root:
     HEADER = """import random
 from functools import partial
-from .. import *
+from . import *
 
 """
     CLASSDEF = """
 
-class Runner(AiRunner):
+class Runner:
     AI_NAME = {!r}
 """
     PYINIT = f"""
     def __init__(self, params):
-        super().__init__(params)
         {s('init')}()
 """
     NAME = None
@@ -361,15 +311,6 @@ class Runner(AiRunner):
         Root.RT_VAR = {}
         Root.SET_VALUES = {}
         Root.ACTION_LITERALS = {}
-
-    # class Compare(Enum):
-    #     largeEqual = 0
-    #     smallEqual = 1
-    #     repudiation = 2
-    #     equal = 3
-    #     large = 4
-    #     small = 5
-    #     none = 6
 
     @staticmethod
     def add_rt_var(v, value=None, opt=None):

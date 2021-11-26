@@ -6,14 +6,9 @@ from tqdm import tqdm
 from unidecode import unidecode
 
 from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target_path
-from loader.Actions import CommandType
-from exporter.Mappings import (
-    AFFLICTION_TYPES,
+from loader.Enums import (
+    CommandType,
     ActionCollision,
-    KILLER_STATE,
-    TRIBE_TYPES,
-    ELEMENTS,
-    WEAPON_TYPES,
     AbilityCondition,
     AbilityTargetAction,
     ActionTargetGroup,
@@ -25,6 +20,13 @@ from exporter.Mappings import (
     AuraType,
     ActionSignalType,
     CharacterControl,
+)
+from exporter.Mappings import (
+    AFFLICTION_TYPES,
+    KILLER_STATE,
+    TRIBE_TYPES,
+    ELEMENTS,
+    WEAPON_TYPES,
 )
 
 

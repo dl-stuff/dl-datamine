@@ -17,27 +17,23 @@ from ctypes import c_float
 
 from loader.Database import DBViewIndex, DBView, check_target_path
 from loader.Actions import CommandType
-from exporter.Shared import ActionCondition, ActionParts, AuraData, PlayerAction, AbilityData, ActionPartsHitLabel, snakey
-from exporter.Adventurers import CharaData, CharaUniqueCombo
-from exporter.Dragons import DragonData
-from exporter.Weapons import WeaponType, WeaponBody
-from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import (
-    WEAPON_TYPES,
-    ELEMENTS,
-    TRIBE_TYPES,
-    AFFLICTION_TYPES,
+from loader.Enums import (
     AbilityCondition,
     ActionTargetGroup,
     AbilityTargetAction,
     AbilityType,
     AbilityStat,
-    AuraType,
     PartConditionType,
     ActionCancelType,
     PartConditionComparisonType,
     ActionSignalType,
 )
+from exporter.Shared import ActionCondition, ActionParts, AuraData, PlayerAction, AbilityData, ActionPartsHitLabel, snakey
+from exporter.Adventurers import CharaData, CharaUniqueCombo
+from exporter.Dragons import DragonData
+from exporter.Weapons import WeaponType, WeaponBody
+from exporter.Wyrmprints import AbilityCrest, UnionAbility
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
 DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
