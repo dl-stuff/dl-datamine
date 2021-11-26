@@ -8,18 +8,20 @@ from collections import defaultdict
 import math
 import copy
 
-from loader.Actions import CommandType
+from loader.Enums import (
+    CommandType,
+    AbilityCondition,
+    ActionTargetGroup,
+    AbilityTargetAction,
+    AbilityType,
+    AbilityStat,
+    PartConditionType,
+    ActionCancelType,
+    PartConditionComparisonType,
+    ActionSignalType,
+)
 from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
 from exporter.Mappings import (
-    ActionTargetGroup,
-    PartConditionType,
-    PartConditionComparisonType,
-    ActionCancelType,
-    AbilityTargetAction,
-    AbilityStat,
-    AbilityCondition,
-    AbilityType,
-    ActionSignalType,
     AFFLICTION_TYPES,
     ELEMENTS,
     TRIBE_TYPES,

@@ -276,14 +276,14 @@ ACTION_PART = DBTableMetadata(
         "_loopNum": DBTableMetadata.INT,
         "_loopFrame": DBTableMetadata.INT,
         "_loopSec": DBTableMetadata.REAL,
-        # TIMESTOP
-        "_stopMotionPositionSec": DBTableMetadata.REAL,
-        "_stopTimeSpanSec": DBTableMetadata.REAL,
-        "_isRepeat": DBTableMetadata.INT,
-        "_isOverridePlaySpeed": DBTableMetadata.INT,
-        "_playSpeed": DBTableMetadata.REAL,
-        # TIMECURVE
-        "_isNormalizeCurve": DBTableMetadata.INT,
+        # # TIMESTOP
+        # "_stopMotionPositionSec": DBTableMetadata.REAL,
+        # "_stopTimeSpanSec": DBTableMetadata.REAL,
+        # "_isRepeat": DBTableMetadata.INT,
+        # "_isOverridePlaySpeed": DBTableMetadata.INT,
+        # "_playSpeed": DBTableMetadata.REAL,
+        # # TIMECURVE
+        # "_isNormalizeCurve": DBTableMetadata.INT,
         # AUTOFIRE
         "_autoFireInterval": DBTableMetadata.REAL,
         "_autoFireActionId": DBTableMetadata.INT,
@@ -377,7 +377,7 @@ def load_actions(db, path):
                     command_type = data["commandType"]
                     print(f"Unknown command type {command_type} in {filepath}")
                 log_schema_keys(schema_map, data, command_type)
-                if command_type in PROCESSORS.keys():
+                if command_type in PROCESSORS:
                     builder = PROCESSORS[command_type]
                     db_data, hitlabel_data = builder(ACTION_PART, ref, seq, data)
                     if db_data is not None:
