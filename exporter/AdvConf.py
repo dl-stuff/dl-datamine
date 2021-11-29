@@ -1016,7 +1016,7 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
         charge = 0.5
         if mpart is not None:
             charge = mpart.get("_chargeSec", 0.5)
-        if not is_dragon and max_CHLV > 1:
+        if mpart is not None and mpart.get("_chargeLvSec") and not is_dragon and max_CHLV > 1:
             clv = list(map(float, [charge] + json.loads(mpart.get("_chargeLvSec"))))
             if mpart.get("_useForEachChargeTime"):
                 clv = clv[:max_CHLV]
@@ -1497,7 +1497,7 @@ class AdvConf(CharaData, SkillProcessHelper):
         # 13: "Tobias",
         16: "Peony",
         # 17: "Grace",
-        # 18: "Chrom",
+        18: "Fortress",
         # 19: "Sharena",
         20: "Dagger2",
         22: "Gun",
