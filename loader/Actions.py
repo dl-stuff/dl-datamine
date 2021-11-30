@@ -292,6 +292,7 @@ ACTION_PART = DBTableMetadata(
         "_autoFireEffectTrigger": DBTableMetadata.INT,
         "_autoFireEffectTriggerResetTime": DBTableMetadata.REAL,
         "_autoFireAutoSearchEnemyRadius": DBTableMetadata.REAL,
+        "_burstAttackActionId": DBTableMetadata.INT,
         # SERVANT
         "_servantActionCommandId": DBTableMetadata.INT,
     },
@@ -334,6 +335,7 @@ PROCESSORS[CommandType.BUFFFIELD_ATTACHMENT] = build_db_data
 PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 PROCESSORS[CommandType.STOCK_BULLET_SHIKIGAMI] = build_bullet
 PROCESSORS[CommandType.CHARACTER_COMMAND] = build_control_data
+PROCESSORS[CommandType.STOCK_BULLET_NEVOPTION] = build_bullet
 
 
 def log_schema_keys(schema_map, data, command_type):
@@ -402,9 +404,9 @@ def summarize_raw_action_json(raw, key=""):
         if key:
             print(f"{key}:", end=" ")
         if cmd in PROCESSORS:
-            print(f"{seq:03} {sec:.4f}s: {cmd.value:03}-{cmd} [PROCESSED]")
+            print(f"{seq:03} {sec:.4f}s: {cmd} [PROCESSED]")
         else:
-            print(f"{seq:03} {sec:.4f}s: {cmd.value:03}-{cmd} [SKIPPED]")
+            print(f"{seq:03} {sec:.4f}s: {cmd} [SKIPPED]")
         for k, v in actdata.items():
             if isinstance(v, list):
                 summarize_raw_action_json(v, f"{key}.{k}")

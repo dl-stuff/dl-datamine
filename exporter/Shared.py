@@ -544,6 +544,7 @@ class ActionParts(DBView):
                 pass
             if not skip_autoFireActionId:
                 self.link(r, "_autoFireActionId", "PlayerAction")
+            self.link(r, "_burstAttackActionId", "PlayerAction")
 
             if "_motionState" in r and r["_motionState"]:
                 ms = r["_motionState"]
