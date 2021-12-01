@@ -208,10 +208,12 @@ def hit_sr(action, startup=None, explicit_any=True):
     return s, r, followed_by
 
 
-def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcond=None):
+def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcond=None, parent_target=None):
     attr = {}
     target = hitattr.get("_TargetGroup")
-    if (target in (ActionTargetGroup.HOSTILE, ActionTargetGroup.HIT_OR_GUARDED_RECORD)) and hitattr.get("_DamageAdjustment"):
+    if target == ActionTargetGroup.FIXED_OBJECT and parent_target is not None:
+        target = parent_target
+    if (target in (ActionTargetGroup.HOSTILE, ActionTargetGroup.HIT_OR_GUARDED_RECORD, ActionTargetGroup.HOSTILE_AND_DUNOBJ)) and hitattr.get("_DamageAdjustment"):
         attr["dmg"] = fr(hitattr.get("_DamageAdjustment"))
         killers = []
         for ks in ("_KillerState1", "_KillerState2", "_KillerState3"):
@@ -291,7 +293,7 @@ def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcon
 
     if add_rng_hitlabels := hitattr.get("_AdditionalRandomHitLabel"):
         add_count = hitattr.get("_AdditionalRandomHitNum")
-        add_attrs = [convert_hitattr(hl, DUMMY_PART, meta=meta, skill=skill) for hl in add_rng_hitlabels]
+        add_attrs = [convert_hitattr(hl, DUMMY_PART, meta=meta, skill=skill, parent_target=target) for hl in add_rng_hitlabels]
         if add_count == 1 and len(add_attrs) == 1:
             attr["addhit"] = add_attrs[0]
         else:
@@ -1373,7 +1375,7 @@ class AbilityConf(AbilityData):
         return self._at_mod(res, i, "eleres", ELEMENTS[self._varid_a(res, i)].lower())
 
     def at_DragonDamageUp(self, res, i):
-        return self._at_mod(res, i, "da")
+        return self._at_mod(res, i, "dragondmg")
 
     def at_HitAttribute(self, res, i):
         return self.at_ChangeState(res, i)
