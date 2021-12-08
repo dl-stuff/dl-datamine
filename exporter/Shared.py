@@ -10,6 +10,7 @@ from loader.Database import DBViewIndex, DBManager, DBView, DBDict, check_target
 from loader.Enums import (
     CommandType,
     ActionCollision,
+    ActionCollisionPos,
     AbilityCondition,
     AbilityTargetAction,
     ActionTargetGroup,
@@ -519,7 +520,7 @@ class ActionParts(DBView):
                 pass
 
             try:
-                r["_collisionPosId"] = ActionCollision(r["_collisionPosId"])
+                r["_collisionPosId"] = ActionCollisionPos(r["_collisionPosId"])
             except (KeyError, ValueError):
                 pass
 
