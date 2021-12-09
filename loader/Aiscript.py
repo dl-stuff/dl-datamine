@@ -284,7 +284,6 @@ FMT_PYTHON = {
 
 class Root:
     HEADER = """import random
-from functools import partial
 from . import *
 
 """
