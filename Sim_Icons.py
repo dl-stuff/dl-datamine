@@ -41,7 +41,7 @@ if __name__ == "__main__":
     patterns["jp"]["^images/icon/amulet/l/" + "(?:" + "|".join(map(str, icon_set)) + ")"] = f"../amulet"
 
     icon_set = set()
-    for data_path in glob(GEN + "/drg/*.json"):
+    for data_path in glob(GEN + "/drg/*/*.json"):
         with open(data_path, "r") as fn:
             data = json.load(fn)
             name = os.path.splitext(os.path.basename(data_path))[0]
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     patterns["jp"]["^images/icon/weapon/l/" + "(?:" + "|".join(map(str, icon_set)) + ")"] = f"../weapon"
 
     icon_set = set()
-    for data_path in glob(GEN + "/adv/*.json"):
+    for data_path in glob(GEN + "/adv/*/*.json"):
         with open(data_path, "r") as fn:
             data = json.load(fn)
             name = os.path.splitext(os.path.basename(data_path))[0]

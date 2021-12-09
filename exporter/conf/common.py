@@ -1700,11 +1700,11 @@ class ActCondConf(ActionCondition):
         "_RateBurstSpeed": ("fspd", "buff"),
         "_MoveSpeedRate": ("mspd", "buff"),  # imba
         "_MoveSpeedRateB": ("mspdb", "buff"),  # very imba
-        "_RateFire": ("resist_flame", "buff"),
-        "_RateWater": ("resist_water", "buff"),
-        "_RateWind": ("resist_wind", "buff"),
-        "_RateLight": ("resist_light", "buff"),
-        "_RateDark": ("resist_shadow", "buff"),
+        "_RateFire": ("res_flame", "buff"),
+        "_RateWater": ("res_water", "buff"),
+        "_RateWind": ("res_wind", "buff"),
+        "_RateLight": ("res_light", "buff"),
+        "_RateDark": ("res_shadow", "buff"),
         "_EnhancedFire2": ("dmg_flame", "buff"),
         "_EnhancedWater2": ("dmg_water", "buff"),
         "_EnhancedWind2": ("dmg_wind", "buff"),
@@ -1713,9 +1713,9 @@ class ActCondConf(ActionCondition):
         "_EnhancedNoElement": ("dmg_nullele", "buff"),
         "_EnhancedDisadvantagedElement": ("dmg_weakele", "buff"),
         # skipping the _Rate<tribe> stuff since no one uses it
-        "_RateDamageCut": ("resist", "buff"),
-        "_RateDamageCut2": ("resist", "buff2"),
-        "_RateDamageCutB": ("resist", "buffB"),
+        "_RateDamageCut": ("res", "buff"),
+        "_RateDamageCut2": ("res", "buff2"),
+        "_RateDamageCutB": ("res", "buffB"),
         "_RateGetHpRecovery": ("getrcv", "buff"),
         "_RateArmored": ("kbres", "buff"),
         "_EnhancedCritical": ("critdmg", "buff"),
@@ -1848,7 +1848,7 @@ class ActCondConf(ActionCondition):
 
         for key, aff in ActCondConf.RATE_TO_AFFKEY.items():
             if res[key]:
-                mods.append((fr(res[key]), f"resist_{aff}", "passive"))
+                mods.append((fr(res[key]), f"affres_{aff}", "passive"))
                 _check_debuff(key, res[key])
             killer_key = f"{key}Killer"
             if killer := res[killer_key]:
