@@ -106,9 +106,7 @@ class WpConf(AbilityCrest):
                 shift_groups[res["_Id"]] = (to_level, to_ability)
         lim_groups = {}
         for res in self.index["AbilityLimitedGroup"].get_all():
-            if not (mix := res.get("_IsEffectMix")):
-                continue
-            lim_groups[res["_Id"]] = {"mix": mix, "max": res.get("_MaxLimitedValue", 0.0) / 100}
+            lim_groups[res["_Id"]] = {"mix": res.get("_IsEffectMix", 0.0), "max": res.get("_MaxLimitedValue", 0.0) / 100}
 
         wp_meta = {"unions": union_conf, "lim_groups": lim_groups, "shift_groups": shift_groups, "actconds": self.index["ActCondConf"].curr_actcond_conf}
         with open(os.path.join(out_dir, "wyrmprints_meta.json"), "w", newline="", encoding="utf-8") as fp:

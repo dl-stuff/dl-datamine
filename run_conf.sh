@@ -4,5 +4,5 @@ python Generate_Conf.py
 # python Merge_Conf.py -name wyrmprints
 # python Merge_Conf.py -name amp
 # python Merge_Conf.py -name fort
-# cp -r ./out/gen/* ../dl/conf
-python Merge_Conf.py --all
+cp -r ./out/gen/* ../dl/conf
+# python Merge_Conf.py --all

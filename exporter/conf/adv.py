@@ -4,6 +4,7 @@ from tqdm import tqdm
 from collections import defaultdict
 
 from loader.Database import DBView, check_target_path
+from loader.Enums import AbilityStat
 
 from exporter.Weapons import WeaponType
 from exporter.Adventurers import CharaData
@@ -114,6 +115,15 @@ class ExAbilityConf(AbilityConf):
         self.meta = None
         self.source = None
         self.use_ablim_groups = False
+
+    def at_BuffExtension(self, res, i):
+        print(self._at_mod(res, i, "bufftime", "ex"))
+        return self._at_mod(res, i, "bufftime", "ex")
+
+    def at_StatusUp(self, res, i):
+        if AbilityStat(self._varid_a(res, i)) == AbilityStat.Atk:
+            return self._at_mod(res, i, "att", "ex")
+        return super().at_StatusUp(res, i)
 
     def process_result(self, res, source=None):
         if conflist := super().process_result(res, source=source):
