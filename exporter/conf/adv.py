@@ -4,7 +4,7 @@ from tqdm import tqdm
 from collections import defaultdict
 
 from loader.Database import DBView, check_target_path
-from loader.Enums import AbilityStat
+from loader.Enums import AbilityStat, AbilityTargetAction
 
 from exporter.Weapons import WeaponType
 from exporter.Adventurers import CharaData
@@ -124,6 +124,15 @@ class ExAbilityConf(AbilityConf):
         if AbilityStat(self._varid_a(res, i)) == AbilityStat.Atk:
             return self._at_mod(res, i, "att", "ex")
         return super().at_StatusUp(res, i)
+
+    def at_ActDamageUp(self, res, i):
+        if AbilityTargetAction(res[f"_TargetAction{i}"]) == AbilityTargetAction.SKILL_ALL:
+            res[f"_TargetAction{i}"] = 0
+            at = self._at_upval("actdmg", res, i)
+            at.append("-t:s")
+            at.append("ex")
+            return at
+        return super().at_ActDamageUp(res, i)
 
     def process_result(self, res, source=None):
         if conflist := super().process_result(res, source=source):
