@@ -306,15 +306,17 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                             part_hitattr_map[source].append(attr)
                         else:
                             part_hitattr_map[source] = attr
-                        if additional := hitattr.get("_AdditionalRandomHitLabel"):
-                            if len(additional) == 1:
-                                additional = additional[0]
-                                additional["_TargetGroup"] = hitattr["_TargetGroup"]
-                                if add_attr := convert_hitattr(additional, part, action, once_per_action, meta=meta, skill=skill, partcond=partcond):
-                                    if source == "_hitAttrLabelSubList":
-                                        part_hitattr_map[source].append(add_attr)
-                                    else:
-                                        part_hitattr_map[source] = [attr, add_attr]
+                        if additional_attrs := hitattr.get("_AdditionalRandomHitLabel"):
+                            if len(additional_attrs) == hitattr.get('_AdditionalRandomHitNum'):
+                                add_attrs = []
+                                for additional in additional_attrs:
+                                    additional["_TargetGroup"] = hitattr["_TargetGroup"]
+                                    if add_attr := convert_hitattr(additional, part, action, once_per_action, meta=meta, skill=skill, partcond=partcond):
+                                        add_attrs.append(add_attr)
+                                if source == "_hitAttrLabelSubList":
+                                    part_hitattr_map[source].extend(add_attrs)
+                                else:
+                                    part_hitattr_map[source] = [attr, *add_attrs]
                         if not pattern:
                             break
         if not part_hitattr_map:
@@ -431,6 +433,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         if gen is not None and delay is not None:
             for gseq in range(1, gen):
                 for attr in ref_attrs:
+                    if isinstance(attr, list):
+                        attr = attr[0]
                     try:
                         gattr, _ = clean_hitattr(attr.copy(), once_per_action)
                     except AttributeError:
@@ -462,6 +466,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                             attr["cond"] = ["and", attr["cond"], ["var>=", [buffname, idx + 1]]]
                         attr["cond"] = ["var>=", [buffname, idx + 1]]
                     else:
+                        if isinstance(attr, list):
+                            attr = attr[0]
                         gattr, _ = clean_hitattr(attr.copy(), once_per_action)
                         if not gattr:
                             continue
