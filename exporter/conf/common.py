@@ -294,8 +294,8 @@ def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcon
     if add_rng_hitlabels := hitattr.get("_AdditionalRandomHitLabel"):
         add_count = hitattr.get("_AdditionalRandomHitNum")
         add_attrs = [convert_hitattr(hl, DUMMY_PART, meta=meta, skill=skill, parent_target=target) for hl in add_rng_hitlabels]
-        if add_count == 1 and len(add_attrs) == 1:
-            attr["addhit"] = add_attrs[0]
+        if len(add_attrs) == add_count:
+            attr["addhit"] = add_attrs
         else:
             attr["DEBUG_ADD_RNG_HITS"] = [add_count, add_attrs]
 
@@ -476,6 +476,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             else:
                 gn = part.get("_generateNum")
                 specific_delay = part.get("_markerDelay")
+            if part.get('_stopWhenAllTargetsGen'):
+                gn = 1
             if specific_delay:
                 delays = [marker_charge + d for d in json.loads(specific_delay)[0:gn]]
                 if ncond is not None:

@@ -117,7 +117,6 @@ class ExAbilityConf(AbilityConf):
         self.use_ablim_groups = False
 
     def at_BuffExtension(self, res, i):
-        print(self._at_mod(res, i, "bufftime", "ex"))
         return self._at_mod(res, i, "bufftime", "ex")
 
     def at_StatusUp(self, res, i):

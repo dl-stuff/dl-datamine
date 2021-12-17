@@ -218,6 +218,7 @@ ACTION_PART = DBTableMetadata(
         "_generateNum": DBTableMetadata.INT,
         # "_generateDelay": DBTableMetadata.REAL, # this is unused
         "_generateNumDependOnBuffCount": DBTableMetadata.INT,
+        "_stopWhenAllTargetsGen": DBTableMetadata.INT,
         "_buffCountConditionId": DBTableMetadata.INT,
         "_setBulletDelayOneByOne": DBTableMetadata.INT,
         "_useFireStockBulletParam": DBTableMetadata.INT,
