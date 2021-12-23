@@ -11,7 +11,7 @@ from exporter.Adventurers import CharaData
 from exporter.Shared import snakey
 from exporter.Mappings import ELEMENTS, WEAPON_TYPES
 
-from exporter.conf.common import SDat, SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_misc, convert_all_hitattr, fr, fmt_conf, remap_stuff
+from exporter.conf.common import ActCondConf, SDat, SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_misc, convert_all_hitattr, fr, fmt_conf, remap_stuff
 
 
 class BaseConf(WeaponType):
@@ -384,16 +384,19 @@ class AdvConf(CharaData, SkillProcessHelper):
 
     def process_exability_data(self, exability_data):
         exability_conf = {
+            "actconds": {},
             "coab": {},
             "chain": {},
             "lookup": {},
         }
+        self.set_ability_and_actcond_meta()
         for coab, chain_data in sorted(exability_data.items()):
             exability_conf["coab"][coab] = self.index["ExAbilityConf"].get(coab, source="ex")
             for chain, charas in sorted(chain_data.items()):
                 exability_conf["chain"][chain] = self.index["AbilityConf"].get(chain, source="ex")
                 for chara in charas:
                     exability_conf["lookup"][chara] = [str(coab), str(chain)]
+        self.unset_ability_and_actcond_meta(exability_conf)
         return exability_conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):

@@ -476,7 +476,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             else:
                 gn = part.get("_generateNum")
                 specific_delay = part.get("_markerDelay")
-            if part.get('_stopWhenAllTargetsGen'):
+            if part.get("_stopWhenAllTargetsGen"):
                 gn = 1
             if specific_delay:
                 delays = [marker_charge + d for d in json.loads(specific_delay)[0:gn]]
@@ -1019,10 +1019,10 @@ class AbilityConf(AbilityData):
         return ["event", "doublebuff"]
 
     def ac_TOTAL_HITCOUNT_MORE(self, res):
-        return ["hits", ">=", int(res["_ConditionValue"])]
+        return ["thits", ">=", int(res["_ConditionValue"]), 1]
 
     def ac_TOTAL_HITCOUNT_LESS(self, res):
-        return ["hits", "<", int(res["_ConditionValue"])]
+        return ["thits", "<", int(res["_ConditionValue"]), 1]
 
     def ac_KILL_ENEMY(self, res):
         cond = ["slayer", int(res["_ConditionValue"])]
@@ -1564,7 +1564,6 @@ class AbilityConf(AbilityData):
             self.source = source
         conf = {}
         if self.source == "ex":
-            self.index["ActCondConf"]._curr_actcond_conf = {}
             if res["_Name"]:
                 conf["name"] = res["_Name"]
             if res["_AbilityIconName"]:
@@ -1621,10 +1620,6 @@ class AbilityConf(AbilityData):
         # AbilityLimitedGroup does not reflect irl mix outside of certain buff abilities on wyrmprints
         if self.use_ablim_groups and res["_AbilityLimitedGroupId1"]:
             conf["lg"] = str(res["_AbilityLimitedGroupId1"])
-
-        if self.source == "ex":
-            if curr_actcond := self.index["ActCondConf"].curr_actcond_conf:
-                conf["actconds"] = curr_actcond
 
         if source is not None:
             self.source = None
@@ -1758,7 +1753,7 @@ class ActCondConf(ActionCondition):
         except KeyError:
             aff = None
         if res["_RemoveConditionId"]:
-            conf["remove"] = res["_RemoveConditionId"]
+            conf["remove"] = str(res["_RemoveConditionId"])
         if res["_EfficacyType"] == 100:
             conf["dispel"] = "buff"
         # elif res["_EfficacyType"] == 97:
