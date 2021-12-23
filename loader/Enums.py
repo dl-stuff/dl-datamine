@@ -128,6 +128,8 @@ class AbilityCondition(ShortEnum):
     ABNORMAL_STATUS_RELEACED = 123
     BURST_ATTACKING = 124
     ON_REVIVE = 125
+    ON_IN_BURST_GUARD_COUNTER = 126
+    QUEST_START_AND_CHANGE_EQUIPMENT = 127
 
 
 class AbilityStat(ShortEnum):
