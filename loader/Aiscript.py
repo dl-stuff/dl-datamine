@@ -20,7 +20,7 @@ def s(v, prefix="self."):
             return "False"
         elif v == "_m":
             return "var_m"
-        snek = snakey(v)
+        snek = snakey(v, with_ext=False)
         if snek[0].isdigit():
             snek = "_" + snek
         return f"{prefix}{snek}"
@@ -59,7 +59,7 @@ def fmt_null(inst):
 
 def fmt_def(inst):
     name = inst.params[0].values[0]
-    name = snakey(name)
+    name = snakey(name, with_ext=False)
     if name[0].isdigit():
         name = "_" + name
     # return f"{INDENT*inst.depth}@log_call(logfmt=logfmt_funcdef, indent=True)\n{INDENT*inst.depth}def {name}(self):"
