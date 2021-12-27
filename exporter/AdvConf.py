@@ -307,7 +307,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                         else:
                             part_hitattr_map[source] = attr
                         if additional_attrs := hitattr.get("_AdditionalRandomHitLabel"):
-                            if len(additional_attrs) == hitattr.get('_AdditionalRandomHitNum'):
+                            if len(additional_attrs) == hitattr.get("_AdditionalRandomHitNum"):
                                 add_attrs = []
                                 for additional in additional_attrs:
                                     additional["_TargetGroup"] = hitattr["_TargetGroup"]
@@ -2482,15 +2482,13 @@ class WpConf(AbilityCrest):
         return conf
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        all_res = self.get_all()
+        all_res = self.get_all(where='_IsPlayable = 1')
         check_target_path(out_dir)
         outdata = {}
         skipped = []
         collisions = defaultdict(list)
         for res in tqdm(all_res, desc="wp"):
-            conf = self.process_result(
-                res,
-            )
+            conf = self.process_result(res)
             if conf:
                 qual_name = snakey(res["_Name"])
                 if qual_name in outdata:
