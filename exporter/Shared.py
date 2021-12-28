@@ -354,6 +354,7 @@ class AuraData(DBView):
 
 class PlayerActionHitAttribute(DBView):
     LINK_ACTCOND = True
+
     def __init__(self, index):
         super().__init__(index, "PlayerActionHitAttribute")
 
@@ -810,9 +811,5 @@ class AbnormalStatusType(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = ActionCondition(index)
-
-    # ['[106] Enemy Positions Revealed', '[267]', '[294] Skill Chain', '[402] Immobile', '[418] Shapeshift Prep', '[419] Shapeshift Time Extended', '[420] Dragondrive Prep', '[444] Adamantine Shield', '[1144]', '[1178]', '[1179]', '[1670] Invulnerability', '[1671] Marked', '[1678] Invulnerability', '[1857] Marked', '[99999999]', '[130010101] Curse of Nihility', '[130020101] Curse of Nihility', '[901010101]']
-    import sys
-
-    pprint(view.get(sys.argv[1]))
+    view = AbilityData(index)
+    view.export_all_to_folder()

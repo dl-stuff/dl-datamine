@@ -47,15 +47,13 @@ class WpConf(AbilityCrest):
         union_abilities = self.index["UnionAbility"].get_all()
         union_names = {res["_Id"]: res["_Name"] for res in union_abilities}
 
-        all_res = self.get_all()
+        all_res = self.get_all(where="_IsPlayable = 1")
         check_target_path(out_dir)
         outdata = {}
         skipped = []
         collisions = defaultdict(list)
         for res in tqdm(all_res, desc="wp"):
-            conf = self.process_result(
-                res,
-            )
+            conf = self.process_result(res)
             if conf:
                 qual_name = snakey(res["_Name"])
                 if qual_name in outdata:
