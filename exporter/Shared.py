@@ -303,7 +303,9 @@ class AbilityData(DBView):
         return res
 
     def export_all_to_folder(self, out_dir="./out", ext=".json"):
-        processed_res = [self.process_result(res) for res in self.get_all()]
+        processed_res = []
+        for res in tqdm(self.get_all(), desc="abilities"):
+            processed_res.append(self.process_result(res))
         with open(os.path.join(out_dir, f"_abilities{ext}"), "w", newline="", encoding="utf-8") as fp:
             json.dump(processed_res, fp, indent=2, ensure_ascii=False, default=str)
 

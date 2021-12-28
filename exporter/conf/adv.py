@@ -115,6 +115,7 @@ class ExAbilityConf(AbilityConf):
         self.meta = None
         self.source = None
         self.use_ablim_groups = False
+        self.use_shift_groups = False
 
     def at_BuffExtension(self, res, i):
         return self._at_mod(res, i, "bufftime", "ex")

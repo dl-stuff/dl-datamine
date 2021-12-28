@@ -961,6 +961,7 @@ class AbilityConf(AbilityData):
         self.source = None
         self.enhanced_key = None
         self.use_ablim_groups = False
+        self.use_shift_groups = False
         # if not self.ABL_GROUPS:
         #     self.ABL_GROUPS = {r["_Id"]: r for r in self.index["AbilityLimitedGroup"].get_all()}
 
@@ -969,6 +970,7 @@ class AbilityConf(AbilityData):
         self.source = None
         self.enhanced_key = None
         self.use_ablim_groups = use_ablim_groups or False
+        self.use_shift_groups = self.use_ablim_groups
 
     def _varids(self, res, i):
         for a in ("a", "b", "c"):
@@ -1557,7 +1559,7 @@ class AbilityConf(AbilityData):
 
     # processing
     def process_result(self, res, source=None):
-        if self.use_ablim_groups and (shiftgroup := res.get("_ShiftGroupId")):
+        if self.use_shift_groups and (shiftgroup := res.get("_ShiftGroupId")):
             return [{"id": str(res["_Id"]), "shiftgroup": str(shiftgroup)}]
         self.enhanced_key = None
         if source is not None:
@@ -1630,7 +1632,10 @@ class AbilityConf(AbilityData):
 
         # AbilityLimitedGroup does not reflect irl mix outside of certain buff abilities on wyrmprints
         if self.use_ablim_groups and res["_AbilityLimitedGroupId1"]:
-            conf["lg"] = str(res["_AbilityLimitedGroupId1"])
+            if len(ablist) == 1:
+                conf["lg"] = str(res["_AbilityLimitedGroupId1"])
+            else:
+                conf["DEBUG_LIMGROUP"] = str(res["_AbilityLimitedGroupId1"])
 
         if source is not None:
             self.source = None
@@ -1638,13 +1643,15 @@ class AbilityConf(AbilityData):
 
     def export_all_talisman_to_folder(self, out_dir="./out", ext=".json"):
         check_target_path(out_dir)
+        self.use_ablim_groups = True
+        self.use_shift_groups = False
         output = os.path.join(out_dir, f"talisman{ext}")
         all_res = self.get_all(where="_Id > 340000000 AND _Id < 400000000")
         outdata = defaultdict(dict)
         for res in tqdm(all_res, desc="talisman"):
             if conf := self.process_result(res, source="talisman"):
                 ab = conf[0].get("ab")
-                if len(ab) > 1:
+                if not ab or len(ab) > 1:
                     ab_key = "hitter"
                 else:
                     ab = ab[0]
@@ -1657,6 +1664,8 @@ class AbilityConf(AbilityData):
                 outdata[ab_key][str(res["_Id"])] = conf
         with open(output, "w") as fn:
             fmt_conf(outdata, f=fn)
+        self.use_ablim_groups = False
+        self.use_shift_groups = False
 
 
 class ActCondConf(ActionCondition):
