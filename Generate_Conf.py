@@ -1,6 +1,7 @@
 import argparse
 from pprint import pprint
 from time import monotonic
+from exporter.Shared import AbilityData
 from loader.Database import DBViewIndex
 
 from exporter.conf.adv import AdvConf
@@ -31,6 +32,7 @@ ALL_HANDLERS = {
     "aura": lambda index: AuraConf(index).export_all_to_folder(out_dir=OUT_DIR),
     "fort": lambda _: write_fort_passives(OUT_DIR),
     # "actcond": lambda index: ActCondConf(index).export_all_to_folder(out_dir=OUT_DIR),
+    "talisman": lambda index: AbilityConf(index).export_all_talisman_to_folder(out_dir=OUT_DIR),
 }
 
 if __name__ == "__main__":

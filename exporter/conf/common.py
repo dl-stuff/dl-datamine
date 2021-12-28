@@ -1568,6 +1568,11 @@ class AbilityConf(AbilityData):
                 conf["name"] = res["_Name"]
             if res["_AbilityIconName"]:
                 conf["icon"] = res["_AbilityIconName"]
+        if self.source == "talisman":
+            if res["_Name"]:
+                conf["name"] = res["_Name"].format(element_owner="Element", weapon_owner="Weapon", ability_val0=int(res.get("_AbilityType1UpValue", 0)))
+            if res["_AbilityIconName"]:
+                conf["icon"] = res["_AbilityIconName"]
         # cond
         condtype = AbilityCondition(res["_ConditionType"])
         try:
@@ -1587,10 +1592,16 @@ class AbilityConf(AbilityData):
             conf["count"] = count
         # ele
         if ele := res.get("_ElementalType"):
-            conf["ele"] = ELEMENTS[ele].lower()
+            try:
+                conf["ele"] = ELEMENTS[ele].lower()
+            except KeyError:
+                pass
         # wt
         if wt := res.get("_WeaponType"):
-            conf["wt"] = WEAPON_TYPES[wt].lower()
+            try:
+                conf["wt"] = WEAPON_TYPES[wt].lower()
+            except KeyError:
+                pass
         # ab
         ablist = []
         conflist = []
@@ -1624,6 +1635,28 @@ class AbilityConf(AbilityData):
         if source is not None:
             self.source = None
         return list(filter(None, conflist))
+
+    def export_all_talisman_to_folder(self, out_dir="./out", ext=".json"):
+        check_target_path(out_dir)
+        output = os.path.join(out_dir, f"talisman{ext}")
+        all_res = self.get_all(where="_Id > 340000000 AND _Id < 400000000")
+        outdata = defaultdict(dict)
+        for res in all_res:
+            if conf := self.process_result(res, source="talisman"):
+                ab = conf[0].get("ab")
+                if len(ab) > 1:
+                    ab_key = "hitter"
+                else:
+                    ab = ab[0]
+                    if ab[0] == "actdmg":
+                        ab_key = ab[2].split(":")[-1]
+                    elif ab[0] == "mod":
+                        ab_key = ab[2]
+                    else:
+                        ab_key = ab[0]
+                outdata[ab_key][str(res["_Id"])] = conf
+        with open(output, "w") as fn:
+            fmt_conf(outdata, f=fn)
 
 
 class ActCondConf(ActionCondition):
@@ -1999,7 +2032,7 @@ class ActCondConf(ActionCondition):
             all_res = self.get_all()
             outdata = {}
             not_parsed = []
-            for res in tqdm(all_res, desc="wp"):
+            for res in tqdm(all_res, desc="actcond"):
                 if conf := self.process_result(res):
                     outdata[str(res["_Id"])] = conf
                 else:
