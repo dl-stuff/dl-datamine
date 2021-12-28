@@ -813,12 +813,5 @@ class AbnormalStatusType(DBView):
 
 if __name__ == "__main__":
     index = DBViewIndex()
-    view = PlayerActionHitAttribute(index)
-    # view.check_overwrite_groups()
-    # view = SkillData(index)
-    # test = view.get(106505012)
-    # print(test)
-    res = view.get("S152_002_01_LV0[0-9]", mode=DBManager.GLOB)
-    from pprint import pprint
-
-    pprint(res)
+    view = AbilityData(index)
+    view.export_all_to_folder()
