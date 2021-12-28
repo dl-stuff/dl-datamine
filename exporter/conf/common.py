@@ -1641,7 +1641,7 @@ class AbilityConf(AbilityData):
         output = os.path.join(out_dir, f"talisman{ext}")
         all_res = self.get_all(where="_Id > 340000000 AND _Id < 400000000")
         outdata = defaultdict(dict)
-        for res in all_res:
+        for res in tqdm(all_res, desc="talisman"):
             if conf := self.process_result(res, source="talisman"):
                 ab = conf[0].get("ab")
                 if len(ab) > 1:
