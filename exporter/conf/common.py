@@ -471,7 +471,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
             elif part.get("_generateNumDependOnBuffCount"):
                 buffcond = part.get("_buffCountConditionId")
                 gn = buffcond.get("_MaxDuplicatedCount", 10)
-                ncond = ["actcond", buffcond["_Id"], ">="]
+                ncond = ["actcond", str(int(buffcond["_Id"])), ">="]
                 specific_delay = part.get("_markerDelay")
             else:
                 gn = part.get("_generateNum")
@@ -1006,10 +1006,10 @@ class AbilityConf(AbilityData):
         return ["hp", "<=", int(res["_ConditionValue"])]
 
     def ac_BUFF_SKILL1(self, res):
-        return ["buffedby", "s1"]
+        return ["buffed_by", "s1"]
 
     def ac_BUFF_SKILL2(self, res):
-        return ["buffedby", "s2"]
+        return ["buffed_by", "s2"]
 
     def ac_DRAGON_MODE(self, res):
         return ["shift", "dform"]
@@ -1129,7 +1129,7 @@ class AbilityConf(AbilityData):
         return ["dauntless"]
 
     def ac_BUFFED_SPECIFIC_ID(self, res):
-        return ["actcond", int(res["_ConditionValue"])]
+        return ["actcond", str(int(res["_ConditionValue"])), ">=", 1]
 
     def ac_DAMAGED(self, res):
         return ["damaged", -1]
@@ -1193,7 +1193,7 @@ class AbilityConf(AbilityData):
         return ["actcondend", int(res["_ConditionValue"])]
 
     def ac_BUFFED_SPECIFIC_ID_COUNT(self, res):
-        return ["actcond", int(res["_ConditionValue2"]), "=", int(res["_ConditionValue"])]
+        return ["actcond", str(int(res["_ConditionValue2"])), "=", int(res["_ConditionValue"])]
 
     def ac_CHARGE_LOOP_REACTION_TIME(self, res):
         return ["fs_hold", "charge"]
@@ -1208,7 +1208,7 @@ class AbilityConf(AbilityData):
         return ["cp", ">=", int(res["_ConditionValue"])]
 
     def ac_BUFF_COUNT_MORE_THAN(self, res):
-        return ["actcond", int(res["_ConditionValue2"]), ">=", int(res["_ConditionValue"])]
+        return ["actcond", str(int(res["_ConditionValue2"])), ">=", int(res["_ConditionValue"])]
 
     def ac_BUFF_CONSUMED(self, res):
         return ["actcondend", int(res["_ConditionValue"]), 1]
