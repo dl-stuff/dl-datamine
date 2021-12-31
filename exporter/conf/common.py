@@ -1021,10 +1021,10 @@ class AbilityConf(AbilityData):
         return ["event", "doublebuff"]
 
     def ac_TOTAL_HITCOUNT_MORE(self, res):
-        return ["thits", ">=", int(res["_ConditionValue"]), 1]
+        return ["hits", ">=", int(res["_ConditionValue"]), 1]
 
     def ac_TOTAL_HITCOUNT_LESS(self, res):
-        return ["thits", "<", int(res["_ConditionValue"]), 1]
+        return ["hits", "<", int(res["_ConditionValue"]), 1]
 
     def ac_KILL_ENEMY(self, res):
         cond = ["slayer", int(res["_ConditionValue"])]
@@ -1061,7 +1061,7 @@ class AbilityConf(AbilityData):
         return ["bleed"]
 
     def ac_HITCOUNT_MOMENT(self, res):
-        cond = ["hits", ">=", int(res["_ConditionValue"]), 1]
+        cond = ["hitcount", int(res["_ConditionValue"])]
         target = AbilityTargetAction(res.get("_TargetAction"))
         if target != AbilityTargetAction.NONE:
             cond.append(AbilityConf.TARGET_ACT[target])
