@@ -150,7 +150,6 @@ def hit_sr(action, startup=None, explicit_any=True):
     noaid_r = None
     noaid_follow = None
     motion = 0
-
     for part in action["_Parts"]:
         # find startup
         if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
@@ -1517,14 +1516,17 @@ class AbilityConf(AbilityData):
         #     actname = f"~misc_{self.source}"
         #     self.meta.alt_actions.append((actname, act))
         # return ["runact", actname]
-        if (act := self.index["PlayerAction"].get(self._varid_a(res, i))) and (actconf := convert_misc(act, convert_follow=False)):
-            hitattr = actconf["attr"][0]
-            for key in list(hitattr):
-                if key.startswith("DEBUG_"):
-                    del hitattr[key]
-            # if set(hitattr.keys()) == {"actcond", "target"}:
-            #     return ["actcond", hitattr["target"], hitattr["actcond"]]
-            return ["hitattr", hitattr]
+        try:
+            if (act := self.index["PlayerAction"].get(self._varid_a(res, i))) and (actconf := convert_misc(act, convert_follow=False)):
+                hitattr = actconf["attr"][0]
+                for key in list(hitattr):
+                    if key.startswith("DEBUG_"):
+                        del hitattr[key]
+                # if set(hitattr.keys()) == {"actcond", "target"}:
+                #     return ["actcond", hitattr["target"], hitattr["actcond"]]
+                return ["hitattr", hitattr]
+        except Exception:
+            pass
         return None
 
     def at_ConsumeSpToRecoverHp(self, res, i):
