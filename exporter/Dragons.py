@@ -95,5 +95,5 @@ class DragonData(DBView):
 if __name__ == "__main__":
     index = DBViewIndex()
     view = DragonData(index)
-    view.export_one_to_folder(29900021, out_dir="./out/dragons")
+    view.export_one_to_folder(20050217, out_dir="./out/dragons")
     # view.export_all_to_folder()
