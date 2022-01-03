@@ -94,14 +94,24 @@ def build_arrange_data(meta, ref, seq, data):
 
 def build_bullet(meta, ref, seq, data):
     db_data, hitlabel_data = build_db_data(meta, ref, seq, data)
-    if ab_label := data["_arrangeBullet"]["_abHitAttrLabel"]:
-        hitlabel_data.extend(build_hitlabel_data(db_data["_Id"], "_abHitAttrLabel", ab_label))
-    if ab_duration := data["_arrangeBullet"]["_abDuration"]:
-        db_data["_abDuration"] = ab_duration
-    if ab_interval := data["_arrangeBullet"]["_abHitInterval"]:
-        db_data["_abHitInterval"] = ab_interval
-    if ab_collision_flag := data["_arrangeBullet"]["_abUseAccurateCollisionHitInterval"]:
-        db_data["_abUseAccurateCollisionHitInterval"] = ab_collision_flag
+    if arrange_bullet := data["_arrangeBullet"]:
+        if ab_label := arrange_bullet["_abHitAttrLabel"]:
+            hitlabel_data.extend(build_hitlabel_data(db_data["_Id"], "_abHitAttrLabel", ab_label))
+        if ab_duration := arrange_bullet["_abDuration"]:
+            db_data["_abDuration"] = ab_duration
+        if ab_interval := arrange_bullet["_abHitInterval"]:
+            db_data["_abHitInterval"] = ab_interval
+        # if ab_collision := arrange_bullet["_abCollisionShape"]:
+        #     db_data["_collision"] = ab_collision
+        #     db_data["_collisionPosId"] = arrange_bullet["_abCollisionPosId"]
+        #     for idx in (1, 2, 3, 5, 6):
+        #         db_data[f"_collisionParams_{idx:02}"] = arrange_bullet[f"_abCollisionParams{idx:02}"]
+        if ab_responsive_act := arrange_bullet["_abResponsiveActionId"]:
+            db_data["_abResponsiveActionId"] = ab_responsive_act
+        if ab_attack_act := arrange_bullet["_abAttackActionId"]:
+            db_data["_abAttackActionId"] = ab_attack_act
+        if ab_collision_flag := arrange_bullet["_abUseAccurateCollisionHitInterval"]:
+            db_data["_abUseAccurateCollisionHitInterval"] = ab_collision_flag
     if db_data["_delayFireSec"] and not any(db_data["_delayFireSec"]):
         db_data["_delayFireSec"] = None
     if data.get("_useMarker"):
@@ -213,6 +223,9 @@ ACTION_PART = DBTableMetadata(
         "_isHitDelete": DBTableMetadata.INT,
         "_abHitInterval": DBTableMetadata.REAL,
         "_abDuration": DBTableMetadata.REAL,
+        "_abResponsiveActionId": DBTableMetadata.INT,
+        "_abAttackActionId": DBTableMetadata.INT,
+        # "_abSkipOtherPlayer": DBTableMetadata.INT,
         "_bulletNum": DBTableMetadata.INT,
         "_fireMaxCount": DBTableMetadata.INT,
         "_generateNum": DBTableMetadata.INT,
