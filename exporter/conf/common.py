@@ -375,6 +375,20 @@ def _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=None, outer_c
         _apply_blt(part, part_hitattr_map, part_hitattr, ab_attrs, blt, outer_msl, ncond)
 
 
+def _hit_collision_iv(part, part_hitattr_map, part_hitattr):
+    if ha_attrs := part_hitattr_map.get("_hitLabel", tuple()):
+        if (chiv := part.get("_collisionHitInterval")) and (((bd := part.get("_bulletDuration")) and chiv < bd) or ((bd := part.get("_duration")) and chiv < bd)):
+            if part.get("_useAccurateCollisionHitInterval"):
+                blt = [math.ceil(bd / chiv), fr(chiv)]
+            else:
+                blt = [int(round(bd / chiv)), fr(chiv)]
+            _apply_blt(part, part_hitattr_map, part_hitattr, ha_attrs, blt, None, None)
+            for attr in ha_attrs:
+                attr["blt_iv"] = 1
+        else:
+            part_hitattr.extend(ha_attrs)
+
+
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action["_Parts"]
     hitattrs = []
@@ -427,7 +441,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
         part_hitattr = []
 
         if cmdtype == CommandType.HIT_ATTRIBUTE:
-            part_hitattr.extend(part_hitattr_map.get("_hitLabel", tuple()))
+            _hit_collision_iv(part, part_hitattr_map, part_hitattr)
         elif cmdtype == CommandType.SETTING_HIT:
             for attr in part_hitattr_map.get("_hitAttrLabel", tuple()):
                 attr["zone"] = part.get("_lifetime", -1)
@@ -1017,7 +1031,7 @@ class AbilityConf(AbilityData):
         return ["break"]
 
     def ac_GET_BUFF_DEF(self, res):
-        return ["event", "doublebuff"]
+        return ["doublebuff"]
 
     def ac_TOTAL_HITCOUNT_MORE(self, res):
         return ["hits", ">=", int(res["_ConditionValue"]), 1]
@@ -1284,9 +1298,10 @@ class AbilityConf(AbilityData):
         AbilityStat.Spr: "sph",
         AbilityStat.Dpr: "dph",
         AbilityStat.DragonTime: "dt",
-        AbilityStat.AttackSpeed: "spd",
+        AbilityStat.AttackSpeed: "aspd",
         AbilityStat.BurstSpeed: "fspd",
         AbilityStat.ChargeSpeed: "cspd",
+        AbilityStat.NeedDpRate: "dpcost",
     }
 
     def _at_upval(self, name, res, i, div=100):
@@ -1551,7 +1566,7 @@ class AbilityConf(AbilityData):
         return ["tohp", "utp", self._upval(res, i)]
 
     def at_DpGaugeCap(self, res, i):
-        return self._at_upval("dprepmax", res, i)
+        return self._at_upval("dprep_cap", res, i)
 
     def at_AbnormalTypeNumKiller(self, res, i):
         return ["affnumkiller", [int(r) for r in res[f"_VariousId{i}str"].split("/")]]

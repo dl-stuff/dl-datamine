@@ -50,7 +50,7 @@ class BaseConf(WeaponType):
                     xn = res[f"_DefaultSkill0{n}"]
                 except KeyError:
                     break
-                conf[f"x{n}"] = convert_x(xn)
+                conf[f"x{n}"] = convert_x(xn, pattern=re.compile(r".*H0\d$"))
                 # for part in xn['_Parts']:
                 #     if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
                 #         fs_delay[f'x{n}'] = part.get('_seconds')
@@ -78,7 +78,7 @@ class BaseConf(WeaponType):
                             for n, xn in enumerate(xalt[f"_{prefix}ActionId"]):
                                 n += 1
                                 xn_key = f"x{n}_{mode_name}{prefix.lower()}"
-                                if xaltconf := convert_x(xn):
+                                if xaltconf := convert_x(xn, pattern=re.compile(r".*H0\d$")):
                                     conf[xn_key] = xaltconf
                                 self.action_ids[xn["_Id"]] = f"x{n}"
                                 if hitattrs := convert_all_hitattr(xn, re.compile(r".*H0\d_LV02$")):
