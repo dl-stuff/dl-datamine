@@ -1268,10 +1268,10 @@ class AbilityConf(AbilityData):
         return ["event", "divinedragon_end"]
 
     def ac_HAS_AURA_TYPE(self, res):
-        return ["auratype", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
+        return ["amp", int(res["_ConditionValue2"]), int(res["_ConditionValue"]), ">=", 1]
 
     def ac_PARTY_AURA_LEVEL_MORE(self, res):
-        return ["aura", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
+        return ["amp", 2, int(res["_ConditionValue"]), ">=", int(res["_ConditionValue2"])]
 
     def ac_DRAGONSHIFT(self, res):
         return ["event", "dragon"]
@@ -1283,10 +1283,10 @@ class AbilityConf(AbilityData):
         return ["event", "s"]
 
     def ac_SELF_AURA_MOMENT(self, res):
-        return ["auratype", int(res["_ConditionValue"]), 1, 1]
+        return ["get_amp", int(res["_ConditionValue2"]), int(res["_ConditionValue"])]
 
     def ac_PARTY_AURA_LEVEL_MORE_REACTION_TIME(self, res):
-        return ["auratype", int(res["_ConditionValue"]), 1]
+        return ["amp", 2, int(res["_ConditionValue"]), ">=", int(res["_ConditionValue2"])]
 
     def ac_ON_REMOVE_ABNORMAL_STATUS(self, res):
         return ["event", "relief"]
