@@ -30,7 +30,7 @@ class DrgConf(DragonData, SkillProcessHelper):
         conf, action = super().convert_skill(sdat, lv)
         conf["sp_db"] = sdat.skill.get("_SpLv2Dragon", 45)
         conf["uses"] = sdat.skill.get("_MaxUseNum", 1)
-        if self.hitattrshift:
+        if self.hit_attr_shift:
             del conf["attr"]
             hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
             hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_HAS_LV0{lv}.*"), attr_key="attr_HAS")
@@ -43,9 +43,9 @@ class DrgConf(DragonData, SkillProcessHelper):
                 pass
         return conf, action
 
-    def process_result(self, res, hitattrshift=False, mlvl=None, uniqueshift=False):
+    def process_result(self, res, hit_attr_shift=False, mlvl=None, uniqueshift=False):
         self.reset_meta()
-        self.hitattrshift = hitattrshift
+        self.hit_attr_shift = hit_attr_shift
 
         max_lb = res.get("_MaxLimitBreakCount", 4)
         att = res["_MaxAtk"]
@@ -108,7 +108,7 @@ class DrgConf(DragonData, SkillProcessHelper):
                 hitattrs = convert_all_hitattr(res[key])
                 if hitattrs and (len(hitattrs) > 1 or hitattrs[0]["dmg"] != 2.0 or set(hitattrs[0].keys()) != {"dmg"}):
                     actconf["attr"] = hitattrs
-                if hitattrshift:
+                if hit_attr_shift:
                     if hitattrs := convert_all_hitattr(res[key], pattern=re.compile(r".*_HAS")):
                         actconf["attr_HAS"] = hitattrs
             if actconf:
@@ -134,7 +134,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             if dxconf := convert_x(xn, convert_follow=True, is_dragon=True):
                 conf[xn_key] = dxconf
                 self.action_ids[xn["_Id"]] = xn_key
-            if hitattrshift:
+            if hit_attr_shift:
                 hitattr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
 
         self.process_skill(res, conf, mlvl or {"ds1": 2, "ds2": 2})
@@ -185,8 +185,8 @@ class DrgConf(DragonData, SkillProcessHelper):
                 with open(outfile, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(conf, f=fp)
 
-    def get(self, name, by=None, hitattrshift=False, mlvl=None, uniqueshift=False):
+    def get(self, name, by=None, hit_attr_shift=False, mlvl=None, uniqueshift=False):
         res = super().get(name, by=by, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res, hitattrshift=hitattrshift, mlvl=mlvl, uniqueshift=uniqueshift)
+        return self.process_result(res, hit_attr_shift=hit_attr_shift, mlvl=mlvl, uniqueshift=uniqueshift)

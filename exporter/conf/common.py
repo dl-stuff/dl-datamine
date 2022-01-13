@@ -304,7 +304,7 @@ def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcon
         attr_with_cond = None
         if partcond:
             # look man i just want partcond to sort first
-            attr_with_cond = {"cond": partcond}
+            attr_with_cond = {"pcond": partcond}
         elif ctype := part.get("_conditionType"):
             if ctype == PartConditionType.AllyHpRateLowest and "heal" in attr:
                 attr["heal"] = [attr["heal"], "lowest"]
@@ -412,7 +412,7 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 if not actcond:
                     continue
                 count = condvalue["_count"]
-                partcond = ("actcond", actcond.get("_Id"), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count)
+                partcond = ("actcond", str(actcond.get("_Id")), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count)
             elif ctype == PartConditionType.AuraLevel:
                 partcond = ("amp", (condvalue["_aura"].value, condvalue["_target"]), PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"])
         # get the hitattrs
@@ -757,9 +757,10 @@ class SkillProcessHelper:
         # for advs only
         self.alt_actions = []
         self.utp_chara = None
-        self.hitattrshift = False
+        self.hit_attr_shift = False
         self.chara_modes = {}
         self.cp1_gauge = 0
+        self.combo_shift = False
 
     def get_enhanced_key(self, base):
         nid = next(self.enhanced_counter[base])
@@ -1197,7 +1198,7 @@ class AbilityConf(AbilityData):
         return ["sp", "s1", ">", int(res["_ConditionValue"])]
 
     def ac_ALWAYS_REACTION_TIME(self, res):
-        return ["repeating"]
+        return ["always"]
 
     def ac_ON_ABNORMAL_STATUS_RESISTED(self, res):
         return ["antiaff", AFFLICTION_TYPES.get(int(res["_ConditionValue"])).lower()]
@@ -1264,7 +1265,7 @@ class AbilityConf(AbilityData):
         return ["event", "buffed"]
 
     def ac_RELEASE_DIVINEDRAGONSHIFT(self, res):
-        return ["event", "divineshift_end"]
+        return ["event", "divinedragon_end"]
 
     def ac_HAS_AURA_TYPE(self, res):
         return ["auratype", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
@@ -1403,8 +1404,8 @@ class AbilityConf(AbilityData):
 
     def at_HitAttributeShift(self, res, i):
         if self.meta is not None:
-            self.meta.hitattrshift = True
-        return ["hitattrshift"]
+            self.meta.hit_attr_shift = True
+        return ["hit_attr_shift"]
 
     def at_EnhancedSkill(self, res, i):
         skill_id = self._varid_a(res, i)
@@ -1500,7 +1501,7 @@ class AbilityConf(AbilityData):
 
     def at_ModifyBuffDebuffDurationTime(self, res, i):
         # this is actually a percent, based on _DurationSec/(_DurationTimeScale or 1)
-        return ["acduration", self._varid_a(res, i), self._upval(res, i)]
+        return ["ac_t", self._varid_a(res, i), self._upval(res, i)]
 
     def at_CpCoef(self, res, i):
         return self._at_mod(res, i, "cph")
@@ -1519,7 +1520,7 @@ class AbilityConf(AbilityData):
         return ab
 
     def at_CpContinuationDown(self, res, i):
-        return self._at_upval("cpdegen", res, i, div=1)
+        return self._at_upval("cp_degen", res, i, div=1)
 
     def at_AddCpRate(self, res, i):
         return self._at_upval("cprep", res, i)
@@ -1545,13 +1546,13 @@ class AbilityConf(AbilityData):
         return None
 
     def at_ConsumeSpToRecoverHp(self, res, i):
-        return ["tohp", "sp", self._upval(res, i)]  # only instance of this has a SR, unclear what happens on normal adv
+        return ["to_hp", "sp", self._upval(res, i)]  # only instance of this has a SR, unclear what happens on normal adv
 
     def at_CrestGroupScoreUp(self, res, i):
         return ["psalm", res["_BaseCrestGroupId"], res["_TriggerBaseCrestGroupCount"], int(self._upval(res, i, div=1))]
 
     def at_ModifyBuffDebuffDurationTimeByRecoveryHp(self, res, i):
-        return ["acduration_healed", res[f"_VariousId{i}a"], self._upval(res, i), res[f"_VariousId{i}b"], res[f"_VariousId{i}c"]]
+        return ["ac_t_healed", res[f"_VariousId{i}a"], self._upval(res, i), res[f"_VariousId{i}b"], res[f"_VariousId{i}c"]]
 
     def at_CrisisRate(self, res, i):
         return self._at_upval("crisis", res, i)
@@ -1563,16 +1564,19 @@ class AbilityConf(AbilityData):
         return self.at_RunOptionAction(res, i)
 
     def at_ConsumeUtpToRecoverHp(self, res, i):
-        return ["tohp", "utp", self._upval(res, i)]
+        return ["to_hp", "utp", self._upval(res, i)]
 
     def at_DpGaugeCap(self, res, i):
         return self._at_upval("dprep_cap", res, i)
 
     def at_AbnormalTypeNumKiller(self, res, i):
-        return ["affnumkiller", [int(r) for r in res[f"_VariousId{i}str"].split("/")]]
+        return ["aff_num_k", [int(r) for r in res[f"_VariousId{i}str"].split("/")]]
+
+    def at_ActDamageUpDependsOnHitCount(self, res, i):
+        return ["actdmg_hitcount", [int(r) for r in res[f"_VariousId{i}str"].split("/")]]
 
     def at_RebornHpRateUp(self, res, i):
-        return ["rebornhp", self._upval(res, i)]
+        return ["reborn_hp", self._upval(res, i)]
 
     # processing
     def process_result(self, res, source=None):
@@ -1722,9 +1726,7 @@ class ActCondConf(ActionCondition):
         if res["_OverwriteGroupId"]:
             conf["overwrite"] = res["_OverwriteGroupId"]
         elif res["_OverwriteIdenticalOwner"] or res["_Overwrite"]:
-            conf["overwrite"] = -1
-        elif res["_MaxDuplicatedCount"] == 1:
-            conf["overwrite"] = -1
+            conf["refresh"] = 1
         if res["_MaxDuplicatedCount"] > 1:
             conf["maxstack"] = res["_MaxDuplicatedCount"]
         elif res["_StackData"]:  # StackBuffData
@@ -1995,6 +1997,10 @@ class ActCondConf(ActionCondition):
                     except KeyError:
                         sdat = self.meta.all_chara_skills[esid]
                     alt[sn] = sdat.group or "default"
+
+        if res["_ComboShift"]:
+            alt["x"] = "enhanced"
+            self.meta.combo_shift = "enhanced"
 
         if alt:
             conf["alt"] = alt

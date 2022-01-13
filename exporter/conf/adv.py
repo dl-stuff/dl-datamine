@@ -231,7 +231,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 dmlvl = {"ds1": mlvl["s1"], "ds2": mlvl["s2"]}
             else:
                 dmlvl = None
-            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", uniqueshift=True, hitattrshift=self.hitattrshift, mlvl=dmlvl)
+            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", uniqueshift=True, hit_attr_shift=self.hit_attr_shift, mlvl=dmlvl)
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
             self.set_animation_reference(res)
@@ -308,6 +308,13 @@ class AdvConf(CharaData, SkillProcessHelper):
                 self.chara_skills[edit] = SDat(edit, "s99", None)
 
         self.process_skill(res, conf, mlvl)
+
+        if self.combo_shift:
+            i = 1
+            while (xn := f"x{i}") in conf:
+                conf[f"{xn}_{self.combo_shift}"] = conf[xn]
+                del conf[xn]
+                i += 1
 
         if ss_conf := self.skillshare_data(res):
             conf["c"]["skillshare"] = ss_conf
