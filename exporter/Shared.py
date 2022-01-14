@@ -448,6 +448,7 @@ class ActionPartsHitLabel(DBView):
         "_hitAttrLabel": 1,
         "_hitAttrLabelSubList": 2,
         "_abHitAttrLabel": 3,
+        "_formationChildHitAttrLabel": 4,
     }
 
     def __init__(self, index):

@@ -19,6 +19,7 @@ from loader.Enums import (
     ActionCancelType,
     PartConditionComparisonType,
     ActionSignalType,
+    CharacterControl,
 )
 from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
 from exporter.Mappings import (
@@ -152,7 +153,8 @@ def hit_sr(action, startup=None, explicit_any=True):
     motion = 0
     for part in action["_Parts"]:
         # find startup
-        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
+        # if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
+        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part["_charaCommand"] in (CharacterControl.ServantAction, CharacterControl.ApplyBuffDebuff):
             s = fr(part["_seconds"])
         if s is None and (hitlabels := part.get("_allHitLabels")):
             for hl_list in hitlabels.values():
@@ -352,10 +354,11 @@ def _apply_blt(part, part_hitattr_map, part_hitattr, attr_list, blt, outer_msl, 
         part_hitattr.append(attr)
 
 
-def _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=None, outer_cnt=1, ncond=None):
-    ha_attrs = part_hitattr_map.get("_hitAttrLabel", [])
-    if ha_sub := part_hitattr_map.get("_hitAttrLabelSubList"):
-        ha_attrs.extend(ha_sub)
+def _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=None, outer_cnt=1, ncond=None, ha_attrs=None):
+    if ha_attrs is None:
+        ha_attrs = part_hitattr_map.get("_hitAttrLabel", [])
+        if ha_sub := part_hitattr_map.get("_hitAttrLabelSubList"):
+            ha_attrs.extend(ha_sub)
     if ha_attrs:
         blt = None
         if (chiv := part.get("_collisionHitInterval")) and (((bd := part.get("_bulletDuration")) and chiv < bd) or ((bd := part.get("_duration")) and chiv < bd)):
@@ -396,12 +399,19 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     for part in actparts:
         cmdtype = part["commandType"]
         # servant for persona
-        if servant_cmd := part.get("_servantActionCommandId"):
-            servant_attr = {"DEBUG_SERVANT": servant_cmd}
-            iv = fr(part["_seconds"])
-            if iv:
-                servant_attr["iv"] = iv
-            hitattrs.append(servant_attr)
+        if part["commandType"] == CommandType.CHARACTER_COMMAND:
+            cmd_attr = None
+            if part["_charaCommand"] == CharacterControl.ServantAction:
+                cmd_attr = {"DEBUG_SERVANT": part.get("_servantActionCommandId")}
+            elif part["_charaCommand"] == CharacterControl.ApplyBuffDebuff:
+                actcond = part["_charaCommandArgs"]["_id"]["_Id"]
+                ACTCOND_CONF.get(actcond)
+                cmd_attr = {"actcond": str(actcond)}
+            if cmd_attr is not None:
+                iv = fr(part["_seconds"])
+                if iv:
+                    cmd_attr["iv"] = iv
+                hitattrs.append(cmd_attr)
             continue
         # parse part conds
         partcond = None
@@ -507,7 +517,9 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                     _single_bullet(part, part_hitattr_map, part_hitattr, outer_msl=marker_charge, outer_cnt=gn)
         elif cmdtype == CommandType.FORMATION_BULLET:
             if gn := part.get("_bulletNum"):
-                _single_bullet(part, part_hitattr_map, part_hitattr, outer_cnt=gn / 2)
+                if fb_sub := part_hitattr_map.get("_formationChildHitAttrLabel"):
+                    _single_bullet(part, part_hitattr_map, part_hitattr, outer_cnt=gn / 2, ha_attrs=fb_sub)
+                _single_bullet(part, part_hitattr_map, part_hitattr)
 
         if part.get("_loopFlag"):
             lp = [part.get("_loopNum", -2) + 1, fr(part.get("_seconds") - part.get("_loopSec", 0.0))]

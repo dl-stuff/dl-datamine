@@ -13,6 +13,7 @@ HIT_LABEL_FIELDS = (
     "_hitAttrLabel",
     "_hitAttrLabelSubList",
     "_abHitAttrLabel",
+    "_formationChildHitAttrLabel",
 )
 
 HASLV_PATTERN = re.compile(r"(S\d{3}_\d{3}.*)_LV\d{2}")
@@ -128,8 +129,8 @@ def build_formation_bullet(meta, ref, seq, data):
         except:
             pass
     data["_bulletNum"] = data["_childNum"]
-    data["_hitAttrLabelSubList"] = bullet_attrs
-    return build_db_data(meta, ref, seq, data)
+    data["_formationChildHitAttrLabel"] = bullet_attrs
+    return build_bullet(meta, ref, seq, data)
 
 
 def build_marker(meta, ref, seq, data):
