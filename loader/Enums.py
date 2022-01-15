@@ -782,6 +782,23 @@ class EnemyAbilityType(ShortEnum):
     DEVIL_FIELD = 55
 
 
+class FirePositionPattern(ShortEnum):
+    NONE = 0
+    Horizontal = 1
+    Radial = 2
+    Circle = 3
+
+
+class FireStockPattern(ShortEnum):
+    NONE = 0
+    StockBullet = 1
+    BuffCount = 2
+    SpecifiedNum = 3
+    ButterflyNum = 4
+    DuplicatedBuffCount = 5
+    PartyAuraLevel = 6
+
+
 class KillerState(ShortEnum):
     NONE = 0
     AbsPoison = 1

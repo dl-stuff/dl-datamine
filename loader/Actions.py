@@ -228,6 +228,8 @@ ACTION_PART = DBTableMetadata(
         "_abAttackActionId": DBTableMetadata.INT,
         # "_abSkipOtherPlayer": DBTableMetadata.INT,
         "_bulletNum": DBTableMetadata.INT,
+        "_firePositionPattern": DBTableMetadata.INT,
+        "_fireStockPattern": DBTableMetadata.INT,
         "_fireMaxCount": DBTableMetadata.INT,
         "_generateNum": DBTableMetadata.INT,
         # "_generateDelay": DBTableMetadata.REAL, # this is unused
