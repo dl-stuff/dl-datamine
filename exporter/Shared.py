@@ -21,6 +21,8 @@ from loader.Enums import (
     AuraType,
     ActionSignalType,
     CharacterControl,
+    FirePositionPattern,
+    FireStockPattern,
 )
 from exporter.Mappings import (
     AFFLICTION_TYPES,
@@ -514,6 +516,16 @@ class ActionParts(DBView):
                 r["_charaCommandArgs"] = json.loads(r["_charaCommandArgs"])
                 if r["_charaCommand"] == CharacterControl.ApplyBuffDebuff and (actcond := self.index["ActionCondition"].get(r["_charaCommandArgs"].get("_id", -1))):
                     r["_charaCommandArgs"]["_id"] = actcond
+            except (KeyError, ValueError):
+                pass
+
+            try:
+                r["_firePositionPattern"] = FirePositionPattern(r["_firePositionPattern"])
+            except (KeyError, ValueError):
+                pass
+
+            try:
+                r["_fireStockPattern"] = FireStockPattern(r["_fireStockPattern"])
             except (KeyError, ValueError):
                 pass
 
