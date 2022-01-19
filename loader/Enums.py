@@ -831,6 +831,33 @@ class KillerState(ShortEnum):
     Break = 201
 
 
+class MarkerShape(ShortEnum):
+    Circle = 0
+    Line = 1
+    Cross_01 = 2
+    Cross_02 = 3
+    Fan30 = 4
+    Fan100 = 5
+    Arrow = 6
+    ArrowCircle = 7
+    Fan120 = 8
+    Fan180 = 9
+    Donuts = 10
+    Fan60 = 11
+    Fan90 = 12
+    Fan150 = 13
+    Fan210 = 14
+    Fan240 = 15
+    Fan270 = 16
+    Fan15 = 17
+    Fan45 = 18
+    Fan10 = 19
+    Tube180 = 20
+    Fan300 = 21
+    Fan330 = 22
+    EnumMax = 23
+
+
 class PartConditionComparisonType(ShortEnum):
     Equality = 0
     Inequality = 1

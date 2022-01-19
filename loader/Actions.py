@@ -208,6 +208,8 @@ ACTION_PART = DBTableMetadata(
         # ROTATION
         # '_rotation': DBTableMetadata.BLOB,
         # MARKER
+        "_shapeType": DBTableMetadata.INT,
+        "_length": DBTableMetadata.REAL,
         "_useForEachChargeTime": DBTableMetadata.INT,
         "_chargeSec": DBTableMetadata.REAL,
         "_chargeLvSec": DBTableMetadata.BLOB,

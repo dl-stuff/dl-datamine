@@ -24,6 +24,7 @@ from loader.Enums import (
     CharacterControl,
     FirePositionPattern,
     FireStockPattern,
+    MarkerShape,
 )
 from exporter.Mappings import (
     AFFLICTION_TYPES,
@@ -521,6 +522,13 @@ class ActionParts(DBView):
                 pass
 
             try:
+                r["_shapeType"] = MarkerShape(r["_shapeType"])
+            except KeyError:
+                pass
+            except ValueError:
+                del r["_shapeType"]
+
+            try:
                 r["_firePositionPattern"] = FirePositionPattern(r["_firePositionPattern"])
             except (KeyError, ValueError):
                 pass
@@ -605,7 +613,7 @@ class ActionParts(DBView):
 
     @staticmethod
     def remove_falsy_fields(res):
-        return DBDict(filter(lambda x: bool(x[1]) or x[0] in ("_seconds", "_seq"), res.items()))
+        return DBDict(filter(lambda x: bool(x[1]) or x[0] in ("_seconds", "_seq", "_shapeType"), res.items()))
 
     def get(self, pk, **kwargs):
         kwargs["expand_one"] = False
