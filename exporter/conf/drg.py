@@ -30,17 +30,6 @@ class DrgConf(DragonData, SkillProcessHelper):
         conf, action = super().convert_skill(sdat, lv)
         conf["sp_db"] = sdat.skill.get("_SpLv2Dragon", 45)
         conf["uses"] = sdat.skill.get("_MaxUseNum", 1)
-        if self.hit_attr_shift:
-            del conf["attr"]
-            hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_LV0{lv}.*"))
-            hitattr_adj(action, conf["startup"], conf, pattern=re.compile(f".*\d_HAS_LV0{lv}.*"), attr_key="attr_HAS")
-        else:
-            try:
-                attr = conf["attr"]
-                del conf["attr"]
-                conf["attr"] = attr
-            except KeyError:
-                pass
         return conf, action
 
     def process_result(self, res, hit_attr_shift=False, mlvl=None, uniqueshift=False):

@@ -63,6 +63,7 @@ if __name__ == "__main__":
         with open(data_path, "r") as fn:
             data = json.load(fn)
             name = os.path.splitext(os.path.basename(data_path))[0]
+            name = name.split(".")[0]
             pic_index[name] = {"name": data["c"]["name"], "icon": f"character/{data['c']['icon']}.png"}
             icon_set.add(data["c"]["icon"])
     patterns["jp"]["^images/icon/chara/l/" + "(?:" + "|".join(map(str, icon_set)) + ")"] = f"../character"

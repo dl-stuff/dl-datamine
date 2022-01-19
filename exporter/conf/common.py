@@ -773,6 +773,7 @@ class SkillProcessHelper:
         self.chara_modes = {}
         self.cp1_gauge = 0
         self.combo_shift = False
+        self.trans_skill = None
 
     def get_enhanced_key(self, base):
         nid = next(self.enhanced_counter[base])
@@ -812,16 +813,38 @@ class SkillProcessHelper:
             "recovery": recovery,
         }
 
-        hitlabel_pattern = re.compile(f".*LV0{lv}$")
-        sconf = hitattr_adj(
-            action,
-            sconf["startup"],
-            sconf,
-            skip_nohitattr=False,
-            pattern=hitlabel_pattern,
-            meta=self,
-            skill=sdat.skill,
-        )
+        if self.hit_attr_shift:
+            hitlabel_pattern = re.compile(f".*\d_LV0{lv}.*")
+            sconf = hitattr_adj(
+                action,
+                sconf["startup"],
+                sconf,
+                skip_nohitattr=False,
+                pattern=hitlabel_pattern,
+                meta=self,
+                skill=sdat.skill,
+            )
+            sconf = hitattr_adj(
+                action,
+                sconf["startup"],
+                sconf,
+                skip_nohitattr=False,
+                pattern=re.compile(f".*\d_HAS_LV0{lv}.*"),
+                meta=self,
+                skill=sdat.skill,
+                attr_key="attr_HAS"
+            )
+        else:
+            hitlabel_pattern = re.compile(f".*LV0{lv}$")
+            sconf = hitattr_adj(
+                action,
+                sconf["startup"],
+                sconf,
+                skip_nohitattr=False,
+                pattern=hitlabel_pattern,
+                meta=self,
+                skill=sdat.skill,
+            )
         hitattrs = sconf.get("attr")
         if (not hitattrs or all(["dmg" not in attr for attr in hitattrs if isinstance(attr, dict)])) and sdat.skill.get(f"_IsAffectedByTensionLv{lv}"):
             sconf["energizable"] = bool(sdat.skill[f"_IsAffectedByTensionLv{lv}"])
@@ -850,16 +873,9 @@ class SkillProcessHelper:
                 tsid, tsk = ts
                 if tsid not in self.all_chara_skills:
                     self.chara_skills[tsid] = SDat(tsid, sdat.base, f"phase{idx+1}", tsk, sdat.sid)
-        # try:
-        #     for tbuff in sdat.skill["_TransBuff"]["_Parts"]:
-        #         if not tbuff.get("_allHitLabels"):
-        #             continue
-        #         for hl_list in tbuff["_allHitLabels"].values():
-        #             for hitlabel in hl_list:
-        #                 if (actcond := hitlabel.get("_ActionCondition1")) and actcond.get("_CurseOfEmptinessInvalid"):
-        #                     sconf["phase_coei"] = True
-        # except KeyError:
-        #     pass
+        if tbuff := sdat.skill.get("_TransBuff"):
+            self.trans_skill = (sdat.base, sdat.group)
+            sconf["phase_buff"] = convert_all_hitattr(tbuff, pattern=re.compile(f".*LV0{lv}$"), meta=self, skill=sdat.skill)
 
         if isinstance((chainskills := sdat.skill.get("_ChainGroupId")), list):
             for idx, cs in enumerate(chainskills):
@@ -1025,6 +1041,10 @@ class AbilityConf(AbilityData):
     def ac_NONE(self, res):
         return None
 
+    ac_BREAKDOWN = ac_NONE
+    ac_OVERDRIVE = ac_NONE
+    ac_DEBUFF_SLIP_HP = ac_NONE
+
     def ac_HP_MORE(self, res):
         return ["hp", ">=", int(res["_ConditionValue"])]
 
@@ -1039,9 +1059,6 @@ class AbilityConf(AbilityData):
 
     def ac_DRAGON_MODE(self, res):
         return ["shift", "dform"]
-
-    def ac_BREAKDOWN(self, res):
-        return ["break"]
 
     def ac_GET_BUFF_DEF(self, res):
         return ["doublebuff"]
@@ -1071,9 +1088,6 @@ class AbilityConf(AbilityData):
     def ac_QUEST_START(self, res):
         return ["event", "start"]
 
-    def ac_OVERDRIVE(self, res):
-        return ["overdrive"]
-
     def ac_ABNORMAL_STATUS(self, res):
         return ["aff", AFFLICTION_TYPES.get(int(res["_ConditionValue"])).lower()]
 
@@ -1082,9 +1096,6 @@ class AbilityConf(AbilityData):
 
     def ac_TENSION_MAX_MOMENT(self, res):
         return ["event", "energized"]
-
-    def ac_DEBUFF_SLIP_HP(self, res):
-        return ["bleed"]
 
     def ac_HITCOUNT_MOMENT(self, res):
         cond = ["hitcount", int(res["_ConditionValue"])]
@@ -1342,8 +1353,16 @@ class AbilityConf(AbilityData):
         # return ["killer", TRIBE_TYPES[self._varid_a(res, i)].lower(), self._upval(res, i)]
         return self._at_mod(res, i, f"killer_{TRIBE_TYPES[self._varid_a(res, i)].lower()}")
 
+    ADU_MOD = {
+        AbilityCondition.DEBUFF_SLIP_HP: ("killer_bleed",),
+        AbilityCondition.BREAKDOWN: ("killer_break", "ex"),
+        AbilityCondition.OVERDRIVE: ("killer_overdrive",),
+    }
+
     def at_ActDamageUp(self, res, i):
         # return self._at_mod(res, i, "actdmg")
+        if adu_mod := AbilityConf.ADU_MOD.get(res["_ConditionType"]):
+            return self._at_mod(res, i, *adu_mod)
         return self._at_upval("actdmg", res, i)
 
     def at_ActCriticalUp(self, res, i):
@@ -1718,6 +1737,14 @@ class ActCondConf(ActionCondition):
     def curr_actcond_conf(self):
         return dict(sorted(self._curr_actcond_conf.items()))
 
+    UNITY_TEXT_FMT = re.compile(r"<.+>|\\n")
+
+    @staticmethod
+    def clean_text(conf, text):
+        if "mods" in conf and "{0:P0}" in text:
+            text = text.replace("{0:P0}", f'{abs(conf["mods"][0][0]):.0%}')
+        return ActCondConf.UNITY_TEXT_FMT.sub(" ", text).strip()
+
     def _process_metadata(self, conf, res):
         # no clue: _UnifiedManagement/_DebuffCategory/_RemoveDebuffCategory
         # visuals, prob: _UsePowerUpEffect/_NotUseStartEffect/_StartEffectCommon/_StartEffectAdd/_DurationNumConsumedHeadText
@@ -1729,10 +1756,7 @@ class ActCondConf(ActionCondition):
         elif res["_BuffIconId"]:
             conf["icon"] = res["_BuffIconId"]
         if res["_Text"]:
-            text = res["_Text"]
-            if "mods" in conf and "{0:P0}" in text:
-                text = text.replace("{0:P0}", f'{abs(conf["mods"][0][0]):.0%}')
-            conf["text"] = text
+            conf["text"] = ActCondConf.clean_text(conf, res["_Text"])
         if flag >> 1 & 1:  # NoCount = 2
             conf["hide"] = 1
         if res["_OverwriteGroupId"]:
@@ -1963,9 +1987,6 @@ class ActCondConf(ActionCondition):
         if res["_CurseOfEmptinessInvalid"]:
             conf["coei"] = res["_CurseOfEmptinessInvalid"]
 
-        if res["_TransSkill"]:
-            conf["phaseup"] = int(res["_TransSkill"])
-
         if res["_GrantSkill"]:
             action_grant = self.index["ActionGrant"].get(res["_GrantSkill"], full_query=False)
             target = AbilityTargetAction(action_grant["_TargetAction"])
@@ -2009,6 +2030,11 @@ class ActCondConf(ActionCondition):
                     except KeyError:
                         sdat = self.meta.all_chara_skills[esid]
                     alt[sn] = sdat.group or "default"
+
+        if res["_TransSkill"] and self.meta.trans_skill:
+            # conf["phase_up"] = int(res["_TransSkill"])
+            base, group = self.meta.trans_skill
+            alt[base] = group
 
         if res["_ComboShift"]:
             alt["x"] = "enhanced"
