@@ -824,16 +824,7 @@ class SkillProcessHelper:
                 meta=self,
                 skill=sdat.skill,
             )
-            sconf = hitattr_adj(
-                action,
-                sconf["startup"],
-                sconf,
-                skip_nohitattr=False,
-                pattern=re.compile(f".*\d_HAS_LV0{lv}.*"),
-                meta=self,
-                skill=sdat.skill,
-                attr_key="attr_HAS"
-            )
+            sconf = hitattr_adj(action, sconf["startup"], sconf, skip_nohitattr=False, pattern=re.compile(f".*\d_HAS_LV0{lv}.*"), meta=self, skill=sdat.skill, attr_key="attr_HAS")
         else:
             hitlabel_pattern = re.compile(f".*LV0{lv}$")
             sconf = hitattr_adj(
@@ -1557,21 +1548,13 @@ class AbilityConf(AbilityData):
         return self._at_upval("cprep", res, i)
 
     def at_RunOptionAction(self, res, i):
-        # act_id = self._varid_a(res, i)
-        # if self.meta is not None:
-        #     act = self.index["PlayerAction"].get(act_id)
-        #     actname = f"~misc_{self.source}"
-        #     self.meta.alt_actions.append((actname, act))
-        # return ["runact", actname]
         try:
             if (act := self.index["PlayerAction"].get(self._varid_a(res, i))) and (actconf := convert_misc(act, convert_follow=False)):
-                hitattr = actconf["attr"][0]
-                for key in list(hitattr):
-                    if key.startswith("DEBUG_"):
-                        del hitattr[key]
-                # if set(hitattr.keys()) == {"actcond", "target"}:
-                #     return ["actcond", hitattr["target"], hitattr["actcond"]]
-                return ["hitattr", hitattr]
+                for hitattr in actconf["attr"]:
+                    for key in list(hitattr):
+                        if key.startswith("DEBUG_"):
+                            del hitattr[key]
+                return ["hitattr", *actconf["attr"]]
         except Exception:
             pass
         return None
@@ -1892,7 +1875,7 @@ class ActCondConf(ActionCondition):
                     slip["addiv"] = fr(res["_RateIncreaseDuration"])
                     slip["threshold"] = res["_RequiredRecoverHp"]
                     slip["kind"] = "corrosion"
-                maybe_debuff.add("_ValidSlipHp")
+                    maybe_debuff.add("_ValidSlipHp")
             else:
                 if res["_ValidRegeneHP"]:
                     slip["kind"] = "hp"
@@ -1909,11 +1892,11 @@ class ActCondConf(ActionCondition):
                     slip["target"] = "s3"
                 elif res["_ValidRegeneDP"]:
                     slip["kind"] = "dp"
-            if "kind" in slip:
+            if "kind" in slip and slip["kind"] not in ("bleed",):
                 if slip["value"][1] > 0:
-                    maybe_debuff.add(1)
+                    maybe_debuff.add(slip["kind"])
                 elif slip["value"][1] < 0:
-                    maybe_buff.add(1)
+                    maybe_buff.add(slip["kind"])
             if res["_SlipDamageIntervalSec"]:
                 slip["iv"] = fr(res["_SlipDamageIntervalSec"])
             conf["slip"] = slip
@@ -1935,22 +1918,22 @@ class ActCondConf(ActionCondition):
             if n := res["_RateRecoverySpExceptTargetSkill"]:
                 for i in range(0, 4):
                     if not (n >> i):
-                        mods.append((fr(res["_RateRecoverySp"]), f"sph_s{i+1}"))
+                        mods.append((fr(res["_RateRecoverySp"]), f"sph_s{i+1}", "buff"))
             else:
-                mods.append((fr(res["_RateRecoverySp"]), "sph"))
+                mods.append((fr(res["_RateRecoverySp"]), "sph", "buff"))
             _check_debuff("_RateRecoverySp", res["_RateRecoverySp"])
 
         for key, aff in ActCondConf.RATE_TO_AFFKEY.items():
             if res[key]:
-                mods.append((fr(res[key]), f"affres_{aff}", "passive"))
+                mods.append((fr(res[key]), f"affres_{aff}", "buff"))
                 _check_debuff(key, res[key])
             killer_key = f"{key}Killer"
             if killer := res[killer_key]:
-                mods.append((fr(killer), f"killer_{aff}", "passive"))
+                mods.append((fr(killer), f"killer_{aff}", "buff"))
                 _check_debuff(killer_key, res[killer_key])
             edge_key = f"{key}Add"
             if edge := res[edge_key]:
-                mods.append((fr(edge), f"edge_{aff}", "passive"))
+                mods.append((fr(edge), f"edge_{aff}", "buff"))
                 _check_debuff(edge_key, res[edge_key])
 
         if res["_HealInvalid"]:
