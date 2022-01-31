@@ -1135,9 +1135,9 @@ class BaseConf(WeaponType):
             for n in range(1, 6):
                 try:
                     xn = res[f"_DefaultSkill0{n}"]
+                    conf[f"x{n}"] = convert_x(xn)
                 except KeyError:
                     break
-                conf[f"x{n}"] = convert_x(xn)
                 # for part in xn['_Parts']:
                 #     if part['commandType'] == 'ACTIVE_CANCEL' and part.get('_actionId') == fs_id and part.get('_seconds'):
                 #         fs_delay[f'x{n}'] = part.get('_seconds')
@@ -2633,9 +2633,12 @@ class DrgConf(DragonData, SkillProcessHelper):
         for n, xn in enumerate(dcombo):
             n += 1
             xn_key = f"dx{n}"
-            if dxconf := convert_x(xn, convert_follow=True, is_dragon=True):
-                conf[xn_key] = dxconf
-                self.action_ids[xn["_Id"]] = xn_key
+            try:
+                if dxconf := convert_x(xn, convert_follow=True, is_dragon=True):
+                    conf[xn_key] = dxconf
+                    self.action_ids[xn["_Id"]] = xn_key
+            except KeyError:
+                continue
             if hitattrshift:
                 hit_attr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
 
