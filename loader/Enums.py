@@ -130,6 +130,12 @@ class AbilityCondition(ShortEnum):
     ON_REVIVE = 125
     ON_IN_BURST_GUARD_COUNTER = 126
     QUEST_START_AND_CHANGE_EQUIPMENT = 127
+    HITCOUNT_TIMESRATE = 128
+    TOTAL_HITCOUNT_LESS_MOMENT = 129
+    TOTAL_HITCOUNT_MORE_MOMENT = 130
+    LETHAL_DAMAGED = 131
+    ON_CHARASTATE_ENTER_EXIT = 132
+    DAMAGED_WITHOUT_MYSELF_BEFORE_DAMAGE_REACTION = 133
 
 
 class AbilityStat(ShortEnum):
@@ -168,6 +174,7 @@ class AbilityTargetAction(ShortEnum):
     SKILL_4 = 10
     HUMAN_SKILL_3 = 11
     HUMAN_SKILL_4 = 12
+    SHARE_SKILL = 13
 
 
 class AbilityType(ShortEnum):
@@ -262,13 +269,13 @@ class AbilityType(ShortEnum):
     SetCharacterState = 88
     ChangeModeRemoteToo = 89
     RecoverySpCutRate = 90
-    Reserve_091 = 91
-    Reserve_092 = 92
-    Reserve_093 = 93
-    Reserve_094 = 94
-    Reserve_095 = 95
-    Reserve_096 = 96
-    Reserve_097 = 97
+    ActRecoveryMulForDyingTarget = 91
+    CallCpCommand = 92
+    AdditionalHitCollision = 93
+    RecoveryOnDamage = 94
+    Guts = 95
+    SendSignal = 96
+    RemoveSignal = 97
     Reserve_098 = 98
     Reserve_099 = 99
     Reserve_100 = 100
@@ -383,6 +390,7 @@ class ActionHitExecType(ShortEnum):
     HEAL_SP_HUMANONLY = 9
     DUMMY_DAMAGE = 10
     HEAL_SP_DRAGONONLY = 11
+    HEAL_ABS_TIME = 12
 
 
 class ActionSignalType(ShortEnum):
@@ -423,7 +431,7 @@ class ActionSignalType(ShortEnum):
     Stop1 = 34
     HitCount = 35
     ActionCriticalStatus = 36
-    RESERVE_03 = 37
+    RecoveryOnDamage = 37
     RESERVE_04 = 38
     RESERVE_05 = 39
     RESERVE_06 = 40
@@ -519,7 +527,7 @@ class CharacterControl(ShortEnum):
     CPCommand = 50
     NevOptionRemoteSync = 51
     RESERVE_33 = 52
-    RESERVE_34 = 53
+    CancelTransform = 53
     RESERVE_35 = 54
     RESERVE_36 = 55
     RESERVE_37 = 56
@@ -702,7 +710,7 @@ class CommandType(ShortEnum):
     EA_POWERCRYSTAL = 160
     SETUP_CTS = 161
     STOCK_BULLET_NEVOPTION = 162
-    RESERVE_82 = 163
+    REBORN = 163
     RESERVE_83 = 164
     RESERVE_84 = 165
     RESERVE_85 = 166

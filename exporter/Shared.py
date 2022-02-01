@@ -337,6 +337,7 @@ ABILITY_TYPES = {
     AbilityType.RunOptionAction: AbilityData.action_reference,
     AbilityType.RunOptionActionRemoteToo: AbilityData.action_reference,
     AbilityType.AbnoramlExtension: AbilityData.affliction_ability,
+    AbilityType.AdditionalHitCollision: AbilityData.action_condition,
 }
 
 
