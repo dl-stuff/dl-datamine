@@ -154,7 +154,7 @@ def hit_sr(action, startup=None, explicit_any=True):
     for part in action["_Parts"]:
         # find startup
         # if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
-        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part["_charaCommand"] in (CharacterControl.ServantAction, CharacterControl.ApplyBuffDebuff):
+        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part["_charaCommand"] in (CharacterControl.ServantAction, CharacterControl.ApplyBuffDebuff, CharacterControl.ResetBuffDebuff):
             s = fr(part["_seconds"])
         if s is None and (hitlabels := part.get("_allHitLabels")):
             for hl_list in hitlabels.values():
@@ -407,6 +407,10 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 actcond = part["_charaCommandArgs"]["_id"]["_Id"]
                 ACTCOND_CONF.get(actcond)
                 cmd_attr = {"actcond": str(actcond)}
+            elif part["_charaCommand"] == CharacterControl.ResetBuffDebuff:
+                actcond = part["_charaCommandArgs"]["_id"]
+                ACTCOND_CONF.get(actcond)
+                cmd_attr = {"actcond_reset": str(actcond)}
             if cmd_attr is not None:
                 iv = fr(part["_seconds"])
                 if iv:
@@ -985,6 +989,7 @@ class AbilityConf(AbilityData):
         AbilityTargetAction.SKILL_4: "s4",
         AbilityTargetAction.HUMAN_SKILL_3: "s3",
         AbilityTargetAction.HUMAN_SKILL_4: "s4",
+        AbilityTargetAction.SHARE_SKILL: "share",
     }
     # ABL_GROUPS = {}
 
@@ -1224,7 +1229,7 @@ class AbilityConf(AbilityData):
         return ["actcond", str(int(res["_ConditionValue2"])), "=", int(res["_ConditionValue"])]
 
     def ac_CHARGE_LOOP_REACTION_TIME(self, res):
-        return ["fs_hold", "charge"]
+        return ["fs_hold", "cd", "fs_charged"]
 
     def ac_AVOID(self, res):
         return ["event", "dodge"]
@@ -1264,7 +1269,7 @@ class AbilityConf(AbilityData):
         return ["event", "heal"]
 
     def ac_CHARGE_TIME_MORE_MOMENT(self, res):
-        return ["fs_hold", "end"]
+        return ["fs_hold", res["_ConditionValue"], "fs_end"]
 
     def ac_HITCOUNT_MOMENT_TIMESRATE(self, res):
         return ["mult", "hits", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
@@ -1317,6 +1322,7 @@ class AbilityConf(AbilityData):
         AbilityStat.BurstSpeed: "fspd",
         AbilityStat.ChargeSpeed: "cspd",
         AbilityStat.NeedDpRate: "dpcost",
+        AbilityStat.ConsumeDpRate: "dpconsume",
     }
 
     def _at_upval(self, name, res, i, div=100):
@@ -2042,10 +2048,12 @@ class ActCondConf(ActionCondition):
             conf["echo"] = addattack["_DamageAdjustment"]
 
         if res["_LevelUpId"]:
-            conf["-lv"] = res["_LevelUpId"]
+            ACTCOND_CONF.get(res["_LevelUpId"])
+            conf["lvl_up"] = str(res["_LevelUpId"])
 
         if res["_LevelDownId"]:
-            conf["+lv"] = res["_LevelDownId"]
+            ACTCOND_CONF.get(res["_LevelDownId"])
+            conf["lvl_down"] = str(res["_LevelDownId"])
 
         if res["_ExcludeFromBuffExtension"]:
             conf["nobufftime"] = 1
