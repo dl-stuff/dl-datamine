@@ -27,6 +27,16 @@ class BaseConf(WeaponType):
         "GUN": "gun",
     }
     GUN_MODES = (40, 41, 42)
+    GUN_FS = {
+        1: 900015,
+        2: 900105,
+        3: 900205,
+    }
+    GUN_X = {
+        1: 30,
+        2: 31,
+        3: 32,
+    }
 
     def __init__(self, index):
         self.action_ids = {}
@@ -144,6 +154,7 @@ class ExAbilityConf(AbilityConf):
 
 class AdvConf(CharaData, SkillProcessHelper):
     SERVANT_TO_DACT = (
+        (-1, "dshift"),  # not actuall a thing irl
         (1, "dx1"),
         (2, "dx2"),
         (3, "dx3"),
@@ -260,10 +271,11 @@ class AdvConf(CharaData, SkillProcessHelper):
                                 mode_name = ""
                             else:
                                 mode_name = f"_mode{m}"
+                    self.chara_modes[m] = mode_name
                 for s in (1, 2):
                     if skill := mode.get(f"_Skill{s}Id"):
                         self.chara_skills[skill["_Id"]] = SDat(skill["_Id"], f"s{s}", mode_name.strip("_") or None, skill)
-                if (burst := mode.get("_BurstAttackId")) and base_mode_burst != burst["_Id"]:
+                if (burst := mode.get("_BurstAttackId")) and burst["_Id"] not in (base_mode_burst, BaseConf.GUN_FS.get(gunkind, 0)):
                     marker = burst.get("_BurstMarkerId")
                     if not marker:
                         marker = self.index["PlayerAction"].get(burst["_Id"] + 4)
@@ -274,7 +286,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                         self.action_ids[burst["_Id"]] = "fs"
                     if not mode_name:
                         base_mode_burst = burst["_Id"]
-                if ((xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict)) and base_mode_x != xalt["_Id"]:
+                if ((xalt := mode.get("_UniqueComboId")) and isinstance(xalt, dict)) and xalt["_Id"] not in (base_mode_x, BaseConf.GUN_X.get(gunkind, 0)):
                     xalt_pattern = re.compile(r".*H0\d_LV02$") if conf["c"]["spiral"] else None
                     for prefix in ("", "Ex"):
                         if xalt.get(f"_{prefix}ActionId"):
@@ -294,10 +306,17 @@ class AdvConf(CharaData, SkillProcessHelper):
                         base_mode_x = xalt["_Id"]
                         if xalt["_MaxComboNum"] < 5:
                             conf["default"] = {"x_max": xalt["_MaxComboNum"]}
-                    if dashondodge := mode.get("_DashOnAvoid"):
-                        if dashconf := convert_misc(dashondodge):
-                            conf["dash"] = dashconf
-                            self.action_ids[dashondodge["_Id"]] = "dash"
+                if dashondodge := mode.get("_DashOnAvoid"):
+                    if dashconf := convert_misc(dashondodge):
+                        conf["dash"] = dashconf
+                        self.action_ids[dashondodge["_Id"]] = "dash"
+
+                if self.utp_chara and (mode_act := mode.get("_ActionId")):
+                    if mode_act_conf := convert_misc(mode_act):
+                        if not "dragonform" in conf:
+                            conf["dragonform"] = {}
+                        conf["dragonform"]["dshift"] = mode_act_conf
+
         try:
             conf["c"]["gun"] = list(conf["c"]["gun"])
         except KeyError:
@@ -337,12 +356,12 @@ class AdvConf(CharaData, SkillProcessHelper):
                     except KeyError:
                         pass
                     attr = dict(attr)
-                    if servant_id == 6:
-                        # man i fucking hate cykagames
-                        attr["gluca"] = 1
-                    attr["msl"] = dact_conf.get("startup") + attr.get("iv", 0.0) + attr.get("msl", 0.0)
+                    # if servant_id == 6:
+                    #     # man i fucking hate cykagames
+                    #     attr["gluca"] = 1
+                    attr["msl"] = dact_conf.get("startup", 0.0) + attr.get("iv", 0.0) + attr.get("msl", 0.0)
                     servant_attrs[servant_id].append(attr)
-        remap_stuff(conf, self.action_ids, servant_attrs=servant_attrs)
+        remap_stuff(conf, self.action_ids, servant_attrs=servant_attrs, chara_modes=self.chara_modes)
         self.unset_ability_and_actcond_meta(conf)
 
         return conf

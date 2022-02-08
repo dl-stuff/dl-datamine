@@ -154,7 +154,7 @@ def hit_sr(action, startup=None, explicit_any=True):
     for part in action["_Parts"]:
         # find startup
         # if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part.get("_servantActionCommandId"):
-        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part["_charaCommand"] in (CharacterControl.ServantAction, CharacterControl.ApplyBuffDebuff, CharacterControl.ResetBuffDebuff):
+        if s is None and part["commandType"] == CommandType.CHARACTER_COMMAND and part["_charaCommand"] in CHARA_COMMAND_ATTR:
             s = fr(part["_seconds"])
         if s is None and (hitlabels := part.get("_allHitLabels")):
             for hl_list in hitlabels.values():
@@ -185,6 +185,8 @@ def hit_sr(action, startup=None, explicit_any=True):
         if part["commandType"] == CommandType.PLAY_MOTION:
             if (animdata := part.get("_animation")) and isinstance(animdata, dict):
                 motion = max(motion, part["_seconds"] + animdata["duration"])
+            if s is None and part["_motionState"] == "change_dragon_loop":
+                s = fr(part["_seconds"])
     followed_by = set()
     for key, seconds in act_cancels.items():
         action_id, action_type = key
@@ -392,30 +394,38 @@ def _hit_collision_iv(part, part_hitattr_map, part_hitattr):
             part_hitattr.extend(ha_attrs)
 
 
+CHARA_COMMAND_ATTR = {
+    CharacterControl.ServantAction: lambda part: {"DEBUG_SERVANT": part.get("_servantActionCommandId")},
+    CharacterControl.ApplyBuffDebuff: lambda part: ACTCOND_CONF.get(actcond := part["_charaCommandArgs"]["_id"]["_Id"]) and {"actcond": str(actcond)},
+    CharacterControl.ResetBuffDebuff: lambda part: ACTCOND_CONF.get(actcond := part["_charaCommandArgs"]["_id"]) and {"actcond_reset": str(actcond)},
+    CharacterControl.CancelTransform: lambda _: {"dform_stop": 1},
+}
+
+
 def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
     actparts = action["_Parts"]
     hitattrs = []
 
     for part in actparts:
         cmdtype = part["commandType"]
-        # servant for persona
-        if part["commandType"] == CommandType.CHARACTER_COMMAND:
-            cmd_attr = None
-            if part["_charaCommand"] == CharacterControl.ServantAction:
-                cmd_attr = {"DEBUG_SERVANT": part.get("_servantActionCommandId")}
-            elif part["_charaCommand"] == CharacterControl.ApplyBuffDebuff:
-                actcond = part["_charaCommandArgs"]["_id"]["_Id"]
-                ACTCOND_CONF.get(actcond)
-                cmd_attr = {"actcond": str(actcond)}
-            elif part["_charaCommand"] == CharacterControl.ResetBuffDebuff:
-                actcond = part["_charaCommandArgs"]["_id"]
-                ACTCOND_CONF.get(actcond)
-                cmd_attr = {"actcond_reset": str(actcond)}
+        # chara commands
+        if cmdtype == CommandType.CHARACTER_COMMAND:
+            try:
+                cmd_attr = CHARA_COMMAND_ATTR[part["_charaCommand"]](part)
+            except KeyError:
+                continue
             if cmd_attr is not None:
+                time_key = "iv"
+                if part["_charaCommandArgs"].get("_guarantee"):
+                    time_key = "msl"
                 iv = fr(part["_seconds"])
                 if iv:
-                    cmd_attr["iv"] = iv
+                    cmd_attr[time_key] = iv
                 hitattrs.append(cmd_attr)
+            continue
+        # servant special case
+        if cmdtype == CommandType.PLAY_MOTION and part["_motionState"] == "change_dragon_loop":
+            hitattrs.append({"DEBUG_SERVANT": -1})
             continue
         # parse part conds
         partcond = None
@@ -429,6 +439,8 @@ def convert_all_hitattr(action, pattern=None, meta=None, skill=None):
                 partcond = ("actcond", str(actcond.get("_Id")), PART_COMPARISON_TO_VARS[condvalue["_compare"]], count)
             elif ctype == PartConditionType.AuraLevel:
                 partcond = ("amp", (condvalue["_aura"].value, condvalue["_target"]), PART_COMPARISON_TO_VARS[condvalue["_compare"]], condvalue["_count"])
+            elif ctype == PartConditionType.CharaMode:
+                partcond = ("mode", json.loads(condvalue)[0])
         # get the hitattrs
         part_hitattr_map = defaultdict(list)
         if raw_hitattrs := part.get("_allHitLabels"):
@@ -692,7 +704,7 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
     return fsconf
 
 
-def remap_stuff(conf, action_ids, servant_attrs=None, parent_key=None, fullconf=None):
+def remap_stuff(conf, action_ids, servant_attrs=None, parent_key=None, fullconf=None, chara_modes=None):
     # search the dict
     fullconf = fullconf or conf
     for key, subvalue in conf.copy().items():
@@ -724,27 +736,42 @@ def remap_stuff(conf, action_ids, servant_attrs=None, parent_key=None, fullconf=
             else:
                 del conf[key]
         elif key == "attr":
+            if chara_modes:
+                for attr in subvalue:
+                    if (pcond := attr.get("pcond")) and pcond[0] == "mode":
+                        mode_name = chara_modes.get(pcond[1]+1)
+                        if mode_name == "":
+                            mode_name = "default"
+                        elif not mode_name:
+                            continue
+                        attr["pcond"] = ("mode", mode_name.strip("_"))
             if servant_attrs:
                 new_attrs = []
                 for attr in subvalue:
                     if servant_id := attr.get("DEBUG_SERVANT"):
-                        for servant_attr in servant_attrs[servant_id]:
+                        if servant_id == -1:
+                            del fullconf["dservant"]["dshift"]
+                        else:
                             try:
                                 del fullconf["dservant"]
                             except KeyError:
                                 pass
+                        for servant_attr in servant_attrs[servant_id]:
                             if "iv" in attr:
                                 servant_attr["iv"] = attr["iv"]
                             elif "iv" in servant_attr:
                                 del servant_attr["iv"]
                             servant_attr["msl"] += attr.get("msl", 0.0)
-                            servant_attr["msl"] = fr(servant_attr["msl"])
+                            if not servant_attr["msl"]:
+                                del servant_attr["msl"]
+                            else:
+                                servant_attr["msl"] = fr(servant_attr["msl"])
                             new_attrs.append(servant_attr)
                     else:
                         new_attrs.append(attr)
                 conf[key] = new_attrs
         elif isinstance(subvalue, dict):
-            remap_stuff(subvalue, action_ids, servant_attrs=servant_attrs, parent_key=key, fullconf=fullconf)
+            remap_stuff(subvalue, action_ids, servant_attrs=servant_attrs, parent_key=key, fullconf=fullconf, chara_modes=chara_modes)
 
 
 class SDat:

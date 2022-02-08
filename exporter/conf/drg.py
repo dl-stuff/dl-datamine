@@ -83,7 +83,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             ("dshift", "_Transform"),
         ):
             try:
-                s, r, _ = hit_sr(res[key], startup=0.0, explicit_any=False)
+                _, r, _ = hit_sr(res[key], startup=0.0, explicit_any=False)
             except KeyError:
                 continue
                 # try:
@@ -94,11 +94,11 @@ class DrgConf(DragonData, SkillProcessHelper):
             if DrgConf.COMMON_ACTIONS_DEFAULTS[act] != r:
                 actconf = {"recovery": r}
             if act == "dshift":
-                hitattrs = convert_all_hitattr(res[key])
+                hitattrs = convert_all_hitattr(res[key], pattern=re.compile(r".*\d{2}$"))
                 if hitattrs and (len(hitattrs) > 1 or hitattrs[0]["dmg"] != 2.0 or set(hitattrs[0].keys()) != {"dmg"}):
                     actconf["attr"] = hitattrs
                 if hit_attr_shift:
-                    if hitattrs := convert_all_hitattr(res[key], pattern=re.compile(r".*_HAS")):
+                    if hitattrs := convert_all_hitattr(res[key], pattern=re.compile(r".*\d{2}_HAS$")):
                         actconf["attr_HAS"] = hitattrs
             if actconf:
                 conf[act] = actconf
@@ -127,7 +127,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             except KeyError:
                 continue
             if hit_attr_shift:
-                hitattr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS"), skip_nohitattr=True, attr_key="attr_HAS")
+                hitattr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS$"), skip_nohitattr=True, attr_key="attr_HAS")
 
         self.process_skill(res, conf, mlvl or {"ds1": 2, "ds2": 2})
 
