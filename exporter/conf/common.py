@@ -3,6 +3,7 @@ import itertools
 import json
 import sys
 import os
+from typing import OrderedDict
 from tqdm import tqdm
 from collections import defaultdict
 import math
@@ -55,6 +56,8 @@ PRETTY_PRINT_THIS = ("dragonform", "dservant", "repeat")
 MULTILINE_LIST = ("abilities", "ref", "chain")
 DUMMY_PART = {"_seconds": 0.0}
 
+FRONT_ATTR_KEYS = ("DEBUG_PARTCOND", "pcond")
+
 
 def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
     if k in PRETTY_PRINT_THIS:
@@ -64,9 +67,12 @@ def fmt_conf(data, k=None, depth=0, f=sys.stdout, lim=2, sortlim=1):
             r_str_lst = []
             end = len(data) - 1
             for idx, d in enumerate(data):
-                if isinstance(d, int):
-                    r_str_lst.append(" " + str(d))
-                elif idx > 0:
+                if isinstance(d, dict):
+                    d = OrderedDict(d)
+                    for front_key in FRONT_ATTR_KEYS:
+                        if front_key in d:
+                            d.move_to_end(front_key, last=False)
+                if idx > 0:
                     r_str_lst.append("\n" + INDENT * (depth + 1) + json.dumps(d))
                 else:
                     r_str_lst.append(json.dumps(d))
@@ -141,6 +147,19 @@ def confsort(a):
             except IndexError:
                 return k
     return k
+
+
+def apply_hitattr_shift_pcond(hitattrs, active):
+    if active:
+        has_pcond = ("vars", "hitattr_shift", "=", 1)
+    else:
+        has_pcond = ("vars", "hitattr_shift", "=", 0)
+    for attr in hitattrs:
+        if "pcond" in attr:
+            attr["pcond"] = ["and", has_pcond, attr["pcond"]]
+        else:
+            attr["pcond"] = has_pcond
+    return hitattrs
 
 
 def hit_sr(action, startup=None, explicit_any=True):
@@ -305,18 +324,14 @@ def convert_hitattr(hitattr, part, meta=None, skill=None, from_ab=False, partcon
     if attr:
         # attr[f"DEBUG_FROM_SEQ"] = part.get("_seq", 0)
         attr["target"] = target.name
-        attr_with_cond = None
         if partcond:
             # look man i just want partcond to sort first
-            attr_with_cond = {"pcond": partcond}
+            attr["pcond"] = partcond
         elif ctype := part.get("_conditionType"):
             if ctype == PartConditionType.AllyHpRateLowest and "heal" in attr:
                 attr["heal"] = [attr["heal"], "lowest"]
             else:
-                attr_with_cond = {"DEBUG_PARTCOND": ctype.name + str(part["_conditionValue"])}
-        if attr_with_cond:
-            attr_with_cond.update(attr)
-            attr = attr_with_cond
+                attr["DEBUG_PARTCOND"] = ctype.name + str(part["_conditionValue"])
         iv = fr(part["_seconds"])
         if iv > 0:
             attr["iv"] = iv
@@ -739,7 +754,7 @@ def remap_stuff(conf, action_ids, servant_attrs=None, parent_key=None, fullconf=
             if chara_modes:
                 for attr in subvalue:
                     if (pcond := attr.get("pcond")) and pcond[0] == "mode":
-                        mode_name = chara_modes.get(pcond[1]+1)
+                        mode_name = chara_modes.get(pcond[1] + 1)
                         if mode_name == "":
                             mode_name = "default"
                         elif not mode_name:
@@ -800,7 +815,7 @@ class SkillProcessHelper:
         # for advs only
         self.alt_actions = []
         self.utp_chara = None
-        self.hit_attr_shift = False
+        self.hitattr_shift = False
         self.chara_modes = {}
         self.cp1_gauge = 0
         self.combo_shift = False
@@ -844,8 +859,8 @@ class SkillProcessHelper:
             "recovery": recovery,
         }
 
-        if self.hit_attr_shift:
-            hitlabel_pattern = re.compile(f".*\d_LV0{lv}.*")
+        if self.hitattr_shift:
+            hitlabel_pattern = re.compile(f".*(?<!_HAS)_LV0{lv}.*")
             sconf = hitattr_adj(
                 action,
                 sconf["startup"],
@@ -855,7 +870,11 @@ class SkillProcessHelper:
                 meta=self,
                 skill=sdat.skill,
             )
-            sconf = hitattr_adj(action, sconf["startup"], sconf, skip_nohitattr=False, pattern=re.compile(f".*\d_HAS_LV0{lv}.*"), meta=self, skill=sdat.skill, attr_key="attr_HAS")
+            if hitattrs := hitattr_adj(action, sconf["startup"], {}, skip_nohitattr=False, pattern=re.compile(f".*_HAS_LV0{lv}.*"), meta=self, skill=sdat.skill, attr_key="attr_HAS").get("attr_HAS"):
+                if not "attr" in sconf:
+                    sconf["attr"] = []
+                apply_hitattr_shift_pcond(sconf["attr"], False)
+                sconf["attr"].extend(apply_hitattr_shift_pcond(hitattrs, True))
         else:
             hitlabel_pattern = re.compile(f".*LV0{lv}$")
             sconf = hitattr_adj(
@@ -1081,7 +1100,7 @@ class AbilityConf(AbilityData):
         return ["buffed_by", "s2"]
 
     def ac_DRAGON_MODE(self, res):
-        return ["shift", "dform"]
+        return ["in_shift", "dform", int(res["_ConditionValue"])]
 
     def ac_GET_BUFF_DEF(self, res):
         return ["doublebuff"]
@@ -1100,7 +1119,9 @@ class AbilityConf(AbilityData):
         return cond
 
     def ac_TRANSFORM_DRAGON(self, res):
-        return ["event", "dragon"]
+        if res["_ConditionValue"] <= 1:
+            return ["event", "dragon"]
+        return ["dshift_count", ">=", int(res["_ConditionValue"]), 1]
 
     def ac_HP_MORE_MOMENT(self, res):
         return ["hp", ">=", int(res["_ConditionValue"]), 1]
@@ -1146,7 +1167,9 @@ class AbilityConf(AbilityData):
         return ["selfaff", AFFLICTION_TYPES.get(int(res["_ConditionValue"])).lower()]
 
     def ac_DRAGONSHIFT_MOMENT(self, res):
-        return ["event", "dragon"]
+        if res["_ConditionValue"] <= 1:
+            return ["event", "dragon"]
+        return ["dshift_count", ">=", int(res["_ConditionValue"]), 1]
 
     def ac_TENSION_LV(self, res):
         return ["energy", "=", int(res["_ConditionValue"])]
@@ -1201,7 +1224,7 @@ class AbilityConf(AbilityData):
         return ["event", "dragon_end"]
 
     def ac_UNIQUE_TRANS_MODE(self, res):
-        return ["shift", "ddrive"]
+        return ["in_shift", "ddrive", int(res["_ConditionValue"])]
 
     def ac_DAMAGED_MYSELF(self, res):
         return ["damaged", int(res["_ConditionValue"] * -1)]
@@ -1320,10 +1343,10 @@ class AbilityConf(AbilityData):
         return ["amp", 2, int(res["_ConditionValue"]), ">=", int(res["_ConditionValue2"])]
 
     def ac_DRAGONSHIFT(self, res):
-        return ["event", "dragon"]
+        return ["dshift_count", ">=", int(res["_ConditionValue"])]
 
     def ac_DRAGON_MODE_STRICTLY(self, res):
-        return ["shift", "dform"]
+        return ["in_shift", "dform", int(res["_ConditionValue"])]
 
     def ac_ACTIVATE_SKILL(self, res):
         return ["event", "s"]
@@ -1459,8 +1482,8 @@ class AbilityConf(AbilityData):
 
     def at_HitAttributeShift(self, res, i):
         if self.meta is not None:
-            self.meta.hit_attr_shift = True
-        return ["hit_attr_shift"]
+            self.meta.hitattr_shift = True
+        return ["hitattr_shift"]
 
     def at_EnhancedSkill(self, res, i):
         skill_id = self._varid_a(res, i)
@@ -1512,7 +1535,7 @@ class AbilityConf(AbilityData):
         return self._at_aff("afftime", res, i)
 
     def at_DragonTimeSpeedRate(self, res, i):
-        value = 100 / (100 + self._upval(res, i))
+        value = 1 / (1 + self._upval(res, i))
         return ["mod", value, "dt"]
 
     def at_DpChargeMyParty(self, res, i):
@@ -1658,7 +1681,7 @@ class AbilityConf(AbilityData):
         if cd := res.get("_CoolTime"):
             conf["cd"] = cd
         # count
-        if count := res.get("_MaxCount"):
+        if (count := res.get("_MaxCount")) or (count := res.get("_OccurenceNum")):
             conf["count"] = count
         # ele
         if ele := res.get("_ElementalType"):

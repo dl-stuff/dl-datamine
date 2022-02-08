@@ -6,7 +6,7 @@ from exporter.Shared import snakey
 from exporter.Dragons import DragonData
 from exporter.Mappings import ELEMENTS
 
-from exporter.conf.common import SDat, SkillProcessHelper, convert_all_hitattr, convert_fs, convert_x, hit_sr, hitattr_adj, remap_stuff, check_target_path, fmt_conf
+from exporter.conf.common import SDat, SkillProcessHelper, convert_all_hitattr, convert_fs, convert_x, hit_sr, hitattr_adj, remap_stuff, check_target_path, fmt_conf, apply_hitattr_shift_pcond
 
 
 class DrgConf(DragonData, SkillProcessHelper):
@@ -32,9 +32,9 @@ class DrgConf(DragonData, SkillProcessHelper):
         conf["uses"] = sdat.skill.get("_MaxUseNum", 1)
         return conf, action
 
-    def process_result(self, res, hit_attr_shift=False, mlvl=None, uniqueshift=False):
+    def process_result(self, res, hitattr_shift=False, mlvl=None, uniqueshift=False):
         self.reset_meta()
-        self.hit_attr_shift = hit_attr_shift
+        self.hitattr_shift = hitattr_shift
 
         max_lb = res.get("_MaxLimitBreakCount", 4)
         att = res["_MaxAtk"]
@@ -94,12 +94,13 @@ class DrgConf(DragonData, SkillProcessHelper):
             if DrgConf.COMMON_ACTIONS_DEFAULTS[act] != r:
                 actconf = {"recovery": r}
             if act == "dshift":
-                hitattrs = convert_all_hitattr(res[key], pattern=re.compile(r".*\d{2}$"))
+                hitattrs = convert_all_hitattr(res[key], pattern=re.compile(r".*(?<!_HAS)$"))
                 if hitattrs and (len(hitattrs) > 1 or hitattrs[0]["dmg"] != 2.0 or set(hitattrs[0].keys()) != {"dmg"}):
                     actconf["attr"] = hitattrs
-                if hit_attr_shift:
-                    if hitattrs := convert_all_hitattr(res[key], pattern=re.compile(r".*\d{2}_HAS$")):
-                        actconf["attr_HAS"] = hitattrs
+                if hitattr_shift:
+                    if hitattrs := convert_all_hitattr(res[key], pattern=re.compile(r".*_HAS$")):
+                        apply_hitattr_shift_pcond(actconf["attr"], False)
+                        actconf["attr"].extend(apply_hitattr_shift_pcond(hitattrs, True))
             if actconf:
                 conf[act] = actconf
 
@@ -121,13 +122,17 @@ class DrgConf(DragonData, SkillProcessHelper):
             n += 1
             xn_key = f"dx{n}"
             try:
-                if dxconf := convert_x(xn, convert_follow=True, is_dragon=True):
+                if dxconf := convert_x(xn, pattern=re.compile(r".*(?<!_HAS)$"), convert_follow=True, is_dragon=True):
                     conf[xn_key] = dxconf
                     self.action_ids[xn["_Id"]] = xn_key
             except KeyError:
                 continue
-            if hit_attr_shift:
-                hitattr_adj(xn, conf[xn_key]["startup"], conf[xn_key], pattern=re.compile(r".*_HAS$"), skip_nohitattr=True, attr_key="attr_HAS")
+            if hitattr_shift:
+                if hitattrs := hitattr_adj(xn, conf[xn_key]["startup"], {}, pattern=re.compile(r".*_HAS$"), skip_nohitattr=True, attr_key="attr_HAS").get("attr_HAS"):
+                    if "attr" not in conf[xn_key]:
+                        conf[xn_key]["attr"] = []
+                    apply_hitattr_shift_pcond(conf[xn_key]["attr"], False)
+                    conf[xn_key]["attr"].extend(apply_hitattr_shift_pcond(hitattrs, True))
 
         self.process_skill(res, conf, mlvl or {"ds1": 2, "ds2": 2})
 
@@ -177,8 +182,8 @@ class DrgConf(DragonData, SkillProcessHelper):
                 with open(outfile, "w", newline="", encoding="utf-8") as fp:
                     fmt_conf(conf, f=fp)
 
-    def get(self, name, by=None, hit_attr_shift=False, mlvl=None, uniqueshift=False):
+    def get(self, name, by=None, hitattr_shift=False, mlvl=None, uniqueshift=False):
         res = super().get(name, by=by, full_query=False)
         if isinstance(res, list):
             res = res[0]
-        return self.process_result(res, hit_attr_shift=hit_attr_shift, mlvl=mlvl, uniqueshift=uniqueshift)
+        return self.process_result(res, hitattr_shift=hitattr_shift, mlvl=mlvl, uniqueshift=uniqueshift)

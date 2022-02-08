@@ -242,7 +242,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 dmlvl = {"ds1": mlvl["s1"], "ds2": mlvl["s2"]}
             else:
                 dmlvl = None
-            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", uniqueshift=True, hit_attr_shift=self.hit_attr_shift, mlvl=dmlvl)
+            conf[udform_key] = self.index["DrgConf"].get(udrg, by="_Id", uniqueshift=True, hitattr_shift=self.hitattr_shift, mlvl=dmlvl)
             self.action_ids.update(self.index["DrgConf"].action_ids)
             # dum
             self.set_animation_reference(res)
