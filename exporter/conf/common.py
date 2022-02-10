@@ -1869,6 +1869,7 @@ class ActCondConf(ActionCondition):
         "_RateDarkAbs": "shadowblight",
         "_RateDestroyFire": "scorchrend",
     }
+    ENHANCED_ACTION = {"_EnhancedBurstAttack", "_EnhancedSkill1", "_EnhancedSkill2", "_EnhancedSkillWeapon"}
 
     def _process_values(self, conf, res):
         # _RemoveAciton: maybe this disables ur fs?
@@ -2117,7 +2118,7 @@ class ActCondConf(ActionCondition):
 
     def process_result(self, res):
         actcond_id = res["_Id"]
-        if actcond_id not in self.all_actcond_conf:
+        if actcond_id not in self.all_actcond_conf or (any((res[k] for k in self.ENHANCED_ACTION)) and actcond_id not in self._curr_actcond_conf):
             conf = {}
             self.all_actcond_conf[actcond_id] = conf
             self._process_values(conf, res)

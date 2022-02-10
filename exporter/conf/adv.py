@@ -449,6 +449,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                     check_target_path(os.path.dirname(output))
                     with open(output, "w", newline="", encoding="utf-8") as fp:
                         fmt_conf(outconf, f=fp)
+                    self.reset_meta()
                 outconf = self.process_result(res)
                 outname = self.outfile_name(outconf, ext)
                 # if ex_res := self.exability_data(res):
