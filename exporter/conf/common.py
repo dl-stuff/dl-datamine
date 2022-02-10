@@ -1460,7 +1460,7 @@ class AbilityConf(AbilityData):
         action_grant = self.index["ActionGrant"].get(self._varid_a(res, i), full_query=False)
         res[f"_TargetAction{i}"] = action_grant["_TargetAction"]
         ACTCOND_CONF.get(action_grant["_GrantCondition"])
-        return ["actgrant", action_grant["_GrantCondition"]]
+        return ["actgrant", str(action_grant["_GrantCondition"])]
 
     def at_CriticalDamageUp(self, res, i):
         return self._at_mod(res, i, "critdmg")
