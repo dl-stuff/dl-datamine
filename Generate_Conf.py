@@ -1,7 +1,7 @@
 import argparse
 from pprint import pprint
 from time import monotonic
-from exporter.Shared import AbilityData
+from exporter.Shared import AbilityData, PlayerAction
 from loader.Database import DBViewIndex
 
 from exporter.conf.adv import AdvConf
@@ -9,7 +9,7 @@ from exporter.conf.drg import DrgConf
 from exporter.conf.wep import WepConf
 from exporter.conf.wp import WpConf
 from exporter.conf.fort import write_fort_passives
-from exporter.conf.common import AuraConf, AbilityConf, ActCondConf, fmt_conf
+from exporter.conf.common import AuraConf, AbilityConf, ActCondConf, fmt_conf, convert_misc
 
 import exporter.conf.common
 
@@ -22,6 +22,7 @@ Q_HANDLERS = {
     "wp": lambda index, q: fmt_conf(WpConf(index).get(q)),
     "ab": lambda index, q: pprint(AbilityConf(index).get(q)),
     "actcond": lambda index, q: pprint(ActCondConf(index).get(q)),
+    "act": lambda index, q: pprint(convert_misc(PlayerAction(index).get(q))),
 }
 
 ALL_HANDLERS = {

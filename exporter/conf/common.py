@@ -22,7 +22,7 @@ from loader.Enums import (
     ActionSignalType,
     CharacterControl,
 )
-from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, check_target_path
+from exporter.Shared import ActionPartsHitLabel, AuraData, AbilityData, ActionCondition, PlayerAction, check_target_path
 from exporter.Mappings import (
     AFFLICTION_TYPES,
     ELEMENTS,
@@ -644,7 +644,7 @@ def convert_misc(action, convert_follow=True):
     return actconf
 
 
-def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
+def convert_fs(burst, marker=None, cancel=None, is_dragon=False, charge_loop=None):
     startup, recovery, followed_by = hit_sr(burst)
     fsconf = {}
     if is_dragon:
@@ -707,6 +707,11 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False):
             fsconf[key] = {"charge": fr(charge), "startup": startup, "recovery": recovery}
             fsconf[key] = hitattr_adj(burst, startup, fsconf[key], hitattr_pattern, skip_nohitattr=False)
             fsconf[key]["interrupt"], fsconf[key]["cancel"] = convert_following_actions(startup, followed_by, ("s",))
+    if charge_loop is not None:
+        # startup, recovery, followed_by = hit_sr(charge_loop)
+        # if charge_conf := hitattr_adj(charge_loop, startup, {"startup": startup, "recovery": recovery}):
+        if charge_loop_attr := convert_all_hitattr(charge_loop):
+            fsconf[key]["attr_hold"] = charge_loop_attr
     if not is_dragon and cancel is not None:
         fsconf["fsf"] = {
             "charge": fr(0.1 + cancel["_Parts"][0]["_duration"]),

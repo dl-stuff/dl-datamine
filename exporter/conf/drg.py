@@ -107,7 +107,7 @@ class DrgConf(DragonData, SkillProcessHelper):
             self.action_ids[res[key]["_Id"]] = act
 
         if burst := res.get("_BurstAttack"):
-            conf.update(convert_fs(burst, burst.get("_BurstMarkerId"), is_dragon=True))
+            conf.update(convert_fs(burst, burst.get("_BurstMarkerId"), is_dragon=True, charge_loop=self.index["PlayerAction"].get(burst["_Id"] + 2)))
             self.action_ids[burst["_Id"]] = "dfs"
 
         if "dodgeb" in conf:
