@@ -711,6 +711,8 @@ def convert_fs(burst, marker=None, cancel=None, is_dragon=False, charge_loop=Non
         # startup, recovery, followed_by = hit_sr(charge_loop)
         # if charge_conf := hitattr_adj(charge_loop, startup, {"startup": startup, "recovery": recovery}):
         if charge_loop_attr := convert_all_hitattr(charge_loop):
+            for attr in charge_loop_attr:
+                attr["ifhc"] = 1
             fsconf[key]["attr_hold"] = charge_loop_attr
     if not is_dragon and cancel is not None:
         fsconf["fsf"] = {
