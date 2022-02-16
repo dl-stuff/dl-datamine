@@ -312,6 +312,8 @@ ACTION_PART = DBTableMetadata(
         "_burstAttackActionId": DBTableMetadata.INT,
         # SERVANT
         "_servantActionCommandId": DBTableMetadata.INT,
+        # REBORN
+        "_withSpCharge": DBTableMetadata.INT,
     },
 )
 
@@ -353,6 +355,7 @@ PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 PROCESSORS[CommandType.STOCK_BULLET_SHIKIGAMI] = build_bullet
 PROCESSORS[CommandType.CHARACTER_COMMAND] = build_control_data
 PROCESSORS[CommandType.STOCK_BULLET_NEVOPTION] = build_bullet
+PROCESSORS[CommandType.REBORN] = build_db_data
 
 
 def log_schema_keys(schema_map, data, command_type):
