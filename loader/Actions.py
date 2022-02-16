@@ -315,6 +315,8 @@ ACTION_PART = DBTableMetadata(
         "_servantActionCommandId": DBTableMetadata.INT,
         # REMOVE_BUFF_TRIGGER_BOMB
         "_targetActionConditionId": DBTableMetadata.INT,
+        # REBORN
+        "_withSpCharge": DBTableMetadata.INT,
     },
 )
 
@@ -356,6 +358,7 @@ PROCESSORS[CommandType.BUTTERFLY_BULLET] = build_bullet
 PROCESSORS[CommandType.STOCK_BULLET_SHIKIGAMI] = build_bullet
 PROCESSORS[CommandType.CHARACTER_COMMAND] = build_control_data
 PROCESSORS[CommandType.STOCK_BULLET_NEVOPTION] = build_bullet
+PROCESSORS[CommandType.REBORN] = build_db_data
 
 
 def log_schema_keys(schema_map, data, command_type):
