@@ -1082,6 +1082,8 @@ class AbilityConf(AbilityData):
             upval = res[f"_AbilityType{i}UpValue"]
         except KeyError:
             upval = res[f"_AbilityType{i}UpValue0"]
+        if not upval:
+            raise ValueError("No up value")
         if div > 1 or div < 0:
             return upval / div
         return upval
@@ -1286,7 +1288,7 @@ class AbilityConf(AbilityData):
         return ["actcond", str(int(res["_ConditionValue2"])), "=", int(res["_ConditionValue"])]
 
     def ac_CHARGE_LOOP_REACTION_TIME(self, res):
-        return ["fs_hold", "cd", "fs_charged"]
+        return ["fs_hold", "cd", "fs"]
 
     def ac_AVOID(self, res):
         return ["event", "dodge"]
@@ -1332,10 +1334,10 @@ class AbilityConf(AbilityData):
         return ["mult", "hits", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
 
     def ac_DUP_BUFF_ALWAYS_TIMESRATE(self, res):
-        return ["mult", "actcond", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
+        return ["mult", "dupbuff", int(res["_ConditionValue"]), int(res["_ConditionValue2"])]
 
     def ac_BUFFED_SPECIFIC_ID_COUNT_MORE_ALWAYS_CHECK(self, res):
-        return ["actcond", int(res["_ConditionValue2"]), ">=", int(res["_ConditionValue"])]
+        return ["actcond", str(int(res["_ConditionValue2"])), ">=", int(res["_ConditionValue"])]
 
     def ac_GET_BUFF_FROM_SKILL(self, res):
         return ["event", "buffed"]
