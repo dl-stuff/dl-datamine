@@ -33,7 +33,7 @@ from exporter.Adventurers import CharaData, CharaUniqueCombo
 from exporter.Dragons import DragonData
 from exporter.Weapons import WeaponType, WeaponBody
 from exporter.Wyrmprints import AbilityCrest, UnionAbility
-from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES
+from exporter.Mappings import WEAPON_TYPES, ELEMENTS, TRIBE_TYPES, AFFLICTION_TYPES, CLASS_TYPES
 
 ONCE_PER_ACT = ("sp", "dp", "utp", "buff", "afflic", "bleed", "extra", "dispel")
 DODGE_ACTIONS = {6, 7, 40, 900710, 900711}
@@ -1550,6 +1550,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 "hp": res["_MaxHp"],
                 "ele": ELEMENTS[res["_ElementalType"]].lower(),
                 "wt": WEAPON_TYPES[res["_WeaponType"]].lower(),
+                "ct": CLASS_TYPES[res["_CharaType"]].lower(),
                 "spiral": spiral,
                 "a": converted,
                 # 'skipped': skipped
