@@ -130,10 +130,10 @@ class AbilityCondition(ShortEnum):
     ON_REVIVE = 125
     ON_IN_BURST_GUARD_COUNTER = 126
     QUEST_START_AND_CHANGE_EQUIPMENT = 127
-    HITCOUNT_TIMESRATE = 128
-    TOTAL_HITCOUNT_LESS_MOMENT = 129
-    TOTAL_HITCOUNT_MORE_MOMENT = 130
-    LETHAL_DAMAGED = 131
+    LETHAL_DAMAGED = 128
+    HITCOUNT_TIMESRATE = 129
+    TOTAL_HITCOUNT_LESS_MOMENT = 130
+    TOTAL_HITCOUNT_MORE_MOMENT = 131
     ON_CHARASTATE_ENTER_EXIT = 132
     DAMAGED_WITHOUT_MYSELF_BEFORE_DAMAGE_REACTION = 133
 
@@ -158,6 +158,7 @@ class AbilityStat(ShortEnum):
     DamageCutB = 16
     MoveSpeedRateB = 17
     NeedDpRate = 18
+    MoveSpeedRateC = 19
 
 
 class AbilityTargetAction(ShortEnum):
@@ -276,9 +277,19 @@ class AbilityType(ShortEnum):
     Guts = 95
     SendSignal = 96
     RemoveSignal = 97
-    Reserve_098 = 98
+    StatusUpBaseOnCharaType = 98
     Reserve_099 = 99
-    Reserve_100 = 100
+    DpGaugeCap2 = 100
+    DpChargeMyParty2 = 101
+    Reserved_102 = 102
+    Reserved_103 = 103
+    Reserved_104 = 104
+    Reserved_105 = 105
+    Reserved_106 = 106
+    Reserved_107 = 107
+    Reserved_108 = 108
+    Reserved_109 = 109
+    Reserved_110 = 110
 
 
 class ActionCancelType(ShortEnum):
@@ -340,7 +351,7 @@ class ActionCollisionPos(ShortEnum):
     SPECIFY_ID = 23
     AREA_ANCHOR = 24
     TARGET_P = 25
-    RESERVE_02 = 26
+    SELF_GROUND_ON_SKILL_START = 26
     RESERVE_03 = 27
     RESERVE_04 = 28
     RESERVE_05 = 29
@@ -375,6 +386,18 @@ class ActionDefDebuff(ShortEnum):
     DisableAction = 20
     AttackOrDefense = 21
     HLExclusive = 22
+    Reserve_23 = 23
+    Reserve_24 = 24
+    Reserve_25 = 25
+    Reserve_26 = 26
+    Reserve_27 = 27
+    Reserve_28 = 28
+    Reserve_29 = 29
+    Reserve_30 = 30
+    Reserve_31 = 31
+    Reserve_32 = 32
+    Unique_10350104_01 = 33
+    Unique_10950503_01 = 34
 
 
 class ActionHitExecType(ShortEnum):
@@ -432,7 +455,7 @@ class ActionSignalType(ShortEnum):
     HitCount = 35
     ActionCriticalStatus = 36
     RecoveryOnDamage = 37
-    RESERVE_04 = 38
+    HideTransformEffect = 38
     RESERVE_05 = 39
     RESERVE_06 = 40
     RESERVE_07 = 41
@@ -528,7 +551,7 @@ class CharacterControl(ShortEnum):
     NevOptionRemoteSync = 51
     RESERVE_33 = 52
     CancelTransform = 53
-    RESERVE_35 = 54
+    DeleteSettingHitOfSelf = 54
     RESERVE_36 = 55
     RESERVE_37 = 56
     RESERVE_38 = 57
@@ -788,6 +811,9 @@ class EnemyAbilityType(ShortEnum):
     PHOENIX = 53
     POWER_CRYSTAL = 54
     DEVIL_FIELD = 55
+    ELEMENTAL_TRAP = 56
+    METEOR_STRIKE = 57
+    TENTACLE_LIFE = 58
 
 
 class FirePositionPattern(ShortEnum):
@@ -895,7 +921,7 @@ class PartConditionType(ShortEnum):
     AuraLevel = 16
     AllyHpRateLowest = 17
     CharaMode = 18
-    RESERVE_05 = 19
+    AxisPosition = 19
     RESERVE_06 = 20
     RESERVE_07 = 21
     RESERVE_08 = 22

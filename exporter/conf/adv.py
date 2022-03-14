@@ -9,7 +9,7 @@ from loader.Enums import AbilityStat, AbilityTargetAction
 from exporter.Weapons import WeaponType
 from exporter.Adventurers import CharaData
 from exporter.Shared import snakey
-from exporter.Mappings import ELEMENTS, WEAPON_TYPES
+from exporter.Mappings import ELEMENTS, WEAPON_TYPES, CLASS_TYPES
 
 from exporter.conf.common import ActCondConf, SDat, SkillProcessHelper, AbilityConf, convert_fs, convert_x, convert_misc, convert_all_hitattr, fr, fmt_conf, remap_stuff
 
@@ -183,6 +183,7 @@ class AdvConf(CharaData, SkillProcessHelper):
                 "hp": res["_MaxHp"],
                 "ele": ELEMENTS[res["_ElementalType"]].lower(),
                 "wt": WEAPON_TYPES[res["_WeaponType"]].lower(),
+                "ct": CLASS_TYPES[res["_CharaType"]].lower(),
                 "spiral": spiral,
             }
         }
