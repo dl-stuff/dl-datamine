@@ -2351,6 +2351,7 @@ SPECIAL_AB = {
     2369: ["cdu", 0.21],
     1776: ["corrosion", 3],
     400000858: ["poised_shadowblight-killer_passive", 0.08],
+    400001066: ["dpamp", 3, 10.0]
 }
 
 
