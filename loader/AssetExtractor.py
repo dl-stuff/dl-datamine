@@ -21,6 +21,7 @@ from PIL import Image, ImageDraw
 from UnityPy import Environment
 
 from UnityPy.export.SpriteHelper import get_triangles, SpritePackingRotation, SpritePackingMode
+from UnityPy.enums.ClassIDType import ClassIDType
 
 MANIFESTS = {
     "jp": "manifest/assetbundle.manifest.json",
@@ -207,7 +208,7 @@ def unpack_TypeTree(obj, dest, ex_paths, obj_by_pathid, name=None):
     data = obj.read()
     result = data.type_tree.to_dict()
     try:
-        name = str(obj.type) + "." + data.name.replace("/", "_")
+        name = obj.type.name + "." + data.name.replace("/", "_")
     except AttributeError:
         print(result)
         pass
@@ -219,7 +220,10 @@ def unpack_MonoBehaviour(obj, dest, ex_paths, obj_by_pathid, name=None, process=
     data = obj.read()
     if data.path_id in ex_paths:
         return
-    name = name or data.name or data.m_Script.get_obj().read().name
+    try:
+        name = name or data.name or data.m_Script.get_obj().read().name
+    except AttributeError:
+        return
     result = data.type_tree.to_dict()
     if process:
         result = process_json(result)
@@ -249,7 +253,7 @@ def unpack_GameObject(obj, dest, ex_paths, obj_by_pathid):
     data = obj.read()
     component_monos = []
     for component in data.m_Components:
-        if component.type == "MonoBehaviour":
+        if component.type == ClassIDType.MonoBehaviour:
             mono_data = component.read()
             mono_json_data = mono_data.type_tree.to_dict().get("_data")
             if not mono_json_data:
@@ -293,7 +297,7 @@ def unpack_Animation(obj, dest, ex_paths, obj_by_pathid):
     data = obj.read()
     if data.path_id in ex_paths:
         return
-    obj_type_str = str(obj.type)
+    obj_type_str = obj.type.name
     # ref = None
     # if obj.container is not None:
     #     ref = find_ref(obj.container)
@@ -402,7 +406,7 @@ def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
             img_name = res.group(1)
             found_ycbcr = {res.group(2): data}
             for other_pathid, other_obj in obj.assets_file.objects.items():
-                if other_pathid in ex_paths or str(other_obj.type) != "Texture2D":
+                if other_pathid in ex_paths or other_obj.type != ClassIDType.Texture2D:
                     continue
                 other_data = other_obj.read()
                 if (res := YCBCR_PATTERN.match(other_data.name)) and res.group(1) == img_name and res.group(2) not in found_ycbcr:
@@ -419,7 +423,7 @@ def unpack_Texture2D(obj, dest, ex_paths, obj_by_pathid):
                 if other_container == obj.container:
                     continue
                 other_obj = other_ptr.get_obj()
-                if str(other_obj.type) != "Texture2D":
+                if other_obj.type != ClassIDType.Texture2D:
                     continue
                 other_data = other_obj.read()
                 if data.name in other_data.name:
@@ -483,30 +487,30 @@ def unpack_Sprite(obj, dest, ex_paths, obj_by_pathid):
     obj_by_pathid[data.path_id] = data.name
 
 
-IMAGE_TYPES = ("Texture2D", "Material", "Sprite", "AssetBundle")
+IMAGE_TYPES = (ClassIDType.Texture2D, ClassIDType.Material, ClassIDType.Sprite, ClassIDType.AssetBundle)
 UNPACK_PRIORITY = {
-    "GameObject": 10,
-    "Material": 9,
-    # "AssetBundle": 8,
+    ClassIDType.GameObject: 10,
+    ClassIDType.Material: 9,
+    # ClassIDType.AssetBundle: 8,
 }
 
 
 def get_unpack_priority(obj):
-    return UNPACK_PRIORITY.get(str(obj.type), 0)
+    return UNPACK_PRIORITY.get(obj.type, 0)
 
 
 UNPACK = {
-    "MonoBehaviour": unpack_MonoBehaviour,
-    "GameObject": unpack_GameObject,
-    "TextAsset": unpack_TextAsset,
-    "AnimationClip": unpack_Animation,
-    "AnimatorController": unpack_Animation,
-    "AnimatorOverrideController": unpack_Animation,
-    "Texture2D": unpack_Texture2D,
-    "Sprite": unpack_Sprite,
-    "Material": unpack_Material,
-    # "AssetBundle": unpack_TypeTree,
-    # "MonoScript": unpack_TypeTree,
+    ClassIDType.MonoBehaviour: unpack_MonoBehaviour,
+    ClassIDType.GameObject: unpack_GameObject,
+    ClassIDType.TextAsset: unpack_TextAsset,
+    ClassIDType.AnimationClip: unpack_Animation,
+    ClassIDType.AnimatorController: unpack_Animation,
+    ClassIDType.AnimatorOverrideController: unpack_Animation,
+    ClassIDType.Texture2D: unpack_Texture2D,
+    ClassIDType.Sprite: unpack_Sprite,
+    ClassIDType.Material: unpack_Material,
+    # ClassIDType.AssetBundle: unpack_TypeTree,
+    # ClassIDType.MonoScript: unpack_TypeTree,
 }
 
 
@@ -520,7 +524,7 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
     for asset in unity_env.assets:
         for obj in asset.get_objects():
             # print(obj.type, obj.read().name, obj.read().path_id)
-            if UNPACK.get(str(obj.type)):
+            if UNPACK.get(obj.type):
                 obj_by_pathid[obj.read().path_id] = obj
             # else:
             #     print(obj.type, obj.read().name, obj.read().path_id)
@@ -531,7 +535,7 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
     for obj in sorted(obj_by_pathid.values(), key=get_unpack_priority, reverse=True):
         if (dest := img_dest if obj.type in IMAGE_TYPES else ex_dest) is None:
             continue
-        method = UNPACK[str(obj.type)]
+        method = UNPACK[obj.type]
         check_target_path(dest, is_dir=True)
         method(obj, dest, ex_paths, obj_by_pathid)
         if print_counter == 0:
@@ -670,7 +674,10 @@ class Extractor:
 def cmd_line_extract():
     EX_PATTERNS = {
         "jp": {
-            r"^emotion/story/chara/110334_02": None,
+            r"^characters/motion": "motion",
+            r"characters/motion/animationclips$": "motion",
+            r"^dragon/motion": "motion",
+            r"^assets/_gluonresources/meshes/dragon": "motion",
         },
     }
 
@@ -691,9 +698,9 @@ def cmd_line_extract():
             ex = Extractor()
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
-        # ex_dir="./_ex_sim",
-        ex = Extractor(ex_dir=None, overwrite=False)
-        ex.ex_dir = ex.ex_img_dir
+        ex_dir = "./_ex_sim"
+        ex = Extractor(ex_dir=ex_dir, overwrite=False)
+        # ex.ex_dir = ex.ex_img_dir
         ex.download_and_extract_by_pattern(EX_PATTERNS)
 
 
