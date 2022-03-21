@@ -202,7 +202,8 @@ def get_data(**kwargs):
     data = []
     while offset % MAX == 0:
         url = get_api_request(offset, **kwargs)
-        gcontext = ssl.SSLContext()  # Only for gangstars
+        # gcontext = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)  # Only for gangstars
+        gcontext = ssl.create_default_context()
         response = urllib.request.urlopen(url, context=gcontext)
         # response = urllib.request.urlopen(url)
         if response.code != 200:
