@@ -2,7 +2,6 @@ import json
 import os
 import errno
 import sys
-from time import monotonic
 from pprint import pprint
 import shutil
 
@@ -12,9 +11,7 @@ import multiprocessing
 import re
 
 # from tqdm import tqdm
-from queue import SimpleQueue
 from collections import defaultdict
-from itertools import chain
 from functools import partial
 
 from PIL import Image, ImageDraw
@@ -516,8 +513,7 @@ UNPACK = {
 
 ### multiprocessing ###
 def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
-    unity_env = Environment()
-    unity_env.load_files(dl_filelist)
+    unity_env = Environment(*[os.path.abspath(f) for f in dl_filelist])
     ex_paths = set()
 
     obj_by_pathid = {}
@@ -698,8 +694,8 @@ def cmd_line_extract():
             ex = Extractor()
             ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
     else:
-        ex_dir = "./_ex_sim"
-        ex = Extractor(ex_dir=ex_dir, overwrite=False)
+        # ex_dir = "./_ex_sim"
+        ex = Extractor(ex_dir=None, overwrite=False)
         # ex.ex_dir = ex.ex_img_dir
         ex.download_and_extract_by_pattern(EX_PATTERNS)
 
