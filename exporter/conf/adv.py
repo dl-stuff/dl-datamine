@@ -399,7 +399,10 @@ class AdvConf(CharaData, SkillProcessHelper):
                 ss_conf["mod_buff"] = modifiers["_BuffDebuffOffset"]
         if res.get("_EditSkillCost", 0) > 0 and (edit := res.get("_EditSkillId")):
             sdat = self.all_chara_skills[edit]
-            ss_conf["src"] = sdat.base
+            if sdat.alias and ("s99", None) in sdat.alias:
+                ss_conf["src"] = "s99"
+            else:
+                ss_conf["src"] = sdat.base
             ss_conf["cost"] = res["_EditSkillCost"]
             if res["_MaxLimitBreakCount"] >= 5:
                 sp_lv = 4

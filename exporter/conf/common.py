@@ -797,16 +797,27 @@ def remap_stuff(conf, action_ids, servant_attrs=None, parent_key=None, fullconf=
 
 
 class SDat:
-    def __init__(self, sid, base, group, skill=None, from_sid=None) -> None:
+    def __init__(self, sid, base, group, skill=None, from_sid=None, alias=None) -> None:
         self.sid = sid
         self.base = base
         self.group = group
-        if self.group is None:
-            self.name = self.base
-        else:
-            self.name = f"{self.base}_{self.group}"
+        self.name = self._get_name()
         self.skill = skill
         self.from_sid = from_sid
+        self.alias = alias or tuple()
+
+    def _get_name(self):
+        if self.group is None:
+            return self.base
+        else:
+            return f"{self.base}_{self.group}"
+
+    def apply_alias(self, base, group):
+        new_sdat = copy.copy(self)
+        new_sdat.base = base
+        new_sdat.group = group
+        new_sdat.name = new_sdat._get_name()
+        return new_sdat
 
 
 class SkillProcessHelper:
@@ -974,9 +985,7 @@ class SkillProcessHelper:
                 self.action_ids[actdata["_Id"]] = act
 
     def process_skill(self, res, conf, mlvl):
-        # exceptions exist
-        while self.chara_skills:
-            sdat = next(iter(self.chara_skills.values()))
+        def _process_sdat(sdat):
             if sdat.base == "s99":
                 lv = mlvl.get(f's{res["_EditSkillLevelNum"]}')
             else:
@@ -984,8 +993,15 @@ class SkillProcessHelper:
             cskill, action = self.convert_skill(sdat, lv)
             conf[sdat.name] = cskill
             self.action_ids[action.get("_Id")] = sdat.name
-            self.all_chara_skills[sdat.sid] = sdat
-            del self.chara_skills[sdat.sid]
+
+        while self.chara_skills:
+            csdat = next(iter(self.chara_skills.values()))
+            _process_sdat(csdat)
+            for alt_base, alt_group in csdat.alias:
+                _process_sdat(csdat.apply_alias(alt_base, alt_group))
+
+            self.all_chara_skills[csdat.sid] = csdat
+            del self.chara_skills[csdat.sid]
 
         for efs, eba in self.enhanced_fs.values():
             for fs, fsc in convert_fs(eba, eba.get("_BurstMarkerId")).items():
@@ -1516,7 +1532,17 @@ class AbilityConf(AbilityData):
                         sdat = self.meta.chara_skills[skill_id]
                     except KeyError:
                         sdat = self.meta.all_chara_skills[skill_id]
-                    ekey = sdat.group or "default"
+                    if sdat.base == "s99":
+                        # case where enhanced skill is also the shared skill
+                        ekey = self.meta.get_enhanced_key(sn)
+                        self.meta.chara_skills[skill_id] = SDat(
+                            skill_id,
+                            sn,
+                            ekey,
+                            alias=((sdat.base, sdat.group), *sdat.alias),
+                        )
+                    else:
+                        ekey = sdat.group or "default"
             if ekey is None:
                 return None
             return ["altskill", ekey]
