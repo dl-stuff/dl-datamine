@@ -136,6 +136,10 @@ class AbilityCondition(ShortEnum):
     TOTAL_HITCOUNT_MORE_MOMENT = 131
     ON_CHARASTATE_ENTER_EXIT = 132
     DAMAGED_WITHOUT_MYSELF_BEFORE_DAMAGE_REACTION = 133
+    ON_DEAD = 134
+    GUTS_MOMENT = 135
+    ON_HIT_TRAP = 136
+    ON_HIT_TRAP_COOLTIME = 137
 
 
 class AbilityStat(ShortEnum):
@@ -278,7 +282,7 @@ class AbilityType(ShortEnum):
     SendSignal = 96
     RemoveSignal = 97
     StatusUpBaseOnCharaType = 98
-    Reserve_099 = 99
+    ChangeStateOtherPartyMembers = 99
     DpGaugeCap2 = 100
     DpChargeMyParty2 = 101
     Reserved_102 = 102
@@ -549,14 +553,14 @@ class CharacterControl(ShortEnum):
     SetFollowerTargetToPlayerTarget = 49
     CPCommand = 50
     NevOptionRemoteSync = 51
-    RESERVE_33 = 52
+    DisplayEnemyAbilityIconForZako = 52
     CancelTransform = 53
     DeleteSettingHitOfSelf = 54
     RESERVE_36 = 55
     RESERVE_37 = 56
     RESERVE_38 = 57
     RESERVE_39 = 58
-    RESERVE_40 = 59
+    AreaChange = 59
     RESERVE_41 = 60
     RESERVE_42 = 61
     RESERVE_43 = 62
@@ -741,7 +745,7 @@ class CommandType(ShortEnum):
     RESERVE_87 = 168
     RESERVE_88 = 169
     RESERVE_89 = 170
-    RESERVE_90 = 171
+    SETUP_X3RD_SUB = 171
     RESERVE_91 = 172
     RESERVE_92 = 173
     RESERVE_93 = 174
@@ -751,7 +755,17 @@ class CommandType(ShortEnum):
     RESERVE_97 = 178
     RESERVE_98 = 179
     RESERVE_99 = 180
-    RESERVE_100 = 181
+    ELEMENTAL_TRAP = 181
+    RESERVE_101 = 182
+    RESERVE_102 = 183
+    RESERVE_103 = 184
+    RESERVE_104 = 185
+    RESERVE_105 = 186
+    RESERVE_106 = 187
+    RESERVE_107 = 188
+    RESERVE_108 = 189
+    RESERVE_109 = 190
+    RESERVE_110 = 191
 
 
 class EnemyAbilityType(ShortEnum):
