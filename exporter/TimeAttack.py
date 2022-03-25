@@ -1,6 +1,8 @@
+from pprint import pprint
 from PIL import Image
 import os
 import json
+import glob
 import urllib.request
 from tqdm import tqdm
 from collections import defaultdict
@@ -20,7 +22,9 @@ ICON_PATTERNS = {
 }
 QUERY_CHARA_NAME = "SELECT _Name, _SecondName FROM View_CharaData WHERE _BaseId=? AND _VariationId=?"
 QUERY_DRAGON_NAME = "SELECT _Name, _SecondName FROM View_DragonData WHERE _BaseId=? AND _VariationId=?"
-QUERY_AMULET_NAME = "SELECT View_AbilityData._Name, AbilityCrest._CrestSlotType, View_AbilityData._AbilityType1UpValue FROM AbilityCrest INNER JOIN View_AbilityData ON AbilityCrest._Abilities13=View_AbilityData._Id WHERE AbilityCrest._BaseId=?"
+# QUERY_AMULET_NAME = "SELECT View_AbilityData._Name, AbilityCrest._CrestSlotType, View_AbilityData._AbilityType1UpValue FROM AbilityCrest INNER JOIN View_AbilityData ON AbilityCrest._Abilities13=View_AbilityData._Id WHERE AbilityCrest._BaseId=?"
+QUERY_AMULET_NAME = "SELECT _Name FROM View_AbilityCrest WHERE View_AbilityCrest._BaseId=?"
+
 
 # some magical knowledge
 FORM_TO_VALUE = {
@@ -66,14 +70,14 @@ def query_name_from_icon(img_url, category, query, dbm, seen_icons):
         if not query_res:
             raise RuntimeError(f"{base_id} not found in {category}")
         name = query_res["_Name"]
-        try:
-            if query_res["_AbilityType1UpValue"]:
-                name = name.format(ability_val0=int(query_res["_AbilityType1UpValue"]))
-            else:
-                name = name.format(ability_val0=FORM_TO_VALUE[name][query_res["_CrestSlotType"]])
-        except KeyError:
-            pass
-        name = name.replace(" {ability_shift0}", "")
+        # try:
+        #     if query_res["_AbilityType1UpValue"]:
+        #         name = name.format(ability_val0=int(query_res["_AbilityType1UpValue"]))
+        #     else:
+        #         name = name.format(ability_val0=FORM_TO_VALUE[name][query_res["_CrestSlotType"]])
+        # except KeyError:
+        #     pass
+        # name = name.replace(" {ability_shift0}", "")
     else:
         base_id = parts[0]
         var_id = parts[1]
@@ -81,29 +85,36 @@ def query_name_from_icon(img_url, category, query, dbm, seen_icons):
         if not query_res:
             raise RuntimeError(f"{base_id, var_id} not found in {category}")
         name = query_res["_SecondName"] or query_res["_Name"]
-    seen_icons[img_url] = name
-    return name
+    seen_icons[img_url] = (name, icon_name)
+    return (name, icon_name)
 
 
 def convert_player_slots(player_slots, dbm, seen_icons):
     chara_img = player_slots["chara_img"]
     try:
-        player_slots["chara_name"] = seen_icons[chara_img]
+        chara_name, chara_id = seen_icons[chara_img]
     except KeyError:
-        player_slots["chara_name"] = query_name_from_icon(chara_img, "chara", QUERY_CHARA_NAME, dbm, seen_icons)
+        chara_name, chara_id = query_name_from_icon(chara_img, "chara", QUERY_CHARA_NAME, dbm, seen_icons)
+
+    player_slots["chara_name"] = chara_name
+    player_slots["chara_id"] = chara_id
 
     dragon_img = player_slots["dragon_img"]
     try:
-        player_slots["dragon_name"] = seen_icons[dragon_img]
+        dragon_name, dragon_id = seen_icons[dragon_img]
     except KeyError:
-        player_slots["dragon_name"] = query_name_from_icon(dragon_img, "dragon", QUERY_DRAGON_NAME, dbm, seen_icons)
+        dragon_name, dragon_id = query_name_from_icon(dragon_img, "dragon", QUERY_DRAGON_NAME, dbm, seen_icons)
+    player_slots["dragon_name"] = dragon_name
+    player_slots["dragon_id"] = dragon_id
 
     for amulet_slot in player_slots["amulet"]:
         amulet_img = amulet_slot["img"]
         try:
-            amulet_slot["name"] = seen_icons[amulet_img]
+            amulet_name, amulet_id = seen_icons[amulet_img]
         except KeyError:
-            amulet_slot["name"] = query_name_from_icon(amulet_img, "amulet", QUERY_AMULET_NAME, dbm, seen_icons)
+            amulet_name, amulet_id = query_name_from_icon(amulet_img, "amulet", QUERY_AMULET_NAME, dbm, seen_icons)
+        amulet_slot["name"] = amulet_name
+        amulet_slot["id"] = amulet_id
 
 
 def get_timeattack_data(quest_id):
@@ -124,9 +135,9 @@ def get_timeattack_data(quest_id):
     if os.path.isfile(iconmap_outfile):
         with open(iconmap_outfile, "r") as fn:
             seen_icons = json.load(fn)
-        seen_icons.update({"": "Empty", None: "Empty"})
+        seen_icons.update({"": ("Empty", None), None: ("Empty", None)})
     else:
-        seen_icons = {"": "Empty", None: "Empty"}
+        seen_icons = {"": ("Empty", None), None: ("Empty", None)}
     for entry in tqdm(data["ranking"]["ranking_data"], desc="icon to names"):
         for player_slots in entry["player_list"]:
             convert_player_slots(player_slots, dbm, seen_icons)
@@ -203,7 +214,7 @@ def weighted_usage_as_csv(quest_id, timestamp):
 
 
 def get_timeattack_index():
-    response = urllib.request.urlopen(TIMEATTACK_URL.format(quest_id=quest_id))
+    response = urllib.request.urlopen(TIMEATTACK_INDEX)
     if response.code != 200:
         return
     res_json = json.load(response)
@@ -211,7 +222,7 @@ def get_timeattack_index():
     for entry in res_json["data"]["index_list"].values():
         for tab in entry.values():
             all_quest_ids[tab["quest_id"]] = tab["title"]
-            print(tab["quest_id"], tab["title"])
+            # print(tab["quest_id"], tab["title"])
     return all_quest_ids
 
 
@@ -239,12 +250,21 @@ def test_image_diff():
 # 227040106 Co-op Ciella
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    prepare_icons()
-    # get_timeattack_index()
-    # exit()
-    for quest_id in (227040105, 227040106):
+    # prepare_icons()
+    get_timeattack_index()
+    for quest_id in get_timeattack_index():
         timestamp = get_timeattack_data(quest_id)
         # timestamp = 1619683200
-        weighted_usage_data(quest_id, timestamp)
-        weighted_usage_data(quest_id, timestamp, weigh_by_rank=False)
-        weighted_usage_as_csv(quest_id, timestamp)
+        # weighted_usage_data(quest_id, timestamp)
+        # weighted_usage_data(quest_id, timestamp, weigh_by_rank=False)
+        # weighted_usage_as_csv(quest_id, timestamp)
+
+    # for filename in glob.glob(os.path.join(OUTPUT_DIR, "iconmap_*.json")):
+    #     print(filename)
+    #     with open(filename, "r") as fn:
+    #         icons = json.load(fn)
+    #     reversed = defaultdict(set)
+    #     for key, value in icons.items():
+    #         reversed[tuple(value)].add(key)
+    #     multiple = {k: v for k, v in reversed.items() if len(v) > 1}
+    #     pprint(multiple)

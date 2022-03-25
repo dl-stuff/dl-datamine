@@ -1,9 +1,11 @@
+import itertools
 import json
 import os
 import errno
 import sys
 from pprint import pprint
 import shutil
+import subprocess
 
 import urllib.request
 import multiprocessing
@@ -32,6 +34,13 @@ IMG_ARGS = {
     ".png": {"optimize": False},
     ".webp": {"lossless": True, "quality": 0},
 }
+
+
+try:
+    with open("cri_keys.json") as fn:
+        CRI_KEYS = json.load(fn)
+except FileNotFoundError:
+    CRI_KEYS = None
 
 
 def save_img(img, dest):
@@ -116,11 +125,18 @@ class ParsedManifest(dict):
         self.path = manifest
         with open(manifest) as f:
             tree = json.load(f)
+        self.assets = {}
+        self["assets"] = self.assets
         for category in tree["categories"]:
             for asset in category["assets"]:
-                self[asset["name"]] = AssetEntry(asset)
+                self.assets[asset["name"]] = AssetEntry(asset)
+        self.raw_assets = {}
+        self["raw_assets"] = self.raw_assets
         for asset in tree["rawAssets"]:
-            self[asset["name"]] = AssetEntry(asset, raw=True)
+            self.raw_assets[asset["name"]] = AssetEntry(asset, raw=True)
+
+    def asset_items(self):
+        return itertools.chain(self.assets.items(), self.raw_assets.items())
 
     @staticmethod
     def flatten(targets):
@@ -129,11 +145,11 @@ class ParsedManifest(dict):
     def get_by_pattern(self, pattern):
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
-        targets = filter(lambda x: pattern.search(x[0]), self.items())
+        targets = filter(lambda x: pattern.search(x[0]), self.asset_items())
         return ParsedManifest.flatten(targets)
 
     def get_by_diff(self, other):
-        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.items())
+        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.asset_items())
         return ParsedManifest.flatten(targets)
 
     def get_by_pattern_diff(self, pattern, other):
@@ -141,7 +157,7 @@ class ParsedManifest(dict):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(
             lambda x: pattern.search(x[0]) and (x[0] not in other.keys() or x[1] != other[x[0]]),
-            self.items(),
+            self.asset_items(),
         )
         return ParsedManifest.flatten(targets)
 
@@ -149,7 +165,7 @@ class ParsedManifest(dict):
         added_keys = set()
         changed_keys = set()
         removed_keys = set()
-        for key, value in self.items():
+        for key, value in self.asset_items():
             if key not in other:
                 added_keys.add(key)
             elif value != other[key]:
@@ -568,8 +584,40 @@ def mp_download(target, source, extract, region, dl_dir, overwrite):
 ### multiprocessing ###
 
 
+def deretore_acb(source, ex_target, dl_target):
+    # https://github.com/OpenCGSS/DereTore
+    if not CRI_KEYS:
+        return False
+    cmds = []
+    if sys.platform != "win32":
+        # needs wine-mono
+        cmds.append("wine")
+    cmds.extend(("deretore/acb2wavs.exe", "-b", CRI_KEYS["b"], "-a", CRI_KEYS["a"]))
+    cmds.append(dl_target)
+    try:
+        subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError:
+        return False
+    check_target_path(ex_target, is_dir=True)
+    out_folder = os.path.join(os.path.dirname(dl_target), "_acb_{}".format(os.path.basename(dl_target)))
+    use_infix = len(os.listdir(out_folder)) > 1
+    for subdir in ("external", "internal"):
+        infix = subdir + "_" if use_infix else ""
+        if os.path.exists(out_sub := os.path.join(out_folder, subdir)):
+            for wav_file in os.listdir(out_sub):
+                shutil.move(
+                    os.path.join(out_sub, wav_file),
+                    os.path.join(
+                        ex_target,
+                        f"{os.path.splitext(os.path.basename(source.name))[0]}_{infix}{wav_file[4:]}",
+                    ),
+                )
+    shutil.rmtree(out_folder)
+    return True
+
+
 class Extractor:
-    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", overwrite=False):
+    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False):
         self.pm = {}
         self.pm_old = {}
         for region, manifest in MANIFESTS.items():
@@ -578,8 +626,20 @@ class Extractor:
         self.dl_dir = dl_dir
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
+        self.ex_media_dir = ex_media_dir
         self.extract_list = []
         self.overwrite = overwrite
+
+    def raw_extract(self, source, ex_target, dl_target):
+        if self.ex_media_dir:
+            ex_target = os.path.join(self.ex_media_dir, ex_target)
+            if source.name.endswith(".acb"):
+                if deretore_acb(source, ex_target, dl_target):
+                    return
+        if self.ex_dir:
+            ex_target = os.path.join(self.ex_dir, ex_target)
+            check_target_path(ex_target, is_dir=True)
+            shutil.copy(dl_target, ex_target)
 
     ### multiprocessing ###
     def pool_download_and_extract(self, download_list, region=None):
@@ -621,10 +681,7 @@ class Extractor:
         sorted_downloaded = defaultdict(list)
         for source, ex_target, dl_target in downloaded:
             if source.raw:
-                if self.ex_dir:
-                    ex_target = os.path.join(self.ex_dir, ex_target)
-                    check_target_path(ex_target, is_dir=True)
-                    shutil.copy(dl_target, ex_target)
+                self.raw_extract(source, ex_target, dl_target)
                 continue
             sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
 
