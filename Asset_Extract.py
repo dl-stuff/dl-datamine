@@ -44,7 +44,9 @@ if __name__ == "__main__":
 
     ex = Extractor(**ex_kwargs)
     # dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media"
-    if args.operation == "diff":
+    if args.operation == "apk":
+        ex.apk_assets_extract(args.patterns[0][1])
+    elif args.operation == "diff":
         if args.region:
             print(f"{args.region}: ", flush=True, end="")
             ex.download_and_extract_by_diff(region=args.region)

@@ -126,11 +126,17 @@ class AssetEntry:
 
 
 class SimpleAssetEntry:
-    def __init__(self, asset_entry):
-        self.name = asset_entry.name
-        self.hash = asset_entry.hash
-        self.url = asset_entry.url
-        self.raw = asset_entry.raw
+    def __init__(self, asset_entry=None):
+        if asset_entry:
+            self.name = asset_entry.name
+            self.hash = asset_entry.hash
+            self.url = asset_entry.url
+            self.raw = asset_entry.raw
+        else:
+            self.name = None
+            self.hash = None
+            self.url = None
+            self.raw = None
 
 
 class ParsedManifest(dict):
@@ -627,24 +633,29 @@ def deretore_acb(source, ex_target, dl_target):
         cmds.append("wine")
     cmds.extend(("bin/deretore/acb2wavs.exe", "-a", CRI_A, "-b", CRI_B))
     cmds.append(dl_target)
+    # print(" ".join(cmds))
     try:
         subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError:
         return False
-    check_target_path(ex_target, is_dir=True)
     out_folder = os.path.join(os.path.dirname(dl_target), "_acb_{}".format(os.path.basename(dl_target)))
+    # if not os.path.exists(out_folder):
+    #     return True
+    check_target_path(ex_target, is_dir=True)
     use_infix = len(os.listdir(out_folder)) > 1
-    for subdir in ("external", "internal"):
+    if use_infix:
+        use_infix = all((bool(os.listdir(subdir)) for subdir in glob.glob(out_folder + "/*")))
+    for subdir in os.listdir(out_folder):
         infix = subdir + "_" if use_infix else ""
-        if os.path.exists(out_sub := os.path.join(out_folder, subdir)):
-            for wav_file in os.listdir(out_sub):
-                shutil.move(
-                    os.path.join(out_sub, wav_file),
-                    os.path.join(
-                        ex_target,
-                        f"{os.path.splitext(os.path.basename(source.name))[0]}_{infix}{wav_file[4:]}",
-                    ),
-                )
+        out_sub = os.path.join(out_folder, subdir)
+        for wav_file in os.listdir(out_sub):
+            shutil.move(
+                os.path.join(out_sub, wav_file),
+                os.path.join(
+                    ex_target,
+                    f"{os.path.splitext(os.path.basename(source.name))[0]}_{infix}{wav_file[4:]}",
+                ),
+            )
     shutil.rmtree(out_folder)
     return True
 
@@ -661,6 +672,7 @@ def crid_mod_usm(source, ex_target, dl_target):
     audio_chno = "0"
     cmds.extend(("bin/crid_mod.exe", "-a", CRI_A, "-b", CRI_B, "-o", ex_basename, "-s", audio_chno, "-v", "-x"))
     cmds.append(dl_target)
+    # print(" ".join(cmds))
     try:
         subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError:
@@ -760,7 +772,7 @@ class Extractor:
                 sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
 
         if raw_extract_args:
-            print(f"\nRaw")
+            print("\nRaw")
             print_counter = 0
             for args in raw_extract_args:
                 self.raw_extract(*args)
@@ -821,3 +833,75 @@ class Extractor:
 
     def report_diff(self, region="jp"):
         self.pm[region].report_diff(self.pm_old[region])
+
+    def apk_assets_extract(self, asset_folder):
+        # for use with apk
+        acb_files = []
+        usm_files = []
+        # unity_files = []
+        # globalgamemanagers = []
+        # deretore_acb(source, ex_target, dl_target)
+        for root, _, files in os.walk(asset_folder):
+            for filename in files:
+                _, ext = os.path.splitext(filename)
+                source = SimpleAssetEntry()
+                source.name = filename
+                filepath = os.path.join(root, filename)
+                args = (
+                    source,
+                    os.path.join(self.ex_media_dir, root.replace(asset_folder, "").replace("/", "_")),
+                    filepath,
+                )
+                if ext in (".acb", ".awb"):
+                    acb_files.append(args)
+                elif ext in (".usm",):
+                    usm_files.append(args)
+                # elif "assets/bin/Data" in root:
+                #     if os.path.basename(filename).startswith("globalgamemanagers"):
+                #         globalgamemanagers.append(filepath)
+                #     else:
+                #         unity_files.append(filepath)
+
+        for args in acb_files:
+            deretore_acb(*args)
+
+        for args in usm_files:
+            crid_mod_usm(*args)
+
+        # print("\nExtract")
+
+        # mp_extract(self.ex_dir, self.ex_img_dir, "bin_Data", [*globalgamemanagers, *unity_files])
+
+        # ex_target = "bin_Data"
+        # bin_data_path = os.path.abspath(os.path.join(asset_folder, "bin/Data"))
+
+        # unity_env = Environment(bin_data_path)
+        # ex_paths = set()
+
+        # obj_by_pathid = {}
+        # for asset in unity_env.assets:
+        #     for obj in asset.get_objects():
+        #         # print(obj.type, obj.read().path_id)
+        #         if UNPACK.get(obj.type):
+        #             obj_by_pathid[obj.read().path_id] = obj
+        #         # else:
+        #         #     print(obj.type, obj.read().name, obj.read().path_id)
+
+        # ex_dest = None if self.ex_dir is None else os.path.join(self.ex_dir, ex_target)
+        # img_dest = None if self.ex_img_dir is None else os.path.join(self.ex_img_dir, ex_target)
+        # print_counter = 0
+        # for obj in sorted(obj_by_pathid.values(), key=get_unpack_priority, reverse=True):
+        #     if (dest := img_dest if obj.type in IMAGE_TYPES else ex_dest) is None:
+        #         continue
+        #     method = UNPACK[obj.type]
+        #     check_target_path(dest, is_dir=True)
+        #     method(obj, dest, ex_paths, obj_by_pathid)
+        #     if print_counter == 0:
+        #         print("=", end="", flush=True)
+        #         print_counter = 10
+        #     print_counter -= 1
+
+        # path_id_to_string = {pathid: sprite for pathid, sprite in obj_by_pathid.items() if isinstance(sprite, str)}
+        # if path_id_to_string:
+        #     with open(os.path.join(img_dest, "_path_id.json"), "w") as fn:
+        #         json.dump(path_id_to_string, fn, indent=2)
