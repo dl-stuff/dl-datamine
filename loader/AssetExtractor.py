@@ -3,9 +3,10 @@ import json
 import os
 import errno
 import sys
-from pprint import pprint
+import glob
 import shutil
 import subprocess
+from pprint import pprint
 
 import requests
 import multiprocessing
@@ -22,12 +23,27 @@ from UnityPy import Environment
 from UnityPy.export.SpriteHelper import get_triangles, SpritePackingRotation, SpritePackingMode
 from UnityPy.enums.ClassIDType import ClassIDType
 
-MANIFESTS = {
-    "jp": "manifest/assetbundle.manifest.json",
-    "en": "manifest/assetbundle.en_us.manifest.json",
-    "cn": "manifest/assetbundle.zh_cn.manifest.json",
-    "tw": "manifest/assetbundle.zh_tw.manifest.json",
-}
+
+def get_latest_manifests():
+    manifest_dirs = sorted(glob.glob("manifest/*/"))
+    latest = manifest_dirs[-1]
+    previous = manifest_dirs[-2]
+    return get_manifests(latest, previous)
+
+
+def get_manifests(latest, previous):
+    def lp_m_tuple(manifest_name):
+        return (os.path.join(latest, manifest_name), os.path.join(previous, manifest_name))
+
+    return {
+        "jp": lp_m_tuple("assetbundle.manifest.json"),
+        "en": lp_m_tuple("assetbundle.en_us.manifest.json"),
+        "cn": lp_m_tuple("assetbundle.zh_cn.manifest.json"),
+        "tw": lp_m_tuple("assetbundle.zh_tw.manifest.json"),
+    }
+
+
+MANIFESTS = get_latest_manifests()
 
 IMG_EXT = ".png"
 IMG_ARGS = {
@@ -559,13 +575,27 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
             json.dump(path_id_to_string, fn, indent=2)
 
 
+def mp_download_to_hash(source, dl_dir):
+    dl_target = os.path.join(dl_dir, source.hash)
+    if not os.path.exists(dl_target):
+        with requests.get(source.url, stream=True) as req:
+            if req.status_code == 200:
+                with open(dl_target, "wb") as fn:
+                    for chunk in req:
+                        fn.write(chunk)
+                print("-", end="", flush=True)
+            else:
+                print("x", end="", flush=True)
+    else:
+        print(".", end="", flush=True)
+
+
 def mp_download(target, source, extract, region, dl_dir, overwrite):
     dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
     check_target_path(dl_target)
 
     if overwrite or not os.path.exists(dl_target):
         try:
-            # urllib.request.urlretrieve(source.url, dl_target)
             with requests.get(source.url, stream=True) as req:
                 if req.status_code == 200:
                     with open(dl_target, "wb") as fn:
@@ -616,7 +646,6 @@ def deretore_acb(source, ex_target, dl_target):
                     ),
                 )
     shutil.rmtree(out_folder)
-    print("=", flush=True)
     return True
 
 
@@ -651,17 +680,17 @@ def crid_mod_usm(source, ex_target, dl_target):
         os.remove(m2v_file)
         if adx_file:
             os.remove(adx_file)
-    print("=", flush=True)
     return True
 
 
 class Extractor:
-    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False):
+    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False, manifest_override=MANIFESTS):
         self.pm = {}
         self.pm_old = {}
-        for region, manifest in MANIFESTS.items():
-            self.pm[region] = ParsedManifest(manifest)
-            self.pm_old[region] = ParsedManifest(f"{manifest}.old")
+        for region, manifests in manifest_override.items():
+            latest, previous = manifests
+            self.pm[region] = ParsedManifest(latest)
+            self.pm_old[region] = ParsedManifest(previous)
         self.dl_dir = dl_dir
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
@@ -732,8 +761,13 @@ class Extractor:
 
         if raw_extract_args:
             print(f"\nRaw")
+            print_counter = 0
             for args in raw_extract_args:
                 self.raw_extract(*args)
+                if print_counter == 0:
+                    print("=", end="", flush=True)
+                    print_counter = 10
+                print_counter -= 1
 
         if sorted_downloaded:
             pool = multiprocessing.Pool(processes=NUM_WORKERS)
@@ -745,6 +779,19 @@ class Extractor:
             pool.join()
 
         print("", flush=True)
+
+    def mirror_files(self, mirror_dir="_mirror"):
+        check_target_path(mirror_dir, is_dir=True)
+        NUM_WORKERS = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool(processes=NUM_WORKERS)
+        dl_args = []
+        for region_pm in self.pm.values():
+            for _, source in region_pm.asset_items():
+                dl_args.append((source, mirror_dir))
+        print(f"Download {len(dl_args)}", flush=True)  # tqdm(dl_args, desc="download", total=len(dl_args))
+        list(filter(None, pool.starmap(mp_download_to_hash, dl_args)))
+        pool.close()
+        pool.join()
 
     ### multiprocessing ###
 
@@ -774,40 +821,3 @@ class Extractor:
 
     def report_diff(self, region="jp"):
         self.pm[region].report_diff(self.pm_old[region])
-
-
-def cmd_line_extract():
-    EX_PATTERNS = {
-        "jp": {
-            r"^.*\.usm$": None,
-            r"^.*\.(acb|awb)$": None,
-        },
-    }
-
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "diff":
-            ex = Extractor(ex_dir=None)
-            if len(sys.argv) > 2:
-                region = sys.argv[2]
-                print(f"{region}: ", flush=True, end="")
-                ex.download_and_extract_by_diff(region=region)
-            else:
-                for region in MANIFESTS.keys():
-                    ex.download_and_extract_by_diff(region=region)
-        elif sys.argv[1] == "report":
-            ex = Extractor()
-            ex.report_diff()
-        else:
-            ex = Extractor()
-            ex.download_and_extract_by_pattern({"jp": {sys.argv[1]: None}})
-    else:
-        # ex_dir = "./_ex_sim"
-        ex = Extractor(ex_dir=None, overwrite=False)
-        # ex.ex_dir = ex.ex_img_dir
-        ex.download_and_extract_by_pattern(EX_PATTERNS)
-
-
-if __name__ == "__main__":
-    cmd_line_extract()
-    # pm = ParsedManifest(MANIFESTS["jp"])
-    # pprint(pm.get_by_pattern(r"images/icon/form/m/", mode=1))

@@ -7,20 +7,26 @@
 
 Can use the `venv.sh` script to setup.
 
-# Running
+# Loading and Parsing Data
 
-1. Manually set up the `manifest` directory to be like the following, these files can be copied from the dated directories. `*.old` files should be the manifests from 1 version earlier.
-```
-manifest/
-  assetbundle.manifest.json
-  assetbundle.manifest.json.old
-  assetbundle.en_us.manifest.json
-  assetbundle.en_us.manifest.json.old
-  assetbundle.zh_cn.manifest.json
-  assetbundle.zh_cn.manifest.json.old
-```
+Run `python Load_Database.py --do_prep`, this generates a `dl.sqlite` file.
 
-2. Run `python Load_Database.py --do_prep`, this generates a `dl.sqlite` file.
-   The `--do_prep` indicates download/extract new assets, it is optional when only db reload is desired.
+The `--do_prep` means download/extract new assets, it is optional when only db reload is desired.
  
-3. Run `python Export_Data.py`
+`python Export_Data.py` creates linked json describing various elements of the game using the database. 
+
+`./run_conf` exports sim compatible json, not all mechanics are implemented.
+
+# Asset Extraction
+
+The Asset_Extract tool downloads data from the manifest and unpack/convert supported formats.
+
+By default, the latest manifest is used.
+
+Examples:
+
+- `python Asset_Extract.py images/icon/chara/l` to download & extract all assets whose names contains "images/icon/chara/l".
+
+- `python Asset_Extract.py "\.usm$"` to download & extract all assets whose names end in ".usm$".
+
+See `python Asset_Extract.py -h` for more arguments.
