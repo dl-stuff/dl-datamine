@@ -616,6 +616,34 @@ def deretore_acb(source, ex_target, dl_target):
     return True
 
 
+def crid_mod_usm(source, ex_target, dl_target):
+    # https://mega.nz/file/TJQniYwL#Dp_D-KvzVlVgTwqzVJc1n3vslBZsHdy8pdDqzhRtsOI
+    if not CRI_KEYS:
+        return False
+    cmds = []
+    if sys.platform != "win32":
+        cmds.append("wine")
+    src_basename = os.path.splitext(os.path.basename(source.name))[0]
+    ex_basename = os.path.join(ex_target, f"{src_basename}")
+    check_target_path(ex_target, is_dir=True)
+    check_target_path(ex_basename)
+    cmds.extend(("crid_mod.exe", "-b", CRI_KEYS["b"], "-a", CRI_KEYS["a"], "-o", ex_basename, "-v", "-x"))
+    cmds.append(dl_target)
+    try:
+        subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError:
+        return False
+    m2v_file = f"{ex_basename}.m2v"
+    cmds = ["ffmpeg", "-y", "-i", m2v_file]
+    if os.path.exists(adx_file := f"{ex_basename}.adx"):
+        cmds.extend(("-i", adx_file, "-c:a", "aac"))
+    cmds.extend(("-c:v", "copy", f"{ex_basename}.mp4"))
+    try:
+        subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError:
+        return False
+
+
 class Extractor:
     def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False):
         self.pm = {}
@@ -635,6 +663,11 @@ class Extractor:
             ex_target = os.path.join(self.ex_media_dir, ex_target)
             if source.name.endswith(".acb"):
                 if deretore_acb(source, ex_target, dl_target):
+                    return
+            if source.name.endswith(".awb"):
+                return
+            if source.name.endswith(".usm"):
+                if crid_mod_usm(source, ex_target, dl_target):
                     return
         if self.ex_dir:
             ex_target = os.path.join(self.ex_dir, ex_target)
@@ -685,13 +718,15 @@ class Extractor:
                 continue
             sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
 
-        pool = multiprocessing.Pool(processes=NUM_WORKERS)
-        ex_args = [(self.ex_dir, self.ex_img_dir, ex_target, dl_targets) for ex_target, dl_targets in sorted_downloaded.items()]
-        print(f"\nExtract {tuple(sorted_downloaded.keys())}", flush=True)
-        # tqdm(ex_args, desc="extract", total=len(ex_args))
-        pool.starmap(mp_extract, ex_args)
-        pool.close()
-        pool.join()
+        if sorted_downloaded:
+            pool = multiprocessing.Pool(processes=NUM_WORKERS)
+            ex_args = [(self.ex_dir, self.ex_img_dir, ex_target, dl_targets) for ex_target, dl_targets in sorted_downloaded.items()]
+            print(f"\nExtract {tuple(sorted_downloaded.keys())}", flush=True)
+            # tqdm(ex_args, desc="extract", total=len(ex_args))
+            pool.starmap(mp_extract, ex_args)
+            pool.close()
+            pool.join()
+
         print("", flush=True)
 
     ### multiprocessing ###
