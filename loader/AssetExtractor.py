@@ -7,7 +7,7 @@ from pprint import pprint
 import shutil
 import subprocess
 
-import urllib.request
+import requests
 import multiprocessing
 
 import re
@@ -36,11 +36,9 @@ IMG_ARGS = {
 }
 
 
-try:
-    with open("cri_keys.json") as fn:
-        CRI_KEYS = json.load(fn)
-except FileNotFoundError:
-    CRI_KEYS = None
+# https://github.com/vgmstream/vgmstream/blob/master/src/meta/hca_keys.h
+CRI_A = "e7889cad"
+CRI_B = "000002b2"
 
 
 def save_img(img, dest):
@@ -567,8 +565,15 @@ def mp_download(target, source, extract, region, dl_dir, overwrite):
 
     if overwrite or not os.path.exists(dl_target):
         try:
-            urllib.request.urlretrieve(source.url, dl_target)
-            print("-", end="", flush=True)
+            # urllib.request.urlretrieve(source.url, dl_target)
+            with requests.get(source.url, stream=True) as req:
+                if req.status_code == 200:
+                    with open(dl_target, "wb") as fn:
+                        for chunk in req:
+                            fn.write(chunk)
+                    print("-", end="", flush=True)
+                else:
+                    print("x", end="", flush=True)
         except Exception as e:
             print(f"\n{e}")
             return
@@ -586,13 +591,11 @@ def mp_download(target, source, extract, region, dl_dir, overwrite):
 
 def deretore_acb(source, ex_target, dl_target):
     # https://github.com/OpenCGSS/DereTore
-    if not CRI_KEYS:
-        return False
     cmds = []
     if sys.platform != "win32":
         # needs wine-mono
         cmds.append("wine")
-    cmds.extend(("deretore/acb2wavs.exe", "-b", CRI_KEYS["b"], "-a", CRI_KEYS["a"]))
+    cmds.extend(("bin/deretore/acb2wavs.exe", "-a", CRI_A, "-b", CRI_B))
     cmds.append(dl_target)
     try:
         subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -613,13 +616,12 @@ def deretore_acb(source, ex_target, dl_target):
                     ),
                 )
     shutil.rmtree(out_folder)
+    print("=", flush=True)
     return True
 
 
 def crid_mod_usm(source, ex_target, dl_target):
     # https://mega.nz/file/TJQniYwL#Dp_D-KvzVlVgTwqzVJc1n3vslBZsHdy8pdDqzhRtsOI
-    if not CRI_KEYS:
-        return False
     cmds = []
     if sys.platform != "win32":
         cmds.append("wine")
@@ -627,7 +629,8 @@ def crid_mod_usm(source, ex_target, dl_target):
     ex_basename = os.path.join(ex_target, f"{src_basename}")
     check_target_path(ex_target, is_dir=True)
     check_target_path(ex_basename)
-    cmds.extend(("crid_mod.exe", "-b", CRI_KEYS["b"], "-a", CRI_KEYS["a"], "-o", ex_basename, "-v", "-x"))
+    audio_chno = "0"
+    cmds.extend(("bin/crid_mod.exe", "-a", CRI_A, "-b", CRI_B, "-o", ex_basename, "-s", audio_chno, "-v", "-x"))
     cmds.append(dl_target)
     try:
         subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
@@ -635,13 +638,21 @@ def crid_mod_usm(source, ex_target, dl_target):
         return False
     m2v_file = f"{ex_basename}.m2v"
     cmds = ["ffmpeg", "-y", "-i", m2v_file]
-    if os.path.exists(adx_file := f"{ex_basename}.adx"):
+    if os.path.exists(adx_file := f"{ex_basename}__{audio_chno}.adx"):
         cmds.extend(("-i", adx_file, "-c:a", "aac"))
+    else:
+        adx_file = None
     cmds.extend(("-c:v", "copy", f"{ex_basename}.mp4"))
     try:
         subprocess.call(cmds, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError:
         return False
+    finally:
+        os.remove(m2v_file)
+        if adx_file:
+            os.remove(adx_file)
+    print("=", flush=True)
+    return True
 
 
 class Extractor:
@@ -711,12 +722,18 @@ class Extractor:
         pool.close()
         pool.join()
 
+        raw_extract_args = []
         sorted_downloaded = defaultdict(list)
         for source, ex_target, dl_target in downloaded:
             if source.raw:
-                self.raw_extract(source, ex_target, dl_target)
-                continue
-            sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
+                raw_extract_args.append((source, ex_target, dl_target))
+            else:
+                sorted_downloaded[ex_target.replace("s_images", "images")].append(dl_target)
+
+        if raw_extract_args:
+            print(f"\nRaw")
+            for args in raw_extract_args:
+                self.raw_extract(*args)
 
         if sorted_downloaded:
             pool = multiprocessing.Pool(processes=NUM_WORKERS)
@@ -762,10 +779,8 @@ class Extractor:
 def cmd_line_extract():
     EX_PATTERNS = {
         "jp": {
-            r"^characters/motion": "motion",
-            r"characters/motion/animationclips$": "motion",
-            r"^dragon/motion": "motion",
-            r"^assets/_gluonresources/meshes/dragon": "motion",
+            r"^.*\.usm$": None,
+            r"^.*\.(acb|awb)$": None,
         },
     }
 
