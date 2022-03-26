@@ -7,6 +7,7 @@ import glob
 import shutil
 import subprocess
 from pprint import pprint
+from tqdm import tqdm
 
 import requests
 import multiprocessing
@@ -137,23 +138,24 @@ class SimpleAssetEntry:
             self.hash = None
             self.url = None
             self.raw = None
+        self.ver = None
 
 
 class ParsedManifest(dict):
     def __init__(self, manifest):
         super().__init__({})
+        self.assets = {}
+        self.raw_assets = {}
         self.path = manifest
         with open(manifest) as f:
-            tree = json.load(f)
-        self.assets = {}
-        self["assets"] = self.assets
-        for category in tree["categories"]:
-            for asset in category["assets"]:
-                self.assets[asset["name"]] = AssetEntry(asset)
-        self.raw_assets = {}
-        self["raw_assets"] = self.raw_assets
-        for asset in tree["rawAssets"]:
-            self.raw_assets[asset["name"]] = AssetEntry(asset, raw=True)
+            mtree = json.load(f)
+            self["assets"] = self.assets
+            for category in mtree["categories"]:
+                for asset in category["assets"]:
+                    self.assets[asset["name"]] = AssetEntry(asset)
+            self["raw_assets"] = self.raw_assets
+            for asset in mtree["rawAssets"]:
+                self.raw_assets[asset["name"]] = AssetEntry(asset, raw=True)
 
     def asset_items(self):
         return itertools.chain(self.assets.items(), self.raw_assets.items())
@@ -163,6 +165,7 @@ class ParsedManifest(dict):
         return [(k, SimpleAssetEntry(v)) for k, v in targets]
 
     def get_by_pattern(self, pattern):
+        pattern_str = str(pattern)
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(lambda x: pattern.search(x[0]), self.asset_items())
@@ -200,6 +203,27 @@ class ParsedManifest(dict):
         pprint(changed_keys)
         print("==========REMOVED==========")
         pprint(removed_keys)
+
+
+class AllParsedManifests:
+    def __init__(self, basename) -> None:
+        self.path = None
+        self.manifests = {}
+        for mpath in tqdm(sorted(glob.glob(f"manifest/*/{basename}")), desc="manifests"):
+            self.manifests[os.path.basename(os.path.dirname(mpath))] = ParsedManifest(mpath)
+
+    def get_by_pattern(self, pattern):
+        if not isinstance(pattern, re.Pattern):
+            pattern = re.compile(pattern, flags=re.IGNORECASE)
+        targets = {}
+        for ver, pm in self.manifests.items():
+            # filter(lambda x: pattern.search(x[0]), self.asset_items())
+            for name, entry in pm.asset_items():
+                if pattern.search(name) and entry.hash not in targets:
+                    sae = SimpleAssetEntry(entry)
+                    sae.ver = ver
+                    targets[entry.hash] = (sae.name, sae)
+        return list(targets.values())
 
 
 def check_target_path(target, is_dir=False):
@@ -584,40 +608,61 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
 def mp_download_to_hash(source, dl_dir):
     dl_target = os.path.join(dl_dir, source.hash)
     if not os.path.exists(dl_target):
-        with requests.get(source.url, stream=True) as req:
-            if req.status_code == 200:
-                with open(dl_target, "wb") as fn:
-                    for chunk in req:
-                        fn.write(chunk)
-                print("-", end="", flush=True)
-            else:
-                print("x", end="", flush=True)
+        while True:
+            try:
+                with requests.get(source.url, stream=True) as req:
+                    if req.status_code == 200:
+                        with open(dl_target, "wb") as fn:
+                            for chunk in req:
+                                fn.write(chunk)
+                        print("-", end="", flush=True)
+                        break
+            except ConnectionError as e:
+                if e.errno == -3:
+                    continue
+                return
+            except Exception as e:
+                print(e)
+                return
     else:
         print(".", end="", flush=True)
 
 
 def mp_download(target, source, extract, region, dl_dir, overwrite):
-    dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
+    # dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
+    if source.raw:
+        if source.ver:
+            dl_target = os.path.join(dl_dir, source.ver, target.replace("/", "_"))
+        else:
+            dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
+    else:
+        dl_target = os.path.join(dl_dir, source.hash)
     check_target_path(dl_target)
 
     if overwrite or not os.path.exists(dl_target):
-        try:
-            with requests.get(source.url, stream=True) as req:
-                if req.status_code == 200:
-                    with open(dl_target, "wb") as fn:
-                        for chunk in req:
-                            fn.write(chunk)
-                    print("-", end="", flush=True)
-                else:
-                    print("x", end="", flush=True)
-        except Exception as e:
-            print(f"\n{e}")
-            return
+        while True:
+            try:
+                with requests.get(source.url, stream=True) as req:
+                    if req.status_code == 200:
+                        with open(dl_target, "wb") as fn:
+                            for chunk in req:
+                                fn.write(chunk)
+                        print("-", end="", flush=True)
+                        break
+            except ConnectionError as e:
+                if e.errno == -3:
+                    continue
+                return
+            except Exception as e:
+                print(e)
+                return
     else:
         print(".", end="", flush=True)
 
     if extract is None:
         extract = os.path.dirname(target).replace("/", "_")
+        if source.ver:
+            extract = os.path.join(source.ver, extract)
     ex_target = os.path.join(region, extract)
     return (source, ex_target, dl_target)
 
@@ -699,10 +744,18 @@ class Extractor:
     def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False, manifest_override=MANIFESTS):
         self.pm = {}
         self.pm_old = {}
-        for region, manifests in manifest_override.items():
-            latest, previous = manifests
-            self.pm[region] = ParsedManifest(latest)
-            self.pm_old[region] = ParsedManifest(previous)
+        if manifest_override == "ALLTIME":
+            for region, manifests in MANIFESTS.items():
+                self.pm[region] = AllParsedManifests(os.path.basename(manifests[0]))
+                self.pm_old[region] = None
+        else:
+            for region, manifests in manifest_override.items():
+                latest, previous = manifests
+                self.pm[region] = ParsedManifest(manifest=latest)
+                if latest == previous:
+                    self.pm_old[region] = None
+                else:
+                    self.pm_old[region] = ParsedManifest(manifest=previous)
         self.dl_dir = dl_dir
         self.ex_dir = ex_dir
         self.ex_img_dir = ex_img_dir
@@ -810,6 +863,8 @@ class Extractor:
     def download_and_extract_by_pattern_diff(self, label_patterns):
         download_list = []
         for region, label_pat in label_patterns.items():
+            if not self.pm_old[region]:
+                continue
             for pat, extract in label_pat.items():
                 matched = self.pm[region].get_by_pattern_diff(pat, self.pm_old[region])
                 if not matched:
@@ -828,10 +883,14 @@ class Extractor:
         self.pool_download_and_extract(download_list)
 
     def download_and_extract_by_diff(self, region="jp"):
+        if not self.pm_old[region]:
+            return
         download_list = self.pm[region].get_by_diff(self.pm_old[region])
         self.pool_download_and_extract(((None, download_list),), region=region)
 
     def report_diff(self, region="jp"):
+        if not self.pm_old[region]:
+            return
         self.pm[region].report_diff(self.pm_old[region])
 
     def apk_assets_extract(self, asset_folder):
@@ -849,7 +908,7 @@ class Extractor:
                 filepath = os.path.join(root, filename)
                 args = (
                     source,
-                    os.path.join(self.ex_media_dir, root.replace(asset_folder, "").replace("/", "_")),
+                    os.path.join(self.ex_media_dir, "apk", root.replace(asset_folder, "").replace("/", "_")),
                     filepath,
                 )
                 if ext in (".acb", ".awb"):
