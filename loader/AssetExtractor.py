@@ -225,6 +225,15 @@ class AllParsedManifests:
                     targets[entry.hash] = (sae.name, sae)
         return list(targets.values())
 
+    def asset_items(self):
+        # return itertools.chain((pm.asset_items() for pm in self.manifests.values()))
+        seen_hash = set()
+        for pm in self.manifests.values():
+            for name, entry in pm.asset_items():
+                if entry.hash not in seen_hash:
+                    seen_hash.add(entry.hash)
+                    yield name, entry
+
 
 def check_target_path(target, is_dir=False):
     if not is_dir:
@@ -617,10 +626,8 @@ def mp_download_to_hash(source, dl_dir):
                                 fn.write(chunk)
                         print("-", end="", flush=True)
                         break
-            except ConnectionError as e:
-                if e.errno == -3:
-                    continue
-                return
+            except requests.exceptions.ConnectionError:
+                continue
             except Exception as e:
                 print(e)
                 return
@@ -846,14 +853,15 @@ class Extractor:
         print("", flush=True)
 
     def mirror_files(self, mirror_dir="_mirror"):
-        check_target_path(mirror_dir, is_dir=True)
-        NUM_WORKERS = multiprocessing.cpu_count()
-        pool = multiprocessing.Pool(processes=NUM_WORKERS)
         dl_args = []
+        check_target_path(mirror_dir, is_dir=True)
         for region_pm in self.pm.values():
+            # mirror_dir = os.path.join(mirror_prefix, os.path.basename(os.path.dirname(region_pm.path)))
             for _, source in region_pm.asset_items():
                 dl_args.append((source, mirror_dir))
         print(f"Download {len(dl_args)}", flush=True)  # tqdm(dl_args, desc="download", total=len(dl_args))
+        NUM_WORKERS = multiprocessing.cpu_count()
+        pool = multiprocessing.Pool(processes=NUM_WORKERS)
         list(filter(None, pool.starmap(mp_download_to_hash, dl_args)))
         pool.close()
         pool.join()

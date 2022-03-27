@@ -39,7 +39,7 @@ if __name__ == "__main__":
         elif arg:
             ex_kwargs["dl_dir"] = arg
 
-    if args.manifest and args.operation == "extract":
+    if args.manifest and args.operation in ("extract", "mirror"):
         if args.manifest == "ALLTIME":
             ex_kwargs["manifest_override"] = args.manifest
         else:
