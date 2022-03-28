@@ -120,9 +120,13 @@ class AssetEntry:
             return f"{self.name} ({self.hash})"
 
     def __eq__(self, other):
+        if not type(other) == AssetEntry:
+            return False
         return self.hash == other.hash
 
     def __ne__(self, other):
+        if not type(other) == AssetEntry:
+            return True
         return self.hash != other.hash
 
 
@@ -165,21 +169,27 @@ class ParsedManifest(dict):
         return [(k, SimpleAssetEntry(v)) for k, v in targets]
 
     def get_by_pattern(self, pattern):
-        pattern_str = str(pattern)
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(lambda x: pattern.search(x[0]), self.asset_items())
         return ParsedManifest.flatten(targets)
 
     def get_by_diff(self, other):
-        targets = filter(lambda x: x[0] not in other.keys() or x[1] != other[x[0]], self.asset_items())
+        targets = filter(lambda x: other.get_entry(x[0]) != x[1], self.asset_items())
         return ParsedManifest.flatten(targets)
+
+    def get_entry(self, key):
+        if key in self.assets:
+            return self.assets[key]
+        if key in self.raw_assets:
+            return self.raw_assets[key]
+        return None
 
     def get_by_pattern_diff(self, pattern, other):
         if not isinstance(pattern, re.Pattern):
             pattern = re.compile(pattern, flags=re.IGNORECASE)
         targets = filter(
-            lambda x: pattern.search(x[0]) and (x[0] not in other.keys() or x[1] != other[x[0]]),
+            lambda x: pattern.search(x[0]) and other.get_entry(x[0]) != x[1],
             self.asset_items(),
         )
         return ParsedManifest.flatten(targets)

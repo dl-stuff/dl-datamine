@@ -46,13 +46,23 @@ if __name__ == "__main__":
         else:
             ex_kwargs["manifest_override"] = get_manifests(args.manifest, args.manifest)
 
+    ex_patterns = defaultdict(dict)
+    for region, exp, target in args.patterns:
+        if not (region := (region or args.region)):
+            for reg in MANIFESTS.keys():
+                ex_patterns[reg][exp] = target
+        else:
+            ex_patterns[region][exp] = target
+
     ex = Extractor(**ex_kwargs)
     # dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media"
     if args.operation == "apk":
         ex.apk_assets_extract(args.patterns[0][1])
     elif args.operation == "diff":
-        if args.region:
-            print(f"{args.region}: ", flush=True, end="")
+        if ex_patterns:
+            print(f"Patterns\n{dict(ex_patterns)}")
+            ex.download_and_extract_by_pattern_diff(ex_patterns)
+        elif args.region:
             ex.download_and_extract_by_diff(region=args.region)
         else:
             for region in MANIFESTS.keys():
@@ -65,12 +75,5 @@ if __name__ == "__main__":
     elif args.operation == "report":
         ex.report_diff()
     else:
-        ex_patterns = defaultdict(dict)
-        for region, exp, target in args.patterns:
-            if not (region := (region or args.region)):
-                for reg in MANIFESTS.keys():
-                    ex_patterns[reg][exp] = target
-            else:
-                ex_patterns[region][exp] = target
         print(f"Patterns\n{dict(ex_patterns)}")
         ex.download_and_extract_by_pattern(ex_patterns)
