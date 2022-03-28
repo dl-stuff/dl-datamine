@@ -41,21 +41,20 @@ if __name__ == "__main__":
             ex_kwargs[key] = arg
 
     if args.manifest and args.operation in ("extract", "mirror"):
-        if args.manifest == "ALLTIME":
+        if args.manifest in ("ALLTIME", "OLDSTYLE"):
             ex_kwargs["manifest_override"] = args.manifest
         else:
             ex_kwargs["manifest_override"] = get_manifests(args.manifest, args.manifest)
+    ex = Extractor(**ex_kwargs)
 
     ex_patterns = defaultdict(dict)
     for region, exp, target in args.patterns:
         if not (region := (region or args.region)):
-            for reg in MANIFESTS.keys():
+            for reg in ex.pm.keys():
                 ex_patterns[reg][exp] = target
         else:
             ex_patterns[region][exp] = target
 
-    ex = Extractor(**ex_kwargs)
-    # dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media"
     if args.operation == "apk":
         ex.apk_assets_extract(args.patterns[0][1])
     elif args.operation == "diff":

@@ -75,7 +75,13 @@ class ParsedManifestFlat(dict):
         with open(manifest) as f:
             for line in f:
                 url, label = [l.strip() for l in line.split("|")]
-                self[label] = url
+                sae = SimpleAssetEntry()
+                sae.name = label
+                sae.hash = os.path.basename(url)
+                sae.url = url
+                _, ext = os.path.splitext(sae.name)
+                sae.raw = bool(ext)
+                self[label] = sae
 
     def get_by_pattern(self, pattern):
         if not isinstance(pattern, re.Pattern):
@@ -766,6 +772,9 @@ class Extractor:
             for region, manifests in MANIFESTS.items():
                 self.pm[region] = AllParsedManifests(os.path.basename(manifests[0]))
                 self.pm_old[region] = None
+        elif manifest_override == "OLDSTYLE":
+            self.pm["jp"] = ParsedManifestFlat("jpmanifest_with_asset_labels.txt")
+            self.pm_old["jp"] = None
         else:
             for region, manifests in manifest_override.items():
                 latest, previous = manifests
