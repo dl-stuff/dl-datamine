@@ -614,28 +614,32 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
             json.dump(path_id_to_string, fn, indent=2)
 
 
+def requests_download(url, target):
+    check_target_path(target)
+    while True:
+        try:
+            with requests.get(url, stream=True) as req:
+                if req.status_code == 200:
+                    with open(target, "wb") as fn:
+                        for chunk in req:
+                            fn.write(chunk)
+                    return True
+        except requests.exceptions.ConnectionError:
+            continue
+        except Exception as e:
+            print(e)
+            return False
+
+
 def mp_download_to_hash(source, dl_dir):
     dl_target = os.path.join(dl_dir, source.hash)
-    if not os.path.exists(dl_target):
-        while True:
-            try:
-                with requests.get(source.url, stream=True) as req:
-                    if req.status_code == 200:
-                        with open(dl_target, "wb") as fn:
-                            for chunk in req:
-                                fn.write(chunk)
-                        print("-", end="", flush=True)
-                        break
-            except requests.exceptions.ConnectionError:
-                continue
-            except Exception as e:
-                print(e)
-                return
+    if not os.path.exists(dl_target) and requests_download(source.url, dl_target):
+        print("-", end="", flush=True)
     else:
         print(".", end="", flush=True)
 
 
-def mp_download(target, source, extract, region, dl_dir, overwrite):
+def mp_download(target, source, extract, region, dl_dir, overwrite, local_mirror):
     # dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
     if source.raw:
         if source.ver:
@@ -644,25 +648,22 @@ def mp_download(target, source, extract, region, dl_dir, overwrite):
             dl_target = os.path.join(dl_dir, region, target.replace("/", "_"))
     else:
         dl_target = os.path.join(dl_dir, source.hash)
-    check_target_path(dl_target)
 
     if overwrite or not os.path.exists(dl_target):
-        while True:
-            try:
-                with requests.get(source.url, stream=True) as req:
-                    if req.status_code == 200:
-                        with open(dl_target, "wb") as fn:
-                            for chunk in req:
-                                fn.write(chunk)
-                        print("-", end="", flush=True)
-                        break
-            except ConnectionError as e:
-                if e.errno == -3:
-                    continue
+        if local_mirror is not None:
+            if not os.path.exists(link_src := os.path.join(local_mirror, source.hash)):
+                if not requests_download(source.url, link_src):
+                    return
+            if source.raw:
+                check_target_path(dl_target)
+                # symlink is no good with wine stuff
+                os.link(link_src, dl_target)
+            else:
+                dl_target = link_src
+        else:
+            if not requests_download(source.url, dl_target):
                 return
-            except Exception as e:
-                print(e)
-                return
+        print("-", end="", flush=True)
     else:
         print(".", end="", flush=True)
 
@@ -748,7 +749,7 @@ def crid_mod_usm(source, ex_target, dl_target):
 
 
 class Extractor:
-    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False, manifest_override=MANIFESTS):
+    def __init__(self, dl_dir="./_download", ex_dir="./_extract", ex_img_dir="./_images", ex_media_dir="./_media", overwrite=False, manifest_override=MANIFESTS, local_mirror="../archives/cdn"):
         self.pm = {}
         self.pm_old = {}
         if manifest_override == "ALLTIME":
@@ -769,6 +770,7 @@ class Extractor:
         self.ex_media_dir = ex_media_dir
         self.extract_list = []
         self.overwrite = overwrite
+        self.local_mirror = local_mirror
 
     def raw_extract(self, source, ex_target, dl_target):
         if self.ex_media_dir:
@@ -793,31 +795,9 @@ class Extractor:
         NUM_WORKERS = multiprocessing.cpu_count()
         pool = multiprocessing.Pool(processes=NUM_WORKERS)
         if region is None:
-            dl_args = [
-                (
-                    target,
-                    source,
-                    extract,
-                    region,
-                    self.dl_dir,
-                    self.overwrite,
-                )
-                for region, extract, matched in download_list
-                for target, source in matched
-            ]
+            dl_args = [(target, source, extract, region, self.dl_dir, self.overwrite, self.local_mirror) for region, extract, matched in download_list for target, source in matched]
         else:
-            dl_args = [
-                (
-                    target,
-                    source,
-                    extract,
-                    region,
-                    self.dl_dir,
-                    self.overwrite,
-                )
-                for extract, matched in download_list
-                for target, source in matched
-            ]
+            dl_args = [(target, source, extract, region, self.dl_dir, self.overwrite, self.local_mirror) for extract, matched in download_list for target, source in matched]
         print(f"Download {len(dl_args)}", flush=True)  # tqdm(dl_args, desc="download", total=len(dl_args))
         downloaded = list(filter(None, pool.starmap(mp_download, dl_args)))
         pool.close()

@@ -27,17 +27,18 @@ if __name__ == "__main__":
     parser.add_argument("-ex", "--extract_dir", type=str, help="Extract directory, 0 to skip")
     parser.add_argument("-ex_img", "--extract_img_dir", type=str, help="Extract image directory, 0 to skip")
     parser.add_argument("-ex_media", "--extract_media_dir", type=str, help="Extract media directory, 0 to skip")
+    parser.add_argument("-local", "--local_mirror", type=str, help="Use assets from local dir")
     parser.add_argument("-m", "--manifest", type=str, help="Manifest directory")
     parser.add_argument("-r", "--region", type=str, help="Region {!r}".format(MANIFESTS.keys()))
     parser.add_argument("patterns", type=pattern, nargs="*", help="Extract patterns. Syntax: {regex}, {regex}:{target}, {regex}:{target}:{region}")
     args = parser.parse_args()
 
     ex_kwargs = {}
-    for key, arg in (("dl_dir", args.download_dir), ("ex_dir", args.extract_dir), ("ex_img_dir", args.extract_img_dir), ("ex_media_dir", args.extract_media_dir)):
+    for key, arg in (("dl_dir", args.download_dir), ("ex_dir", args.extract_dir), ("ex_img_dir", args.extract_img_dir), ("ex_media_dir", args.extract_media_dir), ("local_mirror", args.local_mirror)):
         if arg == "0":
-            ex_kwargs["dl_dir"] = None
+            ex_kwargs[key] = None
         elif arg:
-            ex_kwargs["dl_dir"] = arg
+            ex_kwargs[key] = arg
 
     if args.manifest and args.operation in ("extract", "mirror"):
         if args.manifest == "ALLTIME":
@@ -57,7 +58,10 @@ if __name__ == "__main__":
             for region in MANIFESTS.keys():
                 ex.download_and_extract_by_diff(region=region)
     elif args.operation == "mirror":
-        ex.mirror_files()
+        if args.local_mirror:
+            ex.mirror_files(mirror_dir=args.local_mirror)
+        else:
+            ex.mirror_files()
     elif args.operation == "report":
         ex.report_diff()
     else:
@@ -68,5 +72,5 @@ if __name__ == "__main__":
                     ex_patterns[reg][exp] = target
             else:
                 ex_patterns[region][exp] = target
-        print(f"Patterns {dict(ex_patterns)}")
+        print(f"Patterns\n{dict(ex_patterns)}")
         ex.download_and_extract_by_pattern(ex_patterns)
