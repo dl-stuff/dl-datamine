@@ -632,25 +632,16 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
             json.dump(path_id_to_string, fn, indent=2)
 
 
-def requests_download(url, target, size=None):
+def requests_download(url, target):
     check_target_path(target)
-    max_retry = 3
     while True:
         try:
             with requests.get(url, stream=True) as req:
                 if req.status_code != 200:
-                    if max_retry <= 0:
-                        return False
-                    max_retry -= 1
-                    continue
+                    return False
                 with open(target, "wb") as fn:
                     for chunk in req:
                         fn.write(chunk)
-            if size is None or size == os.stat(target).st_size:
-                return True
-            if max_retry <= 0:
-                return False
-            max_retry -= 1
         except requests.exceptions.ConnectionError:
             continue
         except Exception as e:
@@ -661,7 +652,7 @@ def requests_download(url, target, size=None):
 def mp_download_to_hash(source, dl_dir):
     dl_target = os.path.join(dl_dir, source.hash)
     if not os.path.exists(dl_target) or source.size != os.stat(dl_target).st_size:
-        if requests_download(source.url, dl_target, size=source.size):
+        if requests_download(source.url, dl_target):
             print("-", end="", flush=True)
 
 
