@@ -141,11 +141,13 @@ class SimpleAssetEntry:
         if asset_entry:
             self.name = asset_entry.name
             self.hash = asset_entry.hash
+            self.size = asset_entry.size
             self.url = asset_entry.url
             self.raw = asset_entry.raw
         else:
             self.name = None
             self.hash = None
+            self.size = None
             self.url = None
             self.raw = None
         self.ver = None
@@ -630,16 +632,25 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
             json.dump(path_id_to_string, fn, indent=2)
 
 
-def requests_download(url, target):
+def requests_download(url, target, size=None):
     check_target_path(target)
+    max_retry = 3
     while True:
         try:
             with requests.get(url, stream=True) as req:
-                if req.status_code == 200:
-                    with open(target, "wb") as fn:
-                        for chunk in req:
-                            fn.write(chunk)
-                    return True
+                if req.status_code != 200:
+                    if max_retry <= 0:
+                        return False
+                    max_retry -= 1
+                    continue
+                with open(target, "wb") as fn:
+                    for chunk in req:
+                        fn.write(chunk)
+            if size is None or size == os.stat(target).st_size:
+                return True
+            if max_retry <= 0:
+                return False
+            max_retry -= 1
         except requests.exceptions.ConnectionError:
             continue
         except Exception as e:
@@ -649,10 +660,9 @@ def requests_download(url, target):
 
 def mp_download_to_hash(source, dl_dir):
     dl_target = os.path.join(dl_dir, source.hash)
-    if not os.path.exists(dl_target) and requests_download(source.url, dl_target):
-        print("-", end="", flush=True)
-    else:
-        print(".", end="", flush=True)
+    if not os.path.exists(dl_target) or source.size != os.stat(dl_target).st_size:
+        if requests_download(source.url, dl_target, size=source.size):
+            print("-", end="", flush=True)
 
 
 def mp_download(target, source, extract, region, dl_dir, overwrite, local_mirror):
@@ -667,8 +677,8 @@ def mp_download(target, source, extract, region, dl_dir, overwrite, local_mirror
 
     if overwrite or not os.path.exists(dl_target):
         if local_mirror is not None:
-            if not os.path.exists(link_src := os.path.join(local_mirror, source.hash)):
-                if not requests_download(source.url, link_src):
+            if overwrite or not os.path.exists(link_src := os.path.join(local_mirror, source.hash)):
+                if not requests_download(source.url, link_src, size=source.size):
                     return
             if source.raw:
                 check_target_path(dl_target)

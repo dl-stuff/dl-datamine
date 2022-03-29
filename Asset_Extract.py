@@ -70,7 +70,7 @@ if __name__ == "__main__":
         if args.local_mirror:
             ex.mirror_files(mirror_dir=args.local_mirror)
         else:
-            ex.mirror_files()
+            print("-local_mirror argument required for cdn mirror operation")
     elif args.operation == "report":
         ex.report_diff()
     else:
