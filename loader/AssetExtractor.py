@@ -54,8 +54,11 @@ IMG_ARGS = {
 
 
 # https://github.com/vgmstream/vgmstream/blob/master/src/meta/hca_keys.h
-CRI_A = "e7889cad"
-CRI_B = "000002b2"
+CRI_A = "0030D9E8"
+CRI_B = "00000000"
+
+# 00000000
+# 0030D9E8
 
 
 def save_img(img, dest):
@@ -634,26 +637,39 @@ def mp_extract(ex_dir, ex_img_dir, ex_target, dl_filelist):
 
 def requests_download(url, target):
     check_target_path(target)
-    while True:
+    trials = 3
+    while trials > 0:
+        trials -= 1
         try:
-            with requests.get(url, stream=True) as req:
+            # with requests.get(url, stream=True) as req:
+            #     if req.status_code != 200:
+            #         return False
+            #     with open(target, "wb") as fn:
+            #         for chunk in req:
+            #             fn.write(chunk)
+            with requests.get(url) as req:
                 if req.status_code != 200:
                     return False
                 with open(target, "wb") as fn:
-                    for chunk in req:
-                        fn.write(chunk)
+                    fn.write(req.content)
+            return True
         except requests.exceptions.ConnectionError:
             continue
         except Exception as e:
-            print(e)
+            print(e, url)
             return False
+    print(url)
+    return False
 
 
 def mp_download_to_hash(source, dl_dir):
     dl_target = os.path.join(dl_dir, source.hash)
     if not os.path.exists(dl_target) or source.size != os.stat(dl_target).st_size:
+        if os.path.exists(dl_target):
+            os.remove(dl_target)
         if requests_download(source.url, dl_target):
-            print("-", end="", flush=True)
+            # print("-", end="", flush=True)
+            pass
 
 
 def mp_download(target, source, extract, region, dl_dir, overwrite, local_mirror):
@@ -668,8 +684,9 @@ def mp_download(target, source, extract, region, dl_dir, overwrite, local_mirror
 
     if overwrite or not os.path.exists(dl_target):
         if local_mirror is not None:
-            if overwrite or not os.path.exists(link_src := os.path.join(local_mirror, source.hash)):
-                if not requests_download(source.url, link_src, size=source.size):
+            link_src = os.path.join(local_mirror, source.hash)
+            if overwrite or not os.path.exists(link_src):
+                if not requests_download(source.url, link_src):
                     return
             if source.raw:
                 check_target_path(dl_target)
@@ -852,19 +869,21 @@ class Extractor:
 
         print("", flush=True)
 
-    def mirror_files(self, mirror_dir="_mirror"):
+    def mirror_files(self, mirror_dir="../archives/cdn"):
         dl_args = []
         check_target_path(mirror_dir, is_dir=True)
         for region_pm in self.pm.values():
             # mirror_dir = os.path.join(mirror_prefix, os.path.basename(os.path.dirname(region_pm.path)))
             for _, source in region_pm.asset_items():
                 dl_args.append((source, mirror_dir))
-        print(f"Download {len(dl_args)}", flush=True)  # tqdm(dl_args, desc="download", total=len(dl_args))
-        NUM_WORKERS = multiprocessing.cpu_count()
-        pool = multiprocessing.Pool(processes=NUM_WORKERS)
-        list(filter(None, pool.starmap(mp_download_to_hash, dl_args)))
-        pool.close()
-        pool.join()
+        # print(f"Download {len(dl_args)}", flush=True)
+        # NUM_WORKERS = multiprocessing.cpu_count()
+        # pool = multiprocessing.Pool(processes=NUM_WORKERS)
+        # list(filter(None, pool.starmap(mp_download_to_hash, dl_args)))
+        # pool.close()
+        # pool.join()
+        for args in tqdm(dl_args, desc="download"):
+            mp_download_to_hash(*args)
 
     ### multiprocessing ###
 
