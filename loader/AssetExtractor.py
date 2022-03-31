@@ -54,8 +54,8 @@ IMG_ARGS = {
 
 
 # https://github.com/vgmstream/vgmstream/blob/master/src/meta/hca_keys.h
-CRI_A = "0030D9E8"
-CRI_B = "00000000"
+CRI_A = "e7889cad"
+CRI_B = "000002b2"
 
 # 00000000
 # 0030D9E8
