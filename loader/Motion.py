@@ -75,7 +75,10 @@ def load_override_controller(filename, all_controllers):
             return
         path_id = data["pathID"]
         cat, ref = controller_cat_ref(data["m_Name"])
-        base_controller = all_controllers[data["m_Controller"]["m_PathID"]]
+        try:
+            base_controller = all_controllers[data["m_Controller"]["m_PathID"]]
+        except KeyError:
+            return
         original_to_override = {}
         for clip in data["m_Clips"]:
             original_to_override[clip["m_OriginalClip"]["m_PathID"]] = clip["m_OverrideClip"]["m_PathID"]
