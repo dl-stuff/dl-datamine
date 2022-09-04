@@ -27,7 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("-ex", "--extract_dir", type=str, help="Extract directory, 0 to skip")
     parser.add_argument("-ex_img", "--extract_img_dir", type=str, help="Extract image directory, 0 to skip")
     parser.add_argument("-ex_media", "--extract_media_dir", type=str, help="Extract media directory, 0 to skip")
-    parser.add_argument("-local", "--local_mirror", type=str, help="Use assets from local dir")
+    parser.add_argument("-local", "--local_mirror", default="../archive/cdn", type=str, help="Use assets from local dir")
     parser.add_argument("-m", "--manifest", type=str, help="Manifest directory")
     parser.add_argument("-r", "--region", type=str, help="Region {!r}".format(MANIFESTS.keys()))
     parser.add_argument("patterns", type=pattern, nargs="*", help="Extract patterns. Syntax: {regex}, {regex}:{target}, {regex}:{target}:{region}")
